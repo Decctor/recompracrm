@@ -4,11 +4,11 @@ Status: análise de 21/11/2026, a partir do código em `app/onboarding`, `lib/on
 
 ## 1. Resumo
 
-1. **O valor do CRM chega depois do fim do teste.** Entre as organizações que já enviaram uma campanha, a mediana até o primeiro envio é de **19,6 dias**. O teste grátis dura **15 dias** (`FREE_TRIAL_DURATION_DAYS`). Metade das contas só vê o produto funcionando depois da cobrança.
+1. **O valor do CRM chega depois do fim do teste.** Entre as organizações que já enviaram uma campanha, a mediana até o primeiro envio é de **19,6 dias**. O teste grátis dura **15 dias** (`FREE_TRIAL_DURATION_DAYS`). Depois disso vêm mais 15 dias de carência (`TRIAL_GRACE`) até o bloqueio, mas a partir do D15 o selo do cabeçalho já diz "Teste encerrado. Regularize…". Metade das contas ouve "pague" antes de ver o produto funcionando.
 2. **Quem envia campanha fica.** Das 26 organizações, 9 têm envios de campanha nos últimos 30 dias, e 8 delas também registraram vendas no período. Das 11 que nunca enviaram, só 3 registraram alguma venda nos últimos 30 dias, e 2 dessas 3 ainda estão dentro do teste. O comportamento que separa quem fica de quem some é **ter uma campanha enviando**, não concluir o onboarding.
 3. **O vazamento está no meio, não no topo.** O onboarding em si é rápido (0–4 min nas jornadas recentes, com uma exceção de 85 min). O que demora é o trecho depois do botão "Entrar no RecompraCRM": conectar o WhatsApp oficial, aprovar templates, liberar a campanha. Esse trecho não tem nenhum acompanhamento.
 4. **Depois do onboarding, o painel fica vazio.** `ActivationPanel` é importado em `app/dashboard/layout.tsx`, mas não é renderizado em lugar nenhum, e `OnboardingQualityBubble` também não. Quem entra cai no hub com "Nenhuma venda registrada ainda." e "Nenhum cliente segmentado ainda.", sem uma próxima ação.
-5. **A plataforma não fala com o lojista entre as sessões.** Não existe sequência de ativação por e-mail ou WhatsApp (ver §6). Quem fecha a aba no meio da configuração do WhatsApp só volta se alguém do time lembrar dele.
+5. **A plataforma fala com o lojista uma única vez.** Ela envia uma boas-vindas por WhatsApp, e só quando o onboarding é concluído (ver §6). Não há mensagem de retomada, de destravamento, de fim de teste nem de falha de pagamento: `invoice.payment_failed` só gera log. Quem fecha a aba no meio da configuração só volta se alguém do time lembrar dele.
 
 Com ~2 cadastros por mês, a alavanca mais barata é juntar três coisas: um gatilho automático para cada ponto de travamento, uma mensagem curta ao lojista nesse momento e um alerta para o time agir pessoalmente. Automação pura ainda não se paga nesse volume; um *concierge* bem instrumentado se paga.
 
@@ -71,8 +71,8 @@ Cada item segue a ordem: o que existe hoje → princípio do playbook → movime
 
 ### 4.2. O tempo até o valor passa do teste — *Tie the trial's end to value consumed, not the calendar*
 
-- **Hoje:** 15 dias corridos a partir do cadastro, e a mediana até o primeiro envio é de 19,6 dias. A espera é, em boa parte, externa (Meta), não do lojista.
-- **Movimento (decisão comercial, ver §8):** o teste passa a contar **do primeiro envio** (com teto, por exemplo 30 dias a partir do cadastro), ou é estendido automaticamente enquanto a pendência for da Meta (template em análise, pagamento verificado). O plano original já lista "tratamento comercial do período de teste quando dependências externas atrasarem a ativação" como definição pendente; os dados mostram que essa é a regra, não a exceção.
+- **Hoje:** 15 dias corridos a partir do cadastro, mais 15 de carência até o bloqueio (`resolveSubscriptionAccess`). A mediana até o primeiro envio (19,6 dias) cai dentro da carência. Ou seja, o acesso dura o bastante, mas a comunicação do teste conta outra história: a partir do D8 o selo entra em modo de aviso, e a partir do D15 ele diz que o teste acabou. A espera, em boa parte, é externa (Meta) e não do lojista.
+- **Movimento (decisão comercial, ver §8):** o mais barato é **mudar a narrativa, não o prazo**. Enquanto a conta não estiver ativada e a pendência for externa, o selo e as mensagens falam do próximo passo ("Falta a aprovação da Meta para sua primeira campanha sair"), e não do relógio. Alternativa mais forte: o teste passa a contar **do primeiro envio** (com teto, por exemplo 30 dias a partir do cadastro), ou é estendido automaticamente enquanto a pendência for da Meta (template em análise, pagamento verificado). O plano original já lista "tratamento comercial do período de teste quando dependências externas atrasarem a ativação" como definição pendente; os dados mostram que essa é a regra, não a exceção.
 - **Tela de fim de teste (`/subscription`):** trocar o bloqueio genérico por um resumo do que a loja construiu, em enquadramento de perda (*Architect for what users fear losing*): "Você tem 1.284 clientes importados, 3 campanhas preparadas e R$ 412 em cashback ativo com 57 clientes. Assinando, nada disso para." Usar números exatos (*Use precise numbers*).
 
 ### 4.3. O WhatsApp é o caminho crítico, mas aparece como opcional — *Cut TTV by reorder, not features*
@@ -90,7 +90,7 @@ Cada item segue a ordem: o que existe hoje → princípio do playbook → movime
 - **Hoje:** logo, endereço da loja online (irrelevante na jornada CRM), CNPJ obrigatório, e-mail e telefone, tudo antes do primeiro valor. O único dado que muda o percurso é o segmento.
 - **Movimento:**
   - **Cortar ou adiar:** logo (pedir quando o lojista for personalizar a mensagem ou o Ponto de Interação), slug (gerar automaticamente e esconder no CRM) e e-mail corporativo (usar o do usuário). O CNPJ fica para quando um contrato realmente precisar dele (Meta, fiscal, cobrança). Antes de mexer, revisar o que é obrigatório nos contratos atuais, como o próprio plano exige.
-  - **Pedir com propósito:** o **WhatsApp do responsável**, com consentimento explícito para receber avisos da configuração. É o canal das mensagens do §5 e, hoje, nem é obrigatório nem é do usuário (`organizations.telefone` é da loja).
+  - **Pedir com propósito:** o **WhatsApp do responsável** já existe em 24 das 26 contas (`users.telefone`, usado no código de login e nas boas-vindas). O que falta é o **consentimento explícito** para receber avisos da configuração, e uma forma de sair, já que é o canal das mensagens do §5. Na etapa "Empresa", o campo "Telefone ou WhatsApp" (`organizations.telefone`) é da loja e pode ficar para depois.
   - **Expandir o declarativo:** adicionar uma pergunta de intenção de ~30 segundos (o caso brasileiro do playbook: de 24,2 para 2,5 dias até a primeira venda **adicionando** uma etapa de intenção): "O que mais te incomoda hoje?" (clientes que compram uma vez e somem · clientes antigos que pararam de vir · quero que comprem com mais frequência). A resposta escolhe a campanha recomendada e o texto das mensagens.
 
 ### 4.5. O teste não tem objetivo — *Give the trial an active goal* · *Calibrate the first step*
@@ -130,30 +130,47 @@ Regras da sequência:
 
 | # | Gatilho (estado) | Quando | Canal | Mensagem (rascunho) | Ação |
 | --- | --- | --- | --- | --- | --- |
-| 5.1 | Organização criada | Imediato | E-mail + WhatsApp | "Bem-vindo ao RecompraCRM, {nome}! Sua loja já está criada. O próximo passo leva 3 minutos: {próxima etapa}." | Retomar onboarding |
+| 5.1 | Organização criada (**hoje: só na conclusão**) | Imediato | E-mail + WhatsApp | "Bem-vindo ao RecompraCRM, {nome}! Sua loja já está criada. O próximo passo leva 3 minutos: {próxima etapa}." | Retomar onboarding |
 | 5.2 | Jornada aberta e parada | +2 h, depois +24 h | WhatsApp, depois e-mail | "Você parou em *Cashback*. Faltam 3 etapas, uns 4 minutos. Suas respostas estão salvas." | Retomar na etapa |
 | 5.3 | Importação concluída (ou primeira janela coberta) | Imediato | WhatsApp | "Sua base chegou: 1.284 clientes. 312 deles não compram há mais de 60 dias. Veja quem são." | Hub / audiência |
 | 5.4 | Campanhas preparadas e WhatsApp não conectado | D1 e D3 | WhatsApp + e-mail | "Suas 3 campanhas estão prontas. Só falta conectar o número oficial. Quer que a gente faça com você em 15 min?" | Conectar Meta / agendar |
 | 5.5 | Template aprovado, campanha `PRONTA` | Imediato | WhatsApp | "A Meta aprovou *Boas-vindas*. Libere com um toque e ela começa a enviar." | Liberar campanha |
-| 5.5b | Template rejeitado, pagamento Meta pendente, integração expirada | Imediato | WhatsApp + e-mail | O texto de `resolveNextAction` ("A Meta recusou um envio por falta de forma de pagamento…"). | `proximaAcao.href` |
+| 5.5b | Template rejeitado, pagamento Meta pendente, integração expirada (**hoje: só "WhatsApp desconectado", por e-mail**) | Imediato | WhatsApp + e-mail | O texto de `resolveNextAction` ("A Meta recusou um envio por falta de forma de pagamento…"). | `proximaAcao.href` |
 | 5.6 | Primeira mensagem de campanha entregue (**ativação**) | Imediato | WhatsApp | "🎉 Sua primeira campanha saiu: 48 clientes receberam *Boas-vindas* hoje." | Ver resultados |
 | 5.7 | Primeira recompra atribuída | Imediato | WhatsApp | "Um cliente que recebeu sua mensagem voltou e comprou R$ 87, 6 dias depois. É o RecompraCRM trabalhando." | Resultados da campanha |
 | 5.8 | Progresso no teste | Semanal (segunda de manhã) | E-mail | "Semana 1: 2 campanhas enviando, 131 mensagens entregues, 4 clientes voltaram (meta: 10)." | Hub |
-| 5.9 | Teste terminando | D-3 e D-1 | E-mail + WhatsApp | **Ativado:** resumo do que foi construído, em enquadramento de perda (§4.2). **Não ativado:** oferecer extensão ou ajuda, não o paywall. | Assinar / falar com o time |
-| 5.10 | Sinais para o time (interno) | Imediato | WhatsApp ou e-mail do time | Novo cadastro · parado na etapa X há 24 h · WhatsApp não conectado no D3 · sem envio no D10 · conta pagante sem venda há 14 dias · integração com erro. | Contato humano |
+| 5.9 | Teste terminando / pagamento falhou (`invoice.payment_failed`) | D-3 e D-1 / imediato | E-mail + WhatsApp | **Ativado:** resumo do que foi construído, em enquadramento de perda (§4.2). **Não ativado:** oferecer extensão ou ajuda, não o paywall. | Assinar / falar com o time |
+| 5.10 | Sinais para o time (interno; **hoje: só "nova organização", na conclusão**) | Imediato | WhatsApp do time | Org criada sem concluir em 2 h · parado na etapa X há 24 h · WhatsApp não conectado no D3 · sem envio no D10 · conta pagante sem venda há 14 dias · integração com erro. | Contato humano |
 
 Os textos são rascunhos com números ilustrativos. Na implementação, os números vêm da conta e, quando não houver dado, a frase não é enviada.
 
 ## 6. Infraestrutura de comunicação existente
 
-_Preenchido a partir do mapeamento do código. Ver a próxima revisão desta seção._
+A boa notícia é que todos os canais já existem. O que falta são os gatilhos.
+
+| Canal | Onde | Usado hoje para falar com o lojista |
+| --- | --- | --- |
+| E-mail (Resend + React Email) | `lib/email/index.tsx` (`sendEmailWithResend`), templates em `services/resend/templates/` | Link de acesso (`MagicLink`), convite (`OrganizationInvite`). Avisos em texto/HTML avulso: WhatsApp desconectado (`lib/whatsapp/connection-health.ts`, cron a cada 6 h), 80% do limite do agente de IA, pendências fiscais diárias. |
+| WhatsApp oficial da plataforma (Meta, templates) | `lib/whatsapp/platform-sender.ts` (`getPlatformWhatsappSender`) | Código de acesso (`recompracrm_verification_code`), convite, relatório de vendas recorrente (`recompracrm_relatorio_recorrente`), transferência de atendimento. |
+| WhatsApp interno (gateway, texto livre) | `lib/whatsapp/internal-gateway`, sessão `INTERNAL_WHATSAPP_GATEWAY_SESSION_COMS` | Boas-vindas ao dono (`welcomeOrganizationOwnerOnOnboarding`, `config/onboarding.tsx`) e alerta de nova organização aos fundadores (`notifyInternalsOnNewOrganization`, `config/internal-coms.ts`), ambos só na **conclusão** do onboarding (`app/api/organizations/onboarding/route.ts`). |
+| Crons | `vercel.json` (34 crons) | Nenhum cron de ativação, retomada, fim de teste, inatividade ou saúde de conta. `subscription-reconciliation` só sincroniza com o Stripe. |
+| Notificações no app | — | Não há tabela de notificações nem sino; os toasts são efêmeros. Teste e cobrança aparecem só no selo do cabeçalho (`SubscriptionStatusBanner`, texto em `/api/organizations/subscription-status`). |
+| Eventos | PostHog (`lib/analytics/posthog-*.ts`, `lib/onboarding/analytics.ts`) | Etapas, adiamentos, conclusão, importação, campanha preparada/habilitada/ativada e pagamento Meta confirmado. Sem `identify`/grupos, e o `distinctId` alterna entre usuário e organização. O `campaign_ready` previsto no design não é emitido. |
+
+O que isso muda na implementação:
+
+- **Boas-vindas na hora errada.** O texto diz "Que legal ver que você **iniciou** o onboarding", mas a mensagem só sai na conclusão. Quem abandona no meio nunca a recebe, e o alerta aos fundadores tem o mesmo problema. Mover os dois para a criação da organização (`app/api/organizations/route.ts`) já cobre parte de 5.1 e 5.10 com mudanças de poucas linhas.
+- **Mensagens fora da janela de 24 h** (retomada, destravamento, celebração) precisam de templates de *utilidade* no número oficial, como os `recompracrm_*` que já existem. O gateway interno serve às respostas dentro de uma conversa aberta e aos alertas internos.
+- **Gatilhos por estado:** um cron diário (ou horário) que percorre as organizações não ativadas, calcula `getOnboardingReadiness` e decide a mensagem pela tabela do §5. Ele grava o que já enviou para não repetir, como `connection-health-policy.ts` já faz com seu intervalo de 7 dias. Os gatilhos imediatos (template aprovado, primeiro envio entregue, primeira recompra) entram nos pontos onde o estado muda (`lib/onboarding/reconcile.ts`, webhooks da Meta, atribuição).
+- **Stripe:** `invoice.payment_failed` e `customer.subscription.deleted` hoje só atualizam campos ou geram log. São o lugar natural para o aviso de pagamento e para a mensagem de saída (*Design the cancel screen*).
+- **Medição:** padronizar o `distinctId` (organização como grupo no PostHog) antes de construir o funil do §2. Sem isso, as etapas do cliente e os eventos do servidor não se juntam.
 
 ## 7. Roteiro priorizado
 
 | Prioridade | Item | Esforço | Mexe em |
 | --- | --- | --- | --- |
 | P0 | Renderizar a ativação no hub para contas não ativadas; vazios do hub com ação (§4.1) | Baixo (componentes existem) | Primeiro dia |
-| P0 | Alertas internos para o time (§5.10) | Baixo | Todo o meio do funil |
+| P0 | Mover boas-vindas e alerta aos fundadores para a criação da org; somar alertas de travamento (§5.10, §6) | Baixo | Todo o meio do funil |
 | P0 | Definir e medir ativação (primeiro envio até o D14) e tempo até o primeiro envio no admin (§2, §4.7) | Baixo | Saber se o resto funciona |
 | P1 | Mensagens 5.1, 5.2, 5.4, 5.5, 5.5b (retomada e destravamento do WhatsApp) | Médio | Passos 8–11 |
 | P1 | Conexão Meta mais cedo + submissão automática de templates + conexão assistida (§4.3) | Médio | Maior espera da jornada |
@@ -166,7 +183,7 @@ _Preenchido a partir do mapeamento do código. Ver a próxima revisão desta se�
 ## 8. Decisões que precisam de dono
 
 1. **Regra do teste:** contar a partir do primeiro envio, estender durante pendência da Meta ou manter os 15 dias com extensão manual.
-2. **Canal de WhatsApp da plataforma** para falar com lojistas: qual número e qual conexão; templates de utilidade aprovados para mensagens fora da janela de 24 h.
+2. **Templates de utilidade** no número oficial da plataforma (o mesmo dos `recompracrm_*`) para retomada, destravamento e celebração: quais submeter à Meta primeiro.
 3. **Consentimento:** onde coletar o opt-in do responsável e como sair (LGPD).
 4. **Concierge:** quem do time recebe os alertas do §5.10 e qual é o tempo de resposta esperado.
 5. **QR Code como ponte** enquanto a Meta aprova: sim ou não (§4.3).
