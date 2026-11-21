@@ -155,8 +155,16 @@ test("avisos de parado: pelo estado atual, só para conta viva, sem campanha ant
 		resolveStuckNotices({ snapshot: snapshot(overrides), periodoTesteFim, stripeSubscriptionStatus }).map((n) => n.evento);
 
 	// O caso da trezz: onboarding feito há 5 dias, vendendo, sem WhatsApp oficial.
-	const trezz = { onboardingConcluidoEm: new Date(NOW.getTime() - 5 * DAY), primeiraVendaEm: new Date(NOW.getTime() - 4 * DAY) };
+	const trezz = {
+		onboardingConcluidoEm: new Date(NOW.getTime() - 5 * DAY),
+		primeiraVendaEm: new Date(NOW.getTime() - 4 * DAY),
+		campanhasPreparadas: 3,
+	};
 	assert.deepEqual(keys(trezz), ["whatsapp_pendente"]);
+	// Já entrega campanhas por outra conexão (não oficial): tem canal, nada de aviso.
+	assert.deepEqual(keys({ ...trezz, primeiroEnvioCampanhaEm: new Date(NOW.getTime() - 30 * DAY) }, null, "active"), []);
+	// Sem campanha preparada, a mensagem ("só falta o WhatsApp") não se aplica.
+	assert.deepEqual(keys({ ...trezz, campanhasPreparadas: 0 }), []);
 	// Onboarding de hoje: ainda não é "parado".
 	assert.deepEqual(keys({ onboardingConcluidoEm: NOW }), []);
 	// Com WhatsApp, vendendo há 5 dias sem campanha entregue.

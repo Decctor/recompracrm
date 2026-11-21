@@ -281,7 +281,8 @@ export function isAccountLive({
  * que dispararia o empurrão. Cada aviso vai uma vez por organização (`aviso:<evento>`), também no
  * backfill silencioso, porque é sobre a situação atual. Não são marcos: não movem o cartão.
  *
- * - `whatsapp_pendente`: onboarding concluído há 1 dia ou mais e WhatsApp oficial não conectado.
+ * - `whatsapp_pendente`: onboarding concluído há 1 dia ou mais, campanhas preparadas, WhatsApp oficial
+ *   não conectado e nenhuma campanha entregue até hoje (quem já entrega por outra conexão tem canal).
  * - `vendendo_sem_campanha`: primeira venda há 5 dias ou mais, WhatsApp conectado e nenhuma campanha
  *   entregue. Sem WhatsApp, o aviso certo é o anterior: a campanha não tem por onde sair.
  */
@@ -301,6 +302,10 @@ export function resolveStuckNotices({
 	if (
 		snapshot.onboardingConcluidoEm &&
 		!snapshot.whatsappOficialConectado &&
+		// Uma campanha já entregue prova um canal que funciona (conexão de outro tipo): o aviso seria falso.
+		snapshot.primeiroEnvioCampanhaEm === null &&
+		// A mensagem diz que as campanhas estão prontas e só falta o WhatsApp.
+		snapshot.campanhasPreparadas > 0 &&
 		daysSince(snapshot.onboardingConcluidoEm) >= WHATSAPP_PENDING_AFTER_DAYS
 	) {
 		notices.push({ chave: "aviso:whatsapp_pendente", evento: "whatsapp_pendente" });
