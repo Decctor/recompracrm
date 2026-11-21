@@ -202,14 +202,17 @@ export async function syncControlLifecycle({
 	let justCreated = false;
 	if (!opportunityId) {
 		const owner = organization.autor;
-		const email = owner?.email || organization.email || undefined;
-		const telefone = owner?.telefone || organization.telefone || undefined;
+		// O contato da loja vem primeiro: quando o time cria a conta para o cliente, o "responsável" é
+		// alguém da Syncroniza, e o Control casaria todas essas lojas com o mesmo cliente.
+		const email = organization.email || owner?.email || undefined;
+		const telefone = organization.telefone || owner?.telefone || undefined;
 		const trialStage = commercialBoard?.estagios.find(
 			(stage) => normalizeStageName(stage.nome) === normalizeStageName(CONTROL_COMMERCIAL_TRIAL_STAGE_NAME),
 		);
-		// O cliente no Control é a loja (o CRM da Syncroniza é B2B); o contato é o do responsável.
+		// O cliente no Control é a loja (o CRM da Syncroniza é B2B), com o contato da loja quando houver.
 		const created = await createControlOpportunity({
 			referenciaExterna: reference,
+			reaproveitarAberta: false,
 			cliente: { nome: organization.nome, email, telefone, cpfCnpj: organization.cnpj || undefined },
 			oportunidade: {
 				nome: organization.nome,
@@ -220,22 +223,6 @@ export async function syncControlLifecycle({
 		opportunityId = created.oportunidadeId;
 		justCreated = true;
 		await persist({ controlOportunidadeId: opportunityId, marcosEnviados: [...sent] });
-
-		// Quem chegou por um formulário do site nos últimos dias já tinha uma oportunidade aberta, e o
-		// Control a reaproveitou: ela está no início do funil. Criar a organização é entrar no teste.
-		if (created.reaproveitada && commercialBoard && trialStage) {
-			const current = await getControlOpportunity(opportunityId);
-			const currentStageId = current.estagiosKanban.find((connection) => connection.quadroKanbanId === commercialBoard.id)?.estagioKanbanId ?? null;
-			const currentIndex = currentStageId ? commercialBoard.estagios.findIndex((stage) => stage.id === currentStageId) : -1;
-			const trialIndex = commercialBoard.estagios.findIndex((stage) => stage.id === trialStage.id);
-			if (currentIndex < trialIndex) {
-				await moveControlOpportunityStage(
-					opportunityId,
-					{ quadroKanbanId: commercialBoard.id, estagio: trialStage.nome },
-					`${reference}:comercial:teste`,
-				);
-			}
-		}
 	}
 
 	// 2. Estágio no quadro de sucesso. Só consulta o Control quando há algo novo a decidir.

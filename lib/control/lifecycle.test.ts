@@ -111,11 +111,11 @@ test("estágios manuais e desconhecidos não são tocados", () => {
 	assert.equal(shouldMoveSuccessStage({ estagioAtual: null, estagioAlvo: null }), false);
 });
 
-test("campos personalizados: só as chaves que existem no Control, sem nulos", () => {
+test("campos personalizados: só as chaves que existem no Control, sem nulos nem textos vazios", () => {
 	assert.deepEqual(
 		buildControlCustomFields({
-			valores: { plano: "ESCALA", segmento: null, campanhas_ativas: 3, inexistente: "x" },
-			chavesDisponiveis: ["plano", "segmento", "campanhas_ativas"],
+			valores: { plano: "ESCALA", segmento: null, assinatura_status: "  ", fonte_de_dados: "", campanhas_ativas: 3, inexistente: "x" },
+			chavesDisponiveis: ["plano", "segmento", "assinatura_status", "fonte_de_dados", "campanhas_ativas"],
 		}),
 		{ plano: "ESCALA", campanhas_ativas: 3 },
 	);
