@@ -26,6 +26,7 @@ import {
 	normalizeStageName,
 	planControlLifecycleSync,
 	resolveTrialEndingNotice,
+	shouldBackfillSilently,
 	shouldMoveSuccessStage,
 	type TControlCustomFieldValues,
 	type TControlLifecycleSnapshot,
@@ -66,8 +67,6 @@ function findBoard(boards: TControlBoard[], name: string) {
 
 const DELIVERED_STATUSES = ["ENTREGUE", "LIDO"] as const;
 const DAY_MS = 24 * 60 * 60 * 1000;
-/** Organização mais velha que isto, sincronizada pela primeira vez, entra em backfill silencioso. */
-const BACKFILL_AGE_MS = 2 * DAY_MS;
 
 async function loadOrganization(organizationId: string) {
 	return db.query.organizations.findFirst({
@@ -252,7 +251,7 @@ export async function syncControlLifecycle({
 	// ela alcançou meses atrás não viram eventos — um workflow de parabéns pela primeira campanha
 	// dispararia com meses de atraso. Eles são só registrados como entregues; o cartão vai direto ao
 	// estágio certo (passo 2).
-	const isBackfill = !state && now.getTime() - organization.dataInsercao.getTime() > BACKFILL_AGE_MS;
+	const isBackfill = shouldBackfillSilently({ marcosEnviados: state?.marcosEnviados ?? [], organizacaoCriadaEm: organization.dataInsercao, now });
 	const newMilestones: string[] = [];
 	if (isBackfill) {
 		for (const milestone of plan.novosMarcos) sent.add(milestone.chave);
