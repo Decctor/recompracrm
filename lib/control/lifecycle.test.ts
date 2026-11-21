@@ -6,6 +6,7 @@ import {
 	CONTROL_SUCCESS_MILESTONES,
 	controlOrganizationReference,
 	planControlLifecycleSync,
+	shouldBackfillSilently,
 	shouldMoveSuccessStage,
 	type TControlLifecycleSnapshot,
 } from "./lifecycle";
@@ -134,4 +135,15 @@ test("aviso de fim do teste: só nos últimos 3 dias, sem assinatura paga, uma c
 	assert.equal(resolveTrialEndingNotice({ periodoTesteFim: end, stripeSubscriptionStatus: "active", now: NOW }), null);
 	assert.notEqual(resolveTrialEndingNotice({ periodoTesteFim: end, stripeSubscriptionStatus: "canceled", now: NOW }), null);
 	assert.equal(resolveTrialEndingNotice({ periodoTesteFim: null, stripeSubscriptionStatus: null, now: NOW }), null);
+});
+
+test("backfill silencioso: só antes do primeiro marco registrado, mesmo com uma tentativa que falhou", () => {
+	const old = new Date(NOW.getTime() - 10 * DAY);
+	// Primeira tentativa falhou: a linha existe, mas nenhum marco foi registrado.
+	assert.equal(shouldBackfillSilently({ marcosEnviados: [], organizacaoCriadaEm: old, now: NOW }), true);
+	// O aviso de fim do teste não é marco: não encerra o backfill.
+	assert.equal(shouldBackfillSilently({ marcosEnviados: ["teste_terminando:2026-11-23"], organizacaoCriadaEm: old, now: NOW }), true);
+	assert.equal(shouldBackfillSilently({ marcosEnviados: ["boas_vindas"], organizacaoCriadaEm: old, now: NOW }), false);
+	// Organização nova: os marcos viram eventos desde o começo.
+	assert.equal(shouldBackfillSilently({ marcosEnviados: [], organizacaoCriadaEm: new Date(NOW.getTime() - DAY), now: NOW }), false);
 });

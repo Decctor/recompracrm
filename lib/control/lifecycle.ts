@@ -178,6 +178,29 @@ export function shouldMoveSuccessStage({ estagioAtual, estagioAlvo }: { estagioA
 	return targetIndex > currentIndex;
 }
 
+const SILENT_BACKFILL_MIN_AGE_MS = 2 * DAY_MS;
+
+/**
+ * Primeira sincronização de uma organização que já existia: os marcos alcançados no passado são só
+ * registrados como entregues, sem evento — um workflow de parabéns dispararia com meses de atraso.
+ *
+ * "Primeira" é nenhum marco registrado ainda, não "sem linha de estado": uma primeira tentativa que
+ * falhou deixa uma linha só com o erro, e a retentativa tem de continuar silenciosa.
+ */
+export function shouldBackfillSilently({
+	marcosEnviados,
+	organizacaoCriadaEm,
+	now,
+}: {
+	marcosEnviados: readonly string[];
+	organizacaoCriadaEm: Date;
+	now: Date;
+}) {
+	const milestoneKeys = new Set(CONTROL_SUCCESS_MILESTONES.map((milestone) => milestone.chave));
+	if (marcosEnviados.some((key) => milestoneKeys.has(key))) return false;
+	return now.getTime() - organizacaoCriadaEm.getTime() > SILENT_BACKFILL_MIN_AGE_MS;
+}
+
 export type TControlCustomFieldValues = Record<string, string | number | boolean | null>;
 
 /**
