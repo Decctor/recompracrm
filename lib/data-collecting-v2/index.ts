@@ -8,20 +8,20 @@ import { getChannelErpPolicy } from "@/lib/sales/fulfillment-channels/policy";
 import { processSaleAutomaticFiscalEmissionIfEligible } from "@/lib/sales/sale-processing/process-sale-automatic-fiscal-emission";
 import { type TEventDispatchResult } from "@/lib/campaigns/engine";
 import { db } from "@/services/drizzle";
-import { integrations, organizations } from "@/services/drizzle/schema";
+import { integrations, organizations, sales } from "@/services/drizzle/schema";
 import { isAxiosError } from "axios";
 import dayjs from "dayjs";
 import timezone from "dayjs/plugin/timezone";
 import utc from "dayjs/plugin/utc";
-import { and, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import { z } from "zod";
 import { processDataCollectingV2Effects } from "./effects";
 import {
 	createEmptyRunSummary,
-	groupIntegrationsByOrganization,
 	isEmptyCanonicalBatch,
-	mapWithConcurrency,
 	resolveIntegrationStatusUpdate,
+	runFetchThenPersistByOrganization,
+	type TSettledIntegrationFetch,
 } from "./run-plan";
 import { syncAuxiliaryEntities } from "./sync-auxiliary-entities";
 import { syncSales, type TSyncSalesErpOptions } from "./sync-sales";
@@ -53,6 +53,20 @@ export type TRunDataCollectingV2Params = {
 	 * `groupIntegrationsByOrganization`). Default 1 = comportamento histórico, sequencial.
 	 */
 	organizationConcurrency?: number;
+	/**
+	 * Buscas nos conectores em paralelo, independentemente da organização (a gravação continua em
+	 * série por organização — ver `runFetchThenPersistByOrganization`). Default = `organizationConcurrency`.
+	 * O teto divide o pool do banco (max 10 por instância) com as transações de gravação: Bling e
+	 * iFood tocam o banco na busca para renovar token.
+	 */
+	fetchConcurrency?: number;
+	/**
+	 * Run incremental: conectores com assinatura de listagem (Bling, Cardápio Web) pulam o detalhe dos
+	 * pedidos já gravados com a mesma assinatura e os deixam fora do lote. Default false = run
+	 * completo. Quem liga precisa intercalar runs completos: só eles pegam mudanças que a listagem
+	 * não mostra (contato editado, produto que passou a resolver no catálogo).
+	 */
+	reuseUnchangedListings?: boolean;
 	window?: TCanonicalImportWindow;
 	processImmediateInteractions?: boolean;
 	effects?: Partial<TDataCollectingV2EffectsOptions>;
@@ -138,30 +152,58 @@ async function loadOrganizationConfigurations(organizationIds: string[]) {
 }
 type TOrganizationConfigurationRow = { id: string; configuracao: (typeof organizations.$inferSelect)["configuracao"] };
 
-async function processIntegration({
+function fetchIntegrationBatch({
 	integration,
-	organizationConfiguration,
 	window,
+	reuseUnchangedListings,
+}: {
+	integration: TDataSourceIntegration;
+	window: TCanonicalImportWindow;
+	reuseUnchangedListings: boolean;
+}) {
+	return fetchConnectorImportBatch({
+		organizationId: integration.organizacaoId,
+		integrationId: integration.id,
+		config: integration.configuracao,
+		window,
+		resolveKnownListingSignatures: reuseUnchangedListings ? (sourceSaleIds) => loadKnownListingSignatures({ integration, sourceSaleIds }) : undefined,
+	});
+}
+
+/** Assinaturas de listagem já gravadas nas vendas desta conexão, por `idExterno`. */
+async function loadKnownListingSignatures({ integration, sourceSaleIds }: { integration: TDataSourceIntegration; sourceSaleIds: string[] }) {
+	if (sourceSaleIds.length === 0) return new Map<string, string>();
+	const rows = await db
+		.select({ idExterno: sales.idExterno, assinaturaExternaListagem: sales.assinaturaExternaListagem })
+		.from(sales)
+		.where(
+			and(
+				eq(sales.organizacaoId, integration.organizacaoId),
+				eq(sales.integracaoId, integration.id),
+				inArray(sales.idExterno, sourceSaleIds),
+				isNotNull(sales.assinaturaExternaListagem),
+			),
+		);
+	const known = new Map<string, string>();
+	for (const row of rows) if (row.idExterno && row.assinaturaExternaListagem) known.set(row.idExterno, row.assinaturaExternaListagem);
+	return known;
+}
+
+async function persistFetchedBatch({
+	integration,
+	batch,
+	organizationConfiguration,
 	effects,
 	includeRawInResult,
 	publishDispatches,
 }: {
 	integration: TDataSourceIntegration;
+	batch: TCanonicalImportBatch;
 	organizationConfiguration: (typeof organizations.$inferSelect)["configuracao"] | null;
-	window: TCanonicalImportWindow;
 	effects: TDataCollectingV2EffectsOptions;
 	includeRawInResult?: boolean;
 	publishDispatches?: boolean;
 }) {
-	const fetchStartedAt = Date.now();
-	const batch = await fetchConnectorImportBatch({
-		organizationId: integration.organizacaoId,
-		integrationId: integration.id,
-		config: integration.configuracao,
-		window,
-	});
-	const fetchMs = Date.now() - fetchStartedAt;
-
 	// Lote vazio (o caso de ~99% dos ciclos de polling do iFood): nada a sincronizar, nenhum efeito
 	// a disparar. Pular a transação evita carregar campanhas, abrir/commitar e consultar cashback
 	// só para não escrever nada.
@@ -170,11 +212,10 @@ async function processIntegration({
 			summary: createEmptyRunSummary({ organizationId: integration.organizacaoId, integrationId: integration.id, source: batch.source }),
 			eventDispatches: [] as TEventDispatchResult[],
 			raw: includeRawInResult ? batch.raw : undefined,
-			timing: { fetchMs, persistMs: 0, skippedPersistence: true },
+			skippedPersistence: true,
 		};
 	}
 
-	const persistStartedAt = Date.now();
 	const persisted = await persistCanonicalBatch({
 		integration,
 		organizationConfiguration,
@@ -184,15 +225,17 @@ async function processIntegration({
 		publishDispatches,
 		mode: "CONTINUA",
 	});
-	return { ...persisted, timing: { fetchMs, persistMs: Date.now() - persistStartedAt, skippedPersistence: false } };
+	return { ...persisted, skippedPersistence: false };
 }
 
 export type TDataCollectingV2IntegrationTiming = {
 	organizationId: string;
 	integrationId: string;
-	/** Busca no conector (rede). Numa integração que falhou, é o tempo total até a falha. */
+	/** Busca no conector (rede), da partida até o lote ou a falha. Não inclui a espera por vaga de busca. */
 	fetchMs: number;
-	/** Transação de persistência + efeitos pós-commit. 0 quando o lote veio vazio ou a integração falhou. */
+	/** Lote pronto esperando a vez de gravar (a integração anterior da mesma organização ou uma vaga entre organizações). */
+	waitMs: number;
+	/** Transação de persistência + efeitos pós-commit. 0 quando o lote veio vazio ou a busca falhou; até a falha, se a gravação falhou. */
 	persistMs: number;
 	skippedPersistence: boolean;
 	failed: boolean;
@@ -389,6 +432,8 @@ export async function runDataCollectingV2({
 	integrationIds,
 	integrations: preloadedIntegrations,
 	organizationConcurrency = 1,
+	fetchConcurrency = organizationConcurrency,
+	reuseUnchangedListings = false,
 	window = getDefaultImportWindow(),
 	processImmediateInteractions = true,
 	effects: effectsOverrides,
@@ -413,17 +458,28 @@ export async function runDataCollectingV2({
 		  }
 		| { ok: false; error: TDataCollectingV2RunError; timing: TDataCollectingV2IntegrationTiming };
 
-	async function processIntegrationOutcome(integration: TDataSourceIntegration): Promise<TIntegrationOutcome> {
-		const startedAt = Date.now();
+	async function persistIntegrationOutcome(
+		integration: TDataSourceIntegration,
+		fetched: TSettledIntegrationFetch<TCanonicalImportBatch>,
+	): Promise<TIntegrationOutcome> {
+		const persistStartedAt = Date.now();
+		const baseTiming = {
+			organizationId: integration.organizacaoId,
+			integrationId: integration.id,
+			fetchMs: fetched.fetchMs,
+			waitMs: Math.max(0, persistStartedAt - fetched.fetchedAt),
+		};
 		try {
-			const { summary, eventDispatches, raw, timing } = await processIntegration({
+			if (!fetched.ok) throw fetched.error;
+			const { summary, eventDispatches, raw, skippedPersistence } = await persistFetchedBatch({
 				integration,
+				batch: fetched.value,
 				organizationConfiguration: organizationConfigurationsById.get(integration.organizacaoId)?.configuracao ?? null,
-				window,
 				effects,
 				includeRawInResult,
 				publishDispatches: processImmediateInteractions,
 			});
+			const persistMs = skippedPersistence ? 0 : Date.now() - persistStartedAt;
 			console.log(`[DATA_COLLECTING_V2] [ORG: ${integration.organizacaoId}] [INTEGRATION: ${integration.id}] Summary`, summary);
 
 			// "Última sincronização" finalmente mantida: a linha da conexão registra o fim de cada
@@ -439,7 +495,7 @@ export async function runDataCollectingV2({
 				summary,
 				eventDispatches,
 				raw,
-				timing: { organizationId: integration.organizacaoId, integrationId: integration.id, ...timing, failed: false },
+				timing: { ...baseTiming, persistMs, skippedPersistence, failed: false },
 			};
 		} catch (error) {
 			const message = error instanceof Error ? error.message : "Erro desconhecido ao processar integração.";
@@ -455,26 +511,21 @@ export async function runDataCollectingV2({
 			return {
 				ok: false,
 				error: { organizationId: integration.organizacaoId, integrationId: integration.id, integrationType: integration.tipo, message },
-				timing: {
-					organizationId: integration.organizacaoId,
-					integrationId: integration.id,
-					fetchMs: Date.now() - startedAt,
-					persistMs: 0,
-					skippedPersistence: false,
-					failed: true,
-				},
+				timing: { ...baseTiming, persistMs: fetched.ok ? Date.now() - persistStartedAt : 0, skippedPersistence: false, failed: true },
 			};
 		}
 	}
 
-	// Organizações distintas correm em paralelo (limite `organizationConcurrency`); dentro da
-	// mesma organização as integrações seguem em série. Cada integração já é isolada em try/catch,
-	// então uma falha não derruba as demais do grupo.
-	const outcomesByIntegrationId = new Map<string, TIntegrationOutcome>();
-	await mapWithConcurrency(groupIntegrationsByOrganization(integrationsForImport), organizationConcurrency, async (group) => {
-		for (const integration of group) {
-			outcomesByIntegrationId.set(integration.id, await processIntegrationOutcome(integration));
-		}
+	// Buscas em paralelo (até `fetchConcurrency`, qualquer organização); gravação como antes:
+	// organizações distintas em paralelo (até `organizationConcurrency`), integrações da mesma
+	// organização em série. Cada integração é isolada em try/catch — falha de busca ou de gravação
+	// não derruba as demais do grupo.
+	const outcomesByIntegration = await runFetchThenPersistByOrganization({
+		items: integrationsForImport,
+		fetchConcurrency,
+		organizationConcurrency,
+		fetch: (integration) => fetchIntegrationBatch({ integration, window, reuseUnchangedListings }),
+		persist: persistIntegrationOutcome,
 	});
 
 	const summaries: TDataCollectingV2RunSummary[] = [];
@@ -485,7 +536,7 @@ export async function runDataCollectingV2({
 
 	// Resultados na ordem de entrada das integrações, independentemente de qual grupo terminou antes.
 	for (const integration of integrationsForImport) {
-		const outcome = outcomesByIntegrationId.get(integration.id);
+		const outcome = outcomesByIntegration.get(integration);
 		if (!outcome) continue;
 		timings.push(outcome.timing);
 		if (!outcome.ok) {

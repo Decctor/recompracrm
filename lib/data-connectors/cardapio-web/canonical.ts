@@ -1,4 +1,5 @@
-import { fetchCardapioWebOrdersWithDetails } from ".";
+import { createCardapioWebClient, fetchAllCardapioWebOrders, fetchOrderDetailsInBatches } from ".";
+import { computeListingSignature, partitionListingByKnownSignature } from "../listing-signature";
 import type {
 	TCanonicalClient,
 	TCanonicalDeliveryMode,
@@ -10,9 +11,10 @@ import type {
 	TCanonicalProductAddOnOption,
 	TCanonicalSale,
 	TCanonicalSaleItem,
+	TDataConnectorFetchInput,
 } from "../types";
 import { extractAllCardapioWebData, type MappedCardapioWebClient, type MappedCardapioWebPartner, type MappedCardapioWebSale } from "./mappers";
-import type { TCardapioWebConfig, TGetCardapioWebOrderDetailsOutput } from "./types";
+import type { TCardapioWebConfig, TGetCardapioWebOrderDetailsOutput, TGetCardapioWebOrderHistoryOutput } from "./types";
 
 function mapDeliveryMode(value: string): TCanonicalDeliveryMode {
 	if (value === "PRESENCIAL" || value === "RETIRADA" || value === "ENTREGA" || value === "COMANDA") return value;
@@ -157,15 +159,57 @@ export function toCanonicalCardapioWebImportBatch({
 	};
 }
 
+/**
+ * A listagem só traz pedidos fechados ou cancelados (estados finais), com `status` e `updated_at`:
+ * um pedido que mudou depois de gravado muda um dos dois.
+ */
+export function getCardapioWebListingSignature(order: Pick<TGetCardapioWebOrderHistoryOutput["orders"][number], "status" | "updated_at">) {
+	return computeListingSignature("CARDAPIO-WEB", { status: order.status, updatedAt: order.updated_at });
+}
+
 export async function fetchCardapioWebImportBatch({
 	organizationId,
+	integrationId,
 	config,
 	window,
+	resolveKnownListingSignatures,
 }: {
 	organizationId: string;
+	integrationId: string;
 	config: TCardapioWebConfig;
 	window: TCanonicalImportWindow;
+	resolveKnownListingSignatures?: TDataConnectorFetchInput["resolveKnownListingSignatures"];
 }) {
-	const orders = await fetchCardapioWebOrdersWithDetails(config, window.startDate.toISOString(), window.endDate.toISOString());
-	return toCanonicalCardapioWebImportBatch({ organizationId, window, orders });
+	const client = createCardapioWebClient(config);
+	const orderSummaries = await fetchAllCardapioWebOrders(client, window.startDate.toISOString(), window.endDate.toISOString(), ["closed", "canceled"]);
+	if (orderSummaries.length === 0) return toCanonicalCardapioWebImportBatch({ organizationId, window, orders: [] });
+
+	const known = resolveKnownListingSignatures ? await resolveKnownListingSignatures(orderSummaries.map((order) => order.id.toString())) : null;
+	const { toFetch, unchanged } = partitionListingByKnownSignature({
+		items: orderSummaries,
+		getSourceSaleId: (order) => order.id.toString(),
+		getSignature: getCardapioWebListingSignature,
+		known,
+	});
+	if (known) {
+		console.log(
+			`[CARDAPIO-WEB] [INTEGRATION: ${integrationId}] ${unchanged.length} pedido(s) já gravado(s) sem mudança na listagem; detalhando ${toFetch.length}.`,
+		);
+	}
+
+	const orders = await fetchOrderDetailsInBatches(
+		client,
+		toFetch.map((order) => order.id),
+	);
+	const listingSignatures = new Map(toFetch.map((order) => [order.id.toString(), getCardapioWebListingSignature(order)]));
+	const batch = toCanonicalCardapioWebImportBatch({ organizationId, window, orders });
+	return {
+		...batch,
+		// Pedido cujo detalhe falhou nem entra no lote (é refeito no próximo run): toda venda do lote
+		// veio do detalhe e pode ser carimbada.
+		sales: batch.sales.map((sale) => {
+			const listingSignature = listingSignatures.get(sale.sourceSaleId);
+			return listingSignature ? { ...sale, listingSignature } : sale;
+		}),
+	};
 }

@@ -19,7 +19,10 @@ const BLING_MAX_RETRIES = 3;
 const BLING_MIN_REQUEST_INTERVAL_MS = 400;
 const BLING_RATE_LIMIT_RETRY_MS = 10000;
 
-let blingRateLimitQueue = Promise.resolve();
+// Uma fila por conta Bling (o limite de requisições é da conta): com as buscas do data-collecting
+// em paralelo, uma fila global fazia as contas esperarem umas pelas outras sem motivo.
+const blingRateLimitQueues = new Map<string, Promise<void>>();
+const BLING_DEFAULT_RATE_LIMIT_KEY = "default";
 
 function getBlingCredentials() {
 	const clientId = process.env.BLING_CLIENT_ID;
@@ -54,13 +57,16 @@ function delay(ms: number) {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function waitForBlingRateLimitSlot() {
-	const previousSlot = blingRateLimitQueue;
+async function waitForBlingRateLimitSlot(rateLimitKey: string) {
+	const previousSlot = blingRateLimitQueues.get(rateLimitKey) ?? Promise.resolve();
 	let releaseCurrentSlot: () => void = () => {};
 
-	blingRateLimitQueue = new Promise((resolve) => {
-		releaseCurrentSlot = resolve;
-	});
+	blingRateLimitQueues.set(
+		rateLimitKey,
+		new Promise((resolve) => {
+			releaseCurrentSlot = resolve;
+		}),
+	);
 
 	await previousSlot;
 	await delay(BLING_MIN_REQUEST_INTERVAL_MS);
@@ -158,7 +164,14 @@ export async function getValidBlingConfig({ integrationId, config }: { integrati
 	return refreshedConfig;
 }
 
-export function createBlingClient(config: TBlingConfig): AxiosInstance {
+/**
+ * `rateLimitKey` identifica a conta Bling (o data-collecting usa o ID da organização). Chamadores
+ * sem chave dividem a fila padrão, como antes.
+ */
+export function createBlingClient(
+	config: TBlingConfig,
+	{ rateLimitKey = BLING_DEFAULT_RATE_LIMIT_KEY }: { rateLimitKey?: string } = {},
+): AxiosInstance {
 	const accessToken = config.accessToken.trim();
 	const tokenType = normalizeBlingTokenType(config.tokenType);
 
@@ -172,7 +185,7 @@ export function createBlingClient(config: TBlingConfig): AxiosInstance {
 	});
 
 	client.interceptors.request.use(async (requestConfig) => {
-		await waitForBlingRateLimitSlot();
+		await waitForBlingRateLimitSlot(rateLimitKey);
 		return requestConfig;
 	});
 

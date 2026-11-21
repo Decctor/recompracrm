@@ -146,57 +146,78 @@ class RateLimiter {
 	}
 }
 
-// Global rate limiter instances for CardapioWeb
-let cardapioWebHistoryRateLimiter: RateLimiter | null = null;
-let cardapioWebDetailsRateLimiter: RateLimiter | null = null;
-let cardapioWebCatalogRateLimiter: RateLimiter | null = null;
+// Limitadores por merchant: os limites da API são de cada loja (X-Merchant-Id). Com as buscas do
+// data-collecting em paralelo, limitadores globais faziam lojas diferentes esperarem umas pelas outras.
+const cardapioWebHistoryRateLimiters = new Map<string, RateLimiter>();
+const cardapioWebDetailsRateLimiters = new Map<string, RateLimiter>();
+const cardapioWebCatalogRateLimiters = new Map<string, RateLimiter>();
 
-/**
- * Rate limiter para o endpoint de history (5 req/min)
- */
-function getCardapioWebHistoryRateLimiter(): RateLimiter {
-	if (!cardapioWebHistoryRateLimiter) {
-		cardapioWebHistoryRateLimiter = new RateLimiter(CARDAPIO_WEB_RATE_LIMIT_PER_MINUTE_HISTORY, {
-			safetyMargin: 1.0, // Sem margem - já é super baixo (5 req/min)
-			maxRequestsPerSecond: 1, // Max 1 req/s para evitar burst
-		});
+function getCardapioWebMerchantKey(client: AxiosInstance) {
+	const merchantId = client.defaults.headers["X-Merchant-Id"];
+	return merchantId ? String(merchantId) : "default";
+}
+
+function getOrCreateRateLimiter(limiters: Map<string, RateLimiter>, key: string, create: () => RateLimiter) {
+	let limiter = limiters.get(key);
+	if (!limiter) {
+		limiter = create();
+		limiters.set(key, limiter);
 	}
-	return cardapioWebHistoryRateLimiter;
+	return limiter;
 }
 
 /**
- * Rate limiter para o endpoint de details (400 req/min)
+ * Rate limiter para o endpoint de history (5 req/min por merchant)
  */
-function getCardapioWebDetailsRateLimiter(): RateLimiter {
-	if (!cardapioWebDetailsRateLimiter) {
-		cardapioWebDetailsRateLimiter = new RateLimiter(CARDAPIO_WEB_RATE_LIMIT_PER_MINUTE, {
-			safetyMargin: 0.7, // 280 req/min (70% of 400)
-			maxRequestsPerSecond: 5, // Max 5 req/s = 200ms entre requisições
-		});
-	}
-	return cardapioWebDetailsRateLimiter;
+function getCardapioWebHistoryRateLimiter(client: AxiosInstance): RateLimiter {
+	return getOrCreateRateLimiter(
+		cardapioWebHistoryRateLimiters,
+		getCardapioWebMerchantKey(client),
+		() =>
+			new RateLimiter(CARDAPIO_WEB_RATE_LIMIT_PER_MINUTE_HISTORY, {
+				safetyMargin: 1.0, // Sem margem - já é super baixo (5 req/min)
+				maxRequestsPerSecond: 1, // Max 1 req/s para evitar burst
+			}),
+	);
 }
 
 /**
- * Rate limiter para o endpoint de catalog (5 req/min - mesmo que history)
+ * Rate limiter para o endpoint de details (400 req/min por merchant)
  */
-function getCardapioWebCatalogRateLimiter(): RateLimiter {
-	if (!cardapioWebCatalogRateLimiter) {
-		cardapioWebCatalogRateLimiter = new RateLimiter(CARDAPIO_WEB_RATE_LIMIT_PER_MINUTE_HISTORY, {
-			safetyMargin: 1.0, // Sem margem - já é super baixo (5 req/min)
-			maxRequestsPerSecond: 1, // Max 1 req/s para evitar burst
-		});
-	}
-	return cardapioWebCatalogRateLimiter;
+function getCardapioWebDetailsRateLimiter(client: AxiosInstance): RateLimiter {
+	return getOrCreateRateLimiter(
+		cardapioWebDetailsRateLimiters,
+		getCardapioWebMerchantKey(client),
+		() =>
+			new RateLimiter(CARDAPIO_WEB_RATE_LIMIT_PER_MINUTE, {
+				safetyMargin: 0.7, // 280 req/min (70% of 400)
+				maxRequestsPerSecond: 5, // Max 5 req/s = 200ms entre requisições
+			}),
+	);
+}
+
+/**
+ * Rate limiter para o endpoint de catalog (5 req/min por merchant - mesmo que history)
+ */
+function getCardapioWebCatalogRateLimiter(client: AxiosInstance): RateLimiter {
+	return getOrCreateRateLimiter(
+		cardapioWebCatalogRateLimiters,
+		getCardapioWebMerchantKey(client),
+		() =>
+			new RateLimiter(CARDAPIO_WEB_RATE_LIMIT_PER_MINUTE_HISTORY, {
+				safetyMargin: 1.0, // Sem margem - já é super baixo (5 req/min)
+				maxRequestsPerSecond: 1, // Max 1 req/s para evitar burst
+			}),
+	);
 }
 
 /**
  * Reseta os rate limiters (útil para testes ou quando iniciar nova sessão)
  */
 export function resetCardapioWebRateLimiters(): void {
-	cardapioWebHistoryRateLimiter = null;
-	cardapioWebDetailsRateLimiter = null;
-	cardapioWebCatalogRateLimiter = null;
+	cardapioWebHistoryRateLimiters.clear();
+	cardapioWebDetailsRateLimiters.clear();
+	cardapioWebCatalogRateLimiters.clear();
 }
 
 /**
@@ -358,7 +379,7 @@ export async function getCardapioWebOrderHistory(
 			const { data } = await client.get<TGetCardapioWebOrderHistoryOutput>(`/api/partner/v1/orders/history?${searchParams.toString()}`);
 			return GetCardapioWebOrderHistoryOutputSchema.parse(data);
 		},
-		getCardapioWebHistoryRateLimiter(), // Rate limiter específico para history
+		getCardapioWebHistoryRateLimiter(client), // Rate limiter específico para history
 		3,
 		`history page ${validatedInput.page || 1}`,
 	);
@@ -379,7 +400,7 @@ export async function getCardapioWebOrderDetails(
 			const { data } = await client.get<TGetCardapioWebOrderDetailsOutput>(`/api/partner/v1/orders/${validatedInput.order_id}`);
 			return GetCardapioWebOrderDetailsOutputSchema.parse(data);
 		},
-		getCardapioWebDetailsRateLimiter(), // Rate limiter específico para details
+		getCardapioWebDetailsRateLimiter(client), // Rate limiter específico para details
 		3,
 		`order ${validatedInput.order_id}`,
 	);
@@ -396,7 +417,7 @@ export async function getCardapioWebCatalog(client: AxiosInstance): Promise<TGet
 			console.log(`[CARDAPIO-WEB] Catalog fetched successfully`, data);
 			return GetCardapioWebCatalogOutputSchema.parse(data);
 		},
-		getCardapioWebCatalogRateLimiter(), // Rate limiter específico para catalog
+		getCardapioWebCatalogRateLimiter(client), // Rate limiter específico para catalog
 		3,
 		"catalog",
 	);
@@ -417,7 +438,7 @@ export async function fetchAllCardapioWebOrders(
 	const allOrders: TGetCardapioWebOrderHistoryOutput["orders"] = [];
 	let currentPage = 1;
 	let totalPages = 1;
-	const rateLimiter = getCardapioWebHistoryRateLimiter();
+	const rateLimiter = getCardapioWebHistoryRateLimiter(client);
 	const startTime = Date.now();
 
 	do {
@@ -465,7 +486,7 @@ export async function fetchOrderDetailsInBatches(
 	options?: TFetchOrderDetailsInBatchesOptions,
 ): Promise<TGetCardapioWebOrderDetailsOutput[]> {
 	const results: TGetCardapioWebOrderDetailsOutput[] = [];
-	const rateLimiter = getCardapioWebDetailsRateLimiter();
+	const rateLimiter = getCardapioWebDetailsRateLimiter(client);
 	let completed = 0;
 	let failed = 0;
 	const startTime = Date.now();

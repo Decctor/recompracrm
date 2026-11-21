@@ -55,3 +55,36 @@ export async function mapWithConcurrencySettled<TInput, TOutput>(
 	if (failure) throw (failure as { error: unknown }).error;
 	return results;
 }
+
+/**
+ * Teto de concorrência para tarefas disparadas em momentos diferentes (não uma lista de uma vez):
+ * `run(task)` começa a tarefa assim que houver vaga, em ordem de chegada, e devolve o resultado dela.
+ */
+export function createConcurrencyLimiter(concurrency: number) {
+	const limit = Math.max(1, Math.floor(concurrency));
+	let active = 0;
+	const queue: Array<() => void> = [];
+
+	function startNext() {
+		if (active >= limit) return;
+		const start = queue.shift();
+		if (!start) return;
+		active += 1;
+		start();
+	}
+
+	return function run<T>(task: () => Promise<T>): Promise<T> {
+		return new Promise<T>((resolve, reject) => {
+			queue.push(() => {
+				Promise.resolve()
+					.then(task)
+					.then(resolve, reject)
+					.finally(() => {
+						active -= 1;
+						startNext();
+					});
+			});
+			startNext();
+		});
+	};
+}

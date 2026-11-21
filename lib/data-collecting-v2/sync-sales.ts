@@ -163,6 +163,9 @@ export function buildSaleValues({
 		statusAtendimento: mapCanonicalSaleAttendanceStatus(sale),
 		// Detalhamento do canal (fiscal/conciliação). null em conectores sem detalhamento.
 		integracaoMetadados: sale.integrationMetadata ?? null,
+		// `undefined` quando o conector não carimba: fica fora da assinatura de importação (as vendas
+		// dos outros conectores não reprocessam) e fora do UPDATE (não apaga um carimbo anterior).
+		assinaturaExternaListagem: sale.listingSignature,
 	};
 }
 

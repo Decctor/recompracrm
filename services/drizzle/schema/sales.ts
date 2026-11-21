@@ -115,6 +115,10 @@ export const sales = newTable(
 		// "v1:<sha256>"). Assinatura igual = a fonte não mudou = sync pula as escritas da venda.
 		// null = venda nunca carimbada (legado ou interna) — tratada como alterada no próximo sync.
 		assinaturaExterna: text("assinatura_externa"),
+		// Assinatura do pedido na LISTAGEM do conector (Bling, Cardápio Web), carimbada quando a venda
+		// vem do detalhe. Run incremental com a mesma assinatura na listagem = pedido já gravado como a
+		// fonte o mostra, e o conector pula o detalhe. null = conector sem listagem ou venda não carimbada.
+		assinaturaExternaListagem: text("assinatura_externa_listagem"),
 	},
 	(table) => ({
 		fiscalDocumentCheck: check(

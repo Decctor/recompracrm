@@ -181,6 +181,12 @@ export type TCanonicalSale = {
 	 * taxas do canal). Persistido em `sales.integracaoMetadados`. null = sem detalhamento.
 	 */
 	integrationMetadata?: TSaleIntegrationMetadata | null;
+	/**
+	 * Assinatura do pedido na listagem do conector (`computeListingSignature`), persistida em
+	 * `sales.assinaturaExternaListagem`. Só vem quando a venda foi montada do detalhe; ausente = o conector
+	 * não pula detalhe, ou o detalhe falhou e a venda veio da listagem (não deve ser carimbada).
+	 */
+	listingSignature?: string;
 	raw?: unknown;
 };
 
@@ -211,6 +217,12 @@ export type TDataConnectorFetchInput<TConfig extends TDataSourceIntegrationConfi
 	integrationId: string;
 	config: TConfig;
 	window: TCanonicalImportWindow;
+	/**
+	 * Assinaturas de listagem já gravadas, por `sourceSaleId`, para os pedidos informados. Presente =
+	 * run incremental: o conector que a suporta pula o detalhe dos pedidos com a mesma assinatura e os
+	 * deixa fora do lote. Ausente = run completo (busca tudo, como sempre).
+	 */
+	resolveKnownListingSignatures?: (sourceSaleIds: string[]) => Promise<Map<string, string>>;
 };
 
 export type TDataConnector<TConfig extends TDataSourceIntegrationConfig = TDataSourceIntegrationConfig> = {

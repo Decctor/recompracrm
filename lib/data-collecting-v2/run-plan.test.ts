@@ -7,6 +7,7 @@ import {
 	isEmptyCanonicalBatch,
 	mapWithConcurrency,
 	resolveIntegrationStatusUpdate,
+	runFetchThenPersistByOrganization,
 } from "./run-plan";
 
 function makeBatch(overrides: Partial<TCanonicalImportBatch> = {}): TCanonicalImportBatch {
@@ -126,4 +127,137 @@ test("colisões de idExterno gravam e limpam o erro no run seguinte", () => {
 		now,
 	});
 	assert.equal(cleared?.ultimoErro, null);
+});
+
+function deferred<T>() {
+	let resolve!: (value: T) => void;
+	let reject!: (error: unknown) => void;
+	const promise = new Promise<T>((res, rej) => {
+		resolve = res;
+		reject = rej;
+	});
+	return { promise, resolve, reject };
+}
+
+const flush = () => new Promise((resolve) => setImmediate(resolve));
+
+test("busca de todas as integrações começa já, inclusive as da mesma organização", async () => {
+	const items = [
+		{ id: "a1", organizacaoId: "org-a" },
+		{ id: "a2", organizacaoId: "org-a" },
+		{ id: "b1", organizacaoId: "org-b" },
+	];
+	const fetches = new Map(items.map((item) => [item.id, deferred<string>()]));
+	const started: string[] = [];
+	const run = runFetchThenPersistByOrganization({
+		items,
+		fetchConcurrency: 10,
+		organizationConcurrency: 1,
+		fetch: (item) => {
+			started.push(item.id);
+			return fetches.get(item.id)!.promise;
+		},
+		persist: async (item, fetched) => (fetched.ok ? fetched.value : "erro"),
+	});
+	await flush();
+	assert.deepEqual(started, ["a1", "a2", "b1"]);
+	for (const item of items) fetches.get(item.id)!.resolve(`lote-${item.id}`);
+	const outcomes = await run;
+	assert.deepEqual(
+		items.map((item) => outcomes.get(item)),
+		["lote-a1", "lote-a2", "lote-b1"],
+	);
+});
+
+test("gravação da mesma organização é em série e na ordem de entrada, mesmo se o segundo lote chegar antes", async () => {
+	const items = [
+		{ id: "a1", organizacaoId: "org-a" },
+		{ id: "a2", organizacaoId: "org-a" },
+	];
+	const fetches = new Map(items.map((item) => [item.id, deferred<string>()]));
+	const events: string[] = [];
+	let activePersists = 0;
+	let maxActivePersists = 0;
+	const run = runFetchThenPersistByOrganization({
+		items,
+		fetchConcurrency: 10,
+		organizationConcurrency: 4,
+		fetch: (item) => fetches.get(item.id)!.promise,
+		persist: async (item) => {
+			activePersists += 1;
+			maxActivePersists = Math.max(maxActivePersists, activePersists);
+			events.push(`start-${item.id}`);
+			await flush();
+			events.push(`end-${item.id}`);
+			activePersists -= 1;
+			return item.id;
+		},
+	});
+	fetches.get("a2")!.resolve("a2");
+	await flush();
+	assert.deepEqual(events, []);
+	fetches.get("a1")!.resolve("a1");
+	await run;
+	assert.deepEqual(events, ["start-a1", "end-a1", "start-a2", "end-a2"]);
+	assert.equal(maxActivePersists, 1);
+});
+
+test("organizações distintas gravam em paralelo até o teto", async () => {
+	const items = ["a", "b", "c"].map((org) => ({ id: org, organizacaoId: `org-${org}` }));
+	let activePersists = 0;
+	let maxActivePersists = 0;
+	await runFetchThenPersistByOrganization({
+		items,
+		fetchConcurrency: 10,
+		organizationConcurrency: 2,
+		fetch: async (item) => item.id,
+		persist: async () => {
+			activePersists += 1;
+			maxActivePersists = Math.max(maxActivePersists, activePersists);
+			await flush();
+			activePersists -= 1;
+		},
+	});
+	assert.equal(maxActivePersists, 2);
+});
+
+test("buscas respeitam o teto de concorrência", async () => {
+	const items = Array.from({ length: 5 }, (_, index) => ({ id: `i${index}`, organizacaoId: `org-${index}` }));
+	let activeFetches = 0;
+	let maxActiveFetches = 0;
+	await runFetchThenPersistByOrganization({
+		items,
+		fetchConcurrency: 2,
+		organizationConcurrency: 5,
+		fetch: async (item) => {
+			activeFetches += 1;
+			maxActiveFetches = Math.max(maxActiveFetches, activeFetches);
+			await flush();
+			activeFetches -= 1;
+			return item.id;
+		},
+		persist: async () => undefined,
+	});
+	assert.equal(maxActiveFetches, 2);
+});
+
+test("busca que falha chega ao persist como erro, na vez da integração, sem derrubar as outras", async () => {
+	const items = [
+		{ id: "a1", organizacaoId: "org-a" },
+		{ id: "a2", organizacaoId: "org-a" },
+	];
+	let clock = 0;
+	const outcomes = await runFetchThenPersistByOrganization({
+		items,
+		fetchConcurrency: 10,
+		organizationConcurrency: 1,
+		now: () => (clock += 10),
+		fetch: async (item) => {
+			if (item.id === "a1") throw new Error("ERP fora do ar");
+			return "lote-a2";
+		},
+		persist: async (_item, fetched) => (fetched.ok ? fetched.value : (fetched.error as Error).message),
+	});
+	assert.equal(outcomes.get(items[0]), "ERP fora do ar");
+	assert.equal(outcomes.get(items[1]), "lote-a2");
 });

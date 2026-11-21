@@ -1,3 +1,4 @@
+import { createConcurrencyLimiter, mapWithConcurrency } from "@/lib/async/map-with-concurrency";
 import type { TCanonicalImportBatch } from "@/lib/data-connectors";
 import type { TDataSourceIntegration } from "@/lib/integrations/data-sources";
 import type { TDataCollectingV2RunSummary } from "./types";
@@ -71,6 +72,68 @@ export function groupIntegrationsByOrganization<T extends Pick<TDataSourceIntegr
 }
 
 export { mapWithConcurrency } from "@/lib/async/map-with-concurrency";
+
+/** Desfecho da busca de uma integração. A falha vira valor para a promessa nunca ficar rejeitada sem dono. */
+export type TSettledIntegrationFetch<TFetched> = { fetchMs: number; fetchedAt: number } & (
+	| { ok: true; value: TFetched }
+	| { ok: false; error: unknown }
+);
+
+/**
+ * Busca em paralelo, grava em série por organização. A busca é só rede (ERP, iFood, banco do
+ * cliente) e é ~96% do tempo do run; a gravação é a parte que não pode correr junto dentro da
+ * mesma organização (clientes e produtos criados em transações concorrentes duplicariam).
+ *
+ * Todas as buscas começam já, em ordem de entrada, com no máximo `fetchConcurrency` ao mesmo
+ * tempo — inclusive as de uma organização que ainda espera vaga para gravar. A gravação segue o
+ * desenho de antes: até `organizationConcurrency` organizações em paralelo e, dentro de cada uma,
+ * uma integração por vez, na ordem de entrada; cada uma espera só pelo próprio lote.
+ *
+ * `persist` recebe também as buscas que falharam (para registrar o erro na vez da integração) e
+ * não deve lançar.
+ */
+export async function runFetchThenPersistByOrganization<TItem extends Pick<TDataSourceIntegration, "organizacaoId">, TFetched, TOutcome>({
+	items,
+	fetchConcurrency,
+	organizationConcurrency,
+	fetch,
+	persist,
+	now = Date.now,
+}: {
+	items: TItem[];
+	fetchConcurrency: number;
+	organizationConcurrency: number;
+	fetch: (item: TItem) => Promise<TFetched>;
+	persist: (item: TItem, fetched: TSettledIntegrationFetch<TFetched>) => Promise<TOutcome>;
+	now?: () => number;
+}): Promise<Map<TItem, TOutcome>> {
+	const runFetch = createConcurrencyLimiter(fetchConcurrency);
+	const pendingFetches = new Map(
+		items.map((item) => [
+			item,
+			runFetch(async (): Promise<TSettledIntegrationFetch<TFetched>> => {
+				const startedAt = now();
+				try {
+					const value = await fetch(item);
+					const fetchedAt = now();
+					return { ok: true, value, fetchMs: fetchedAt - startedAt, fetchedAt };
+				} catch (error) {
+					const fetchedAt = now();
+					return { ok: false, error, fetchMs: fetchedAt - startedAt, fetchedAt };
+				}
+			}),
+		]),
+	);
+
+	const outcomes = new Map<TItem, TOutcome>();
+	await mapWithConcurrency(groupIntegrationsByOrganization(items), organizationConcurrency, async (group) => {
+		for (const item of group) {
+			const fetched = await pendingFetches.get(item)!;
+			outcomes.set(item, await persist(item, fetched));
+		}
+	});
+	return outcomes;
+}
 
 /** "Última sincronização" de um run sem mudanças é regravada no máximo a cada 5 minutos. */
 export const INTEGRATION_SYNC_STATUS_STALE_MS = 5 * 60 * 1000;

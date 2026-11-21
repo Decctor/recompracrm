@@ -21,8 +21,10 @@ async function fetchConnectorBatch(input: TDataConnectorFetchInput) {
 	if (input.config.tipo === "CARDAPIO-WEB") {
 		return fetchCardapioWebImportBatch({
 			organizationId: input.organizationId,
+			integrationId: input.integrationId,
 			config: input.config,
 			window: input.window,
+			resolveKnownListingSignatures: input.resolveKnownListingSignatures,
 		});
 	}
 
@@ -57,6 +59,7 @@ async function fetchConnectorBatch(input: TDataConnectorFetchInput) {
 			integrationId: input.integrationId,
 			config: input.config,
 			window: input.window,
+			resolveKnownListingSignatures: input.resolveKnownListingSignatures,
 		});
 	}
 
