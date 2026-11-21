@@ -25,6 +25,7 @@ import {
 	controlOrganizationReference,
 	normalizeStageName,
 	planControlLifecycleSync,
+	resolveTrialEndingNotice,
 	shouldMoveSuccessStage,
 	type TControlCustomFieldValues,
 	type TControlLifecycleSnapshot,
@@ -272,6 +273,26 @@ export async function syncControlLifecycle({
 		);
 		sent.add(milestone.chave);
 		newMilestones.push(milestone.chave);
+		await persist({ marcosEnviados: [...sent] });
+	}
+
+	// 3b. Aviso de fim do teste: evento de serviço, não marco (não move o cartão). Vale também no
+	// backfill, porque é sobre o teste que termina agora, não sobre o passado.
+	const trialNotice = resolveTrialEndingNotice({
+		periodoTesteFim: organization.periodoTesteFim,
+		stripeSubscriptionStatus: organization.stripeSubscriptionStatus,
+		now,
+	});
+	if (trialNotice && !sent.has(trialNotice.chave)) {
+		await sendControlEvent({
+			evento: trialNotice.evento,
+			eventId: `${reference}:${trialNotice.chave}`,
+			oportunidadeId: opportunityId,
+			propriedades: { organizacaoId: organizationId, fimDoTeste: trialNotice.fimDoTeste },
+			dataOcorrencia: now.toISOString(),
+		});
+		sent.add(trialNotice.chave);
+		newMilestones.push(trialNotice.chave);
 		await persist({ marcosEnviados: [...sent] });
 	}
 
