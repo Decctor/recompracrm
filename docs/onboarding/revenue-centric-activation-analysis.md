@@ -161,7 +161,7 @@ O que isso muda na implementação:
 
 - **Boas-vindas na hora errada.** O texto diz "Que legal ver que você **iniciou** o onboarding", mas a mensagem só sai na conclusão. Quem abandona no meio nunca a recebe, e o alerta aos fundadores tem o mesmo problema. Mover os dois para a criação da organização (`app/api/organizations/route.ts`) já cobre parte de 5.1 e 5.10 com mudanças de poucas linhas.
 - **Mensagens fora da janela de 24 h** (retomada, destravamento, celebração) precisam de templates de *utilidade* no número oficial, como os `recompracrm_*` que já existem. O gateway interno serve às respostas dentro de uma conversa aberta e aos alertas internos.
-- **Gatilhos por estado:** um cron diário (ou horário) que percorre as organizações não ativadas, calcula `getOnboardingReadiness` e decide a mensagem pela tabela do §5. Ele grava o que já enviou para não repetir, como `connection-health-policy.ts` já faz com seu intervalo de 7 dias. Os gatilhos imediatos (template aprovado, primeiro envio entregue, primeira recompra) entram nos pontos onde o estado muda (`lib/onboarding/reconcile.ts`, webhooks da Meta, atribuição).
+- **Gatilhos por estado:** a recomendação é que a régua viva no Syncroniza Control (§9), e não num motor novo aqui. Se ficar no RecompraCRM, o desenho seria um cron diário (ou horário) que percorre as organizações não ativadas, calcula `getOnboardingReadiness` e decide a mensagem pela tabela do §5. Ele grava o que já enviou para não repetir, como `connection-health-policy.ts` já faz com seu intervalo de 7 dias. Os gatilhos imediatos (template aprovado, primeiro envio entregue, primeira recompra) entram nos pontos onde o estado muda (`lib/onboarding/reconcile.ts`, webhooks da Meta, atribuição).
 - **Stripe:** `invoice.payment_failed` e `customer.subscription.deleted` hoje só atualizam campos ou geram log. São o lugar natural para o aviso de pagamento e para a mensagem de saída (*Design the cancel screen*).
 - **Medição:** padronizar o `distinctId` (organização como grupo no PostHog) antes de construir o funil do §2. Sem isso, as etapas do cliente e os eventos do servidor não se juntam.
 
@@ -172,7 +172,8 @@ O que isso muda na implementação:
 | P0 | Renderizar a ativação no hub para contas não ativadas; vazios do hub com ação (§4.1) | Baixo (componentes existem) | Primeiro dia |
 | P0 | Mover boas-vindas e alerta aos fundadores para a criação da org; somar alertas de travamento (§5.10, §6) | Baixo | Todo o meio do funil |
 | P0 | Definir e medir ativação (primeiro envio até o D14) e tempo até o primeiro envio no admin (§2, §4.7) | Baixo | Saber se o resto funciona |
-| P1 | Mensagens 5.1, 5.2, 5.4, 5.5, 5.5b (retomada e destravamento do WhatsApp) | Médio | Passos 8–11 |
+| P0 | Quadro "Ativação RecompraCRM" no Control + sincronização de estágio a partir da prontidão (§9.3–9.4) | Médio | Medição do funil e base da régua |
+| P1 | Mensagens 5.1, 5.2, 5.4, 5.5, 5.5b como workflows do Control (retomada e destravamento do WhatsApp) | Médio | Passos 8–11 |
 | P1 | Conexão Meta mais cedo + submissão automática de templates + conexão assistida (§4.3) | Médio | Maior espera da jornada |
 | P1 | Teste ligado ao valor e tela de fim de teste com resumo de perda (§4.2) | Médio (decisão comercial) | Conversão do teste |
 | P2 | Celebrações 5.3, 5.6, 5.7 e número de impacto na entrada (§4.6) | Médio | Memória do produto |
@@ -182,13 +183,86 @@ O que isso muda na implementação:
 
 ## 8. Decisões que precisam de dono
 
+0. **Onde vive a régua:** confirmar o Control como motor do ciclo de vida (§9) e qual parceiro/quadro recebe as contas.
 1. **Regra do teste:** contar a partir do primeiro envio, estender durante pendência da Meta ou manter os 15 dias com extensão manual.
 2. **Templates de utilidade** no número oficial da plataforma (o mesmo dos `recompracrm_*`) para retomada, destravamento e celebração: quais submeter à Meta primeiro.
 3. **Consentimento:** onde coletar o opt-in do responsável e como sair (LGPD).
 4. **Concierge:** quem do time recebe os alertas do §5.10 e qual é o tempo de resposta esperado.
 5. **QR Code como ponte** enquanto a Meta aprova: sim ou não (§4.3).
 
-## 9. Limites desta análise
+## 9. Syncroniza Control como motor do ciclo de vida
+
+O Syncroniza Control já é o CRM da própria Syncroniza e tem quase tudo o que a régua do §5 precisa. A divisão proposta é esta:
+
+> **O RecompraCRM decide o estado; o Control decide a conversa.**
+>
+> A prontidão e a ativação continuam calculadas aqui (`getOnboardingReadiness`), a única fonte de verdade. Quem fala com o lojista, quando, por qual canal e qual pessoa do time assume é decidido nos workflows do Control. Não se constrói um segundo motor de régua no RecompraCRM.
+
+### 9.1. O que o Control já oferece
+
+| Recurso | Onde (syncroniza-control) | Uso na ativação |
+| --- | --- | --- |
+| Workflows com gatilho, espera, condição e ação | `src/lib/workflows/catalog.ts`, `src/server/workflows/` | A régua inteira do §5. |
+| Gatilhos úteis | `oportunidade_entrou_estagio`, `oportunidade_parada` (dias no estágio), `data_entidade_relativa` (ex.: fim do teste), `cliente_sem_resposta`, `cliente_respondeu_whatsapp`, `lead_ficou_quente` | Travamento, prazo do teste, follow-up e celebração na entrada de estágio. |
+| Esperas | `duracao_fixa`, `dias_uteis`, `ate_horario_comercial` | "+2 h, depois +24 h", sem mensagem de madrugada. |
+| Ações | `enviar_template_mensagem` (**WhatsApp e e-mail**), `enviar_mensagem_ia`, `executar_agente`, `criar_atividade`, `enviar_notificacao_interna`, `atualizar_campo_entidade` | A mensagem ao lojista, a tarefa para o CS e o alerta ao time, no mesmo fluxo. |
+| Antispam | Condições de saída (`cliente_respondeu_whatsapp`, mudança de estágio), chave de evento ancorada, teto de mensagens sem resposta e dedupe de template (`docs/chat-inactivity-trigger-plan.md`) | O teto de mensagens do §5 já vem pronto. |
+| Hub de atendimento | `chats` + agente de IA | A resposta do lojista cai numa conversa atendida, não num número de disparo. |
+| Funil e tempo por estágio | `get_commercial_analytics` (`funil_pipeline`, `tempo_medio_por_estagio`) | O mapa de quedas do §3, recalculado sem SQL avulso. |
+| Tracking, atribuição e lead score | `packages/tracking-sdk`, `/api/track`, `src/lib/scoring/lead-score.ts` | Liga a origem do anúncio à ativação, não só ao cadastro. |
+| API e MCP | `POST /api/v1/opportunities` (idempotente, `referenciaExterna`); MCP com Bearer: `update_opportunity`, `move_opportunity_stage`, `log_interaction`; categoria de acesso `SERVIDOR_EXTERNO` | Integração servidor a servidor. |
+
+### 9.2. O que já está ligado hoje
+
+- `MarketingTrackingScript` carrega o `control.js` em todo o site, exceto `/dashboard`, `/admin-dashboard`, `/shop` e o Ponto de Interação, e faz `identify` com usuário e organização. Isso inclui `/onboarding`.
+- `captureClientEvent` repassa ao Control só os eventos com `controlEvent`: o `lead` no cadastro e os `lead`/`contact` dos CTAs.
+- **Depois do cadastro, o Control fica cego.** Ele não recebe organização criada, etapa do onboarding, WhatsApp conectado, primeiro envio, fim do teste nem assinatura. O funil comercial termina onde a ativação começa.
+
+### 9.3. Modelo: quadro "Ativação RecompraCRM"
+
+Cada conta vira um cliente (o responsável) e uma oportunidade no parceiro Syncroniza, com `referenciaExterna = organizacaoId`. Os estágios são **derivados** da prontidão; ninguém os move à mão.
+
+| Estágio | Entra quando (estado no RecompraCRM) | Workflows do estágio | Sai quando |
+| --- | --- | --- | --- |
+| Cadastro | Usuário criado, sem organização | 5.1; aviso ao time se não criar a org em 2 h | Org criada |
+| Onboarding em andamento | Org criada, jornada aberta | 5.2 (+2 h WhatsApp, +24 h e-mail); `criar_atividade` para o CS se parado há 24 h | Jornada concluída |
+| Preparado, sem canal | Concluído, WhatsApp ≠ `CONECTADO` | 5.4 no D1 e D3; `oportunidade_parada` (3 dias) cria a atividade "conexão assistida" | Número conectado |
+| Aguardando Meta | Conectado; template em análise ou pagamento pendente | 5.5 quando `PRONTA`, 5.5b quando rejeitado ou pendente | Primeira mensagem entregue |
+| **Ativado** | Primeira mensagem de campanha entregue | 5.6 na entrada; 5.3 e 5.7 | Envios em 3 das primeiras 4 semanas |
+| Hábito | Uso recorrente | 5.8 semanal; `data_entidade_relativa` sobre "fim do teste" dispara 5.9 | Assinou |
+| Fechado | Ganho: assinatura `active` (Stripe). Perdido: bloqueado sem assinar, com motivo "não ativou" ou "ativou e não assinou" | Boas-vindas de cliente; pesquisa de perda | — |
+| Nutrição | Ativou e parou de enviar por 14 dias | Reengajamento + atividade para o CS | Voltou a enviar |
+
+Campos personalizados da oportunidade (variáveis das mensagens e das condições): fim do teste, plano, segmento, fonte de dados, etapa atual, campanhas ativas, envios em 7 dias, recompras atribuídas e consultoria ativa. Com eles, `tempo_medio_por_estagio` vira o painel semanal do §2 sem nenhum trabalho a mais.
+
+### 9.4. Como os dois conversam
+
+1. **Uma única função de sincronização no RecompraCRM**, por exemplo `syncControlLifecycle({ organizationId })`. Ela lê a prontidão, calcula estágio e campos e chama o Control de forma idempotente: cria a oportunidade pela API v1 com `referenciaExterna` e depois move o estágio ou atualiza os campos. Só envia quando algo mudou.
+2. **Pontos de chamada (todos já existem):**
+   - criação da organização (`app/api/organizations/route.ts`);
+   - progresso e conclusão do onboarding;
+   - `lib/onboarding/reconcile.ts` (campanha ativada);
+   - callback da conexão Meta e webhooks de status de template;
+   - `import_job_completed`;
+   - webhook do Stripe;
+   - um cron diário para corrigir desvios e atualizar os contadores.
+3. **Uma chamada que falha não trava o produto.** O próximo gatilho ou o cron diário reconcilia, com o mesmo padrão "navegação não pode travar por falha de persistência" que `onboarding-page.tsx` já usa.
+4. **Migrar o que hoje sai pelo gateway interno:** a boas-vindas ao dono e o alerta de nova organização, com os números dos fundadores fixos em `config/internal-coms.ts`, viram workflows do estágio "Onboarding em andamento". Assim, as respostas passam a cair no hub do Control.
+
+### 9.5. Lacunas no Control
+
+1. **Mudar estágio e campos servidor a servidor.** A API v1 só cria oportunidades. O MCP cobre `move_opportunity_stage` e `update_opportunity`, mas é a superfície dos agentes. Recomendo `PATCH /api/v1/opportunities/{id}` (ou por `referenciaExterna`) com o mesmo modelo de escopo e idempotência do POST.
+2. **Eventos de produto servidor a servidor.** `/api/track` é de navegador: com domínios autorizados configurados, uma requisição sem `Origin` é recusada (`isOriginAllowed`). Falta uma ingestão com chave secreta, para que `org_criada`, `primeiro_envio` e `primeira_recompra` entrem no perfil, no lead score e no funil.
+3. **Gatilho por evento ou por campo.** Hoje um workflow nasce de estágio, data, chat ou proposta. Um gatilho genérico, "evento recebido" ou "campo alterado", deixa a celebração 5.7 (primeira recompra) e os alertas 5.5b fora do quadro de estágios. Também serve aos outros parceiros do Control.
+4. **Consentimento e saída** do responsável para mensagens de ativação (LGPD): verificar como o Control registra opt-out por cliente antes de ligar a régua.
+
+### 9.6. O que fica no RecompraCRM
+
+- **Interface no app:** painel de ativação no hub, entrada do onboarding, selo do teste e tela `/subscription` (§4.1, §4.2, §4.6).
+- **Mensagens transacionais e operacionais** que não são régua: código de acesso, convite, "WhatsApp desconectado", pendências fiscais e relatório recorrente.
+- **O cálculo da ativação:** o Control recebe o resultado, nunca recalcula.
+
+## 10. Limites desta análise
 
 - **Amostra pequena:** são 26 organizações, e só 6 passaram pelo onboarding novo (`organization_onboardings`). As demais são anteriores a ele ou entraram por deal/consultoria. Os números do §2–3 apontam direção; não são estatística.
 - **Correlação não é causa:** quem envia campanha pode ficar porque já era a conta mais engajada. O teste é ver se encurtar o tempo até o primeiro envio aumenta a retenção das próximas coortes.
