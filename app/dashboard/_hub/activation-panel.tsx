@@ -2,11 +2,12 @@
 
 import { Button } from "@/components/ui/button";
 import { captureClientEvent } from "@/lib/analytics/posthog-client";
-import type { TActivation, TActivationMilestone } from "@/lib/onboarding/activation";
+import type { TActivation, TActivationCelebration, TActivationMilestone } from "@/lib/onboarding/activation";
 import { useOnboardingActivation } from "@/lib/queries/onboarding";
 import { cn } from "@/lib/utils";
-import { ArrowRight, CircleCheck, Clock, TriangleAlert } from "lucide-react";
+import { ArrowRight, CircleCheck, Clock, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { Panel } from "./panel";
 import { WhatsappChannelNotice } from "./whatsapp-channel-notice";
 
@@ -21,11 +22,73 @@ import { WhatsappChannelNotice } from "./whatsapp-channel-notice";
  */
 export function ActivationSlot({ enabled }: { enabled: boolean }) {
 	const { data, isPending, isError } = useOnboardingActivation({ enabled });
+	const celebration = useCelebration(data?.celebracao ?? null);
 	if (!enabled) return null;
 	// Enquanto carrega, nada: o aviso do WhatsApp piscaria e sumiria para quem ainda não ativou.
 	if (isPending) return null;
-	if (isError || !data?.visivel) return <WhatsappChannelNotice enabled={enabled} />;
-	return <ActivationPanel activation={data} />;
+	if (isError || !data) return <WhatsappChannelNotice enabled={enabled} />;
+	if (data.visivel) return <ActivationPanel activation={data} celebration={celebration} />;
+	return (
+		<>
+			{celebration.value ? (
+				<Panel>
+					<Panel.Body>
+						<CelebrationNote celebration={celebration.value} onDismiss={celebration.dismiss} />
+					</Panel.Body>
+				</Panel>
+			) : null}
+			<WhatsappChannelNotice enabled={enabled} />
+		</>
+	);
+}
+
+type TCelebrationState = { value: TActivationCelebration | null; dismiss: () => void };
+
+/**
+ * A celebração vale por alguns dias depois do acontecimento (regra no modelo). "Fechar" vale para
+ * este navegador: é conveniência, não estado — no pior caso, ela aparece de novo até a janela acabar.
+ */
+function useCelebration(celebration: TActivationCelebration | null): TCelebrationState {
+	const key = celebration ? `recompracrm:celebracao:${celebration.chave}` : null;
+	const [dismissedKey, setDismissedKey] = useState<string | null>(null);
+	useEffect(() => {
+		if (!key) return;
+		try {
+			if (window.localStorage.getItem(key) === "1") setDismissedKey(key);
+		} catch {}
+	}, [key]);
+	return {
+		value: celebration && dismissedKey !== key ? celebration : null,
+		dismiss: () => {
+			if (!key) return;
+			setDismissedKey(key);
+			try {
+				window.localStorage.setItem(key, "1");
+			} catch {}
+		},
+	};
+}
+
+function CelebrationNote({ celebration, onDismiss }: { celebration: TActivationCelebration; onDismiss: () => void }) {
+	return (
+		<div className="flex items-start gap-3 rounded-lg bg-success-surface px-3 py-3 text-success-surface-foreground" role="status">
+			<CircleCheck className="mt-0.5 size-5 shrink-0" aria-hidden />
+			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
+				<p className="font-bold text-sm">{celebration.titulo}</p>
+				<p className="text-sm">{celebration.texto}</p>
+			</div>
+			<Button
+				type="button"
+				variant="ghost"
+				size="icon"
+				className="size-7 shrink-0 text-current hover:bg-success/10"
+				onClick={onDismiss}
+				aria-label="Fechar"
+			>
+				<X className="size-4" aria-hidden />
+			</Button>
+		</div>
+	);
 }
 
 const REGRESSION_TITLE: Record<NonNullable<TActivation["regressao"]>["motivo"], string> = {
@@ -34,7 +97,7 @@ const REGRESSION_TITLE: Record<NonNullable<TActivation["regressao"]>["motivo"], 
 	SEM_VENDA: "As vendas pelo sistema pararam",
 };
 
-export function ActivationPanel({ activation }: { activation: TActivation }) {
+export function ActivationPanel({ activation, celebration }: { activation: TActivation; celebration?: TCelebrationState }) {
 	const next = activation.proximaAcao;
 	if (activation.regressao) {
 		return (
@@ -57,6 +120,7 @@ export function ActivationPanel({ activation }: { activation: TActivation }) {
 		<Panel>
 			<Panel.Header title="Primeiros passos" hint={`${activation.progresso.feitos} de ${activation.progresso.total} feitos`} />
 			<Panel.Body>
+				{celebration?.value ? <CelebrationNote celebration={celebration.value} onDismiss={celebration.dismiss} /> : null}
 				<div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:gap-6">
 					{/* A ação vem antes no DOM: no celular ela fica no topo, e quem lê com leitor de tela
 					    ouve o que fazer antes da lista. No desktop a escada vai para a esquerda. */}

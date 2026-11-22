@@ -49,8 +49,13 @@ export type TActivationFacts = {
 		manuaisAtivas: number;
 		templates: Array<{ nome: string; status: "RASCUNHO" | "EM_ANALISE" | "APROVADO" | "REJEITADO" | "PAUSADO" }>;
 	};
-	envios: { primeiraEntregaEm: Date | null; ultimaEntregaEm: Date | null };
+	envios: { primeiraEntregaEm: Date | null; ultimaEntregaEm: Date | null; entregas14Dias: number };
 	erp: { produtosUtilizaveis: number; pendenciasLancamento: Array<{ chave: string; rotulo: string; href: string }> };
+	/** Primeiros resultados, para celebrar o momento em que acontecem. */
+	resultados: {
+		primeiraConversao: { em: Date; valor: number; minutos: number | null } | null;
+		primeiroCashback: { em: Date; valor: number } | null;
+	};
 };
 
 export type TActivationMilestoneState = "FEITO" | "EM_ANDAMENTO" | "PENDENTE";
@@ -70,6 +75,9 @@ export type TActivationAction = { chave: string; rotulo: string; descricao: stri
 
 export type TActivationRegression = { motivo: "CANAL_PERDIDO" | "SEM_ENVIO" | "SEM_VENDA"; desde: Date | null };
 
+/** Um primeiro resultado recente. A chave inclui a data, para "fechar" valer só para este momento. */
+export type TActivationCelebration = { chave: string; titulo: string; texto: string };
+
 export type TActivation = {
 	segmento: TActivationSegment;
 	/** Canal do ERP que a escada acompanha (segmentos ERP e CRM_ERP). */
@@ -81,11 +89,14 @@ export type TActivation = {
 	regressao: TActivationRegression | null;
 	/** A superfície do hub aparece: antes da ativação, ou numa regressão. */
 	visivel: boolean;
+	/** Primeiro resultado dos últimos dias, mostrado uma vez (com ou sem a superfície). */
+	celebracao: TActivationCelebration | null;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const ACTIVATION_DELIVERY_REGRESSION_DAYS = 14;
 export const ACTIVATION_ERP_REGRESSION_DAYS = 7;
+export const ACTIVATION_CELEBRATION_DAYS = 7;
 const ERP_CHANNELS: TErpChannel[] = ["BALCAO", "CATALOGO", "MESAS"];
 
 const number = (value: number) => value.toLocaleString("pt-BR");
@@ -456,6 +467,72 @@ function regressionAction(facts: TActivationFacts, regression: TActivationRegres
 	}
 }
 
+const ERP_FIRST_SALE_CELEBRATION: Record<TErpChannel, string> = {
+	BALCAO: "Sua primeira venda no PDV",
+	CATALOGO: "Seu primeiro pedido pela loja",
+	MESAS: "Sua primeira comanda fechada",
+};
+
+const money = (value: number) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const dayKey = (date: Date) => date.toISOString().slice(0, 10);
+
+/**
+ * O pico do esforço merece mais que um selo de "feito" (regra do pico e do fim): a primeira compra de
+ * quem recebeu campanha, a primeira campanha entregue, a primeira venda no balcão ou no canal do ERP.
+ * Vale por alguns dias depois do acontecimento; o mais forte ganha. Números sempre reais.
+ */
+export function resolveActivationCelebration(
+	facts: TActivationFacts,
+	segmento: TActivationSegment,
+	canalErp: TErpChannel | null,
+): TActivationCelebration | null {
+	const recent = (date: Date | null | undefined): date is Date =>
+		!!date && facts.now.getTime() - date.getTime() <= ACTIVATION_CELEBRATION_DAYS * DAY_MS && date.getTime() <= facts.now.getTime();
+
+	const conversion = facts.resultados.primeiraConversao;
+	if (conversion && recent(conversion.em)) {
+		const days = conversion.minutos === null ? null : Math.round(conversion.minutos / (24 * 60));
+		const when = days === null ? "" : days === 0 ? " no mesmo dia" : `, ${plural(days, "dia", "dias")} depois`;
+		return {
+			chave: `primeira-recompra:${dayKey(conversion.em)}`,
+			titulo: "Um cliente voltou depois da sua campanha",
+			texto:
+				conversion.valor > 0
+					? `Ele recebeu a mensagem e comprou ${money(conversion.valor)}${when}.`
+					: `Ele recebeu a mensagem e voltou a comprar${when}.`,
+		};
+	}
+	const firstDelivery = facts.envios.primeiraEntregaEm;
+	if (segmento !== "ERP" && recent(firstDelivery)) {
+		return {
+			chave: `primeira-entrega:${dayKey(firstDelivery)}`,
+			titulo: "Sua primeira campanha saiu",
+			texto: `${plural(facts.envios.entregas14Dias, "mensagem entregue", "mensagens entregues")} desde ${shortDate(firstDelivery)}.`,
+		};
+	}
+	const firstCounterSale = facts.vendas.balcao.primeiraEm;
+	if (segmento === "CRM_BALCAO" && recent(firstCounterSale)) {
+		const cashback = facts.resultados.primeiroCashback;
+		return {
+			chave: `primeira-venda-balcao:${dayKey(firstCounterSale)}`,
+			titulo: "Primeira venda no balcão registrada",
+			texto:
+				cashback && recent(cashback.em) && cashback.valor > 0
+					? `O cliente já tem ${money(cashback.valor)} de cashback para a próxima visita.`
+					: "O cliente já está na sua base, pronto para as campanhas.",
+		};
+	}
+	const erpSales = canalErp ? facts.vendas.erp[canalErp] : null;
+	if (canalErp && erpSales && recent(erpSales.primeiraEm)) {
+		return {
+			chave: `primeira-venda-erp:${dayKey(erpSales.primeiraEm)}`,
+			titulo: ERP_FIRST_SALE_CELEBRATION[canalErp],
+			texto: `${plural(erpSales.total, "venda", "vendas")} desde ${shortDate(erpSales.primeiraEm)}.`,
+		};
+	}
+	return null;
+}
+
 export function resolveActivation(facts: TActivationFacts): TActivation {
 	const segmento = resolveActivationSegment(facts);
 	const usesErp = segmento === "ERP" || segmento === "CRM_ERP";
@@ -497,5 +574,6 @@ export function resolveActivation(facts: TActivationFacts): TActivation {
 		ativado,
 		regressao,
 		visivel: !ativado || regressao !== null,
+		celebracao: resolveActivationCelebration(facts, segmento, canalErp),
 	};
 }

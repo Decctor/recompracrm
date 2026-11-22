@@ -22,6 +22,7 @@ function activation(segmento: TActivation["segmento"], marcos: TActivationMilest
 		ativado,
 		regressao: null,
 		visivel: !ativado,
+		celebracao: null,
 	};
 }
 

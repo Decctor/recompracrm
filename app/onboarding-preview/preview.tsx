@@ -57,7 +57,7 @@ const readiness: TOnboardingReadiness = {
 			},
 		],
 	},
-	dados: { vendasValidas: 126, clientes: 65, clientesComAniversario: 8, coberturaInicio: new Date("2026-08-15"), coberturaParcial: true },
+	dados: { vendasValidas: 126, clientes: 65, clientesComAniversario: 8, coberturaInicio: new Date("2026-08-15"), coberturaParcial: true, clientesInativos: null },
 	cashback: {
 		estado: "ATIVO",
 		programaId: "p",

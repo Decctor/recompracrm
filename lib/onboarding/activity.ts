@@ -1,7 +1,7 @@
 import { getValidSaleConditions } from "@/lib/sales/valid-sale";
 import type { DB, DBTransaction } from "@/services/drizzle";
 import { campaignConversions, cashbackProgramTransactions, clients, interactions, sales } from "@/services/drizzle/schema";
-import { and, count, eq, gte, inArray, isNotNull, max, min, sql } from "drizzle-orm";
+import { and, asc, count, eq, gte, inArray, isNotNull, max, min, sql } from "drizzle-orm";
 import type { TActivationSalesOrigin } from "./activation";
 import type { TErpChannel } from "./erp-channels";
 
@@ -25,7 +25,10 @@ export type TOrganizationActivity = {
 	primeiraVendaEm: Date | null;
 	envios: { primeiraEntregaEm: Date | null; ultimaEntregaEm: Date | null; entregas14Dias: number };
 	primeiroResgateEm: Date | null;
-	primeiraConversaoEm: Date | null;
+	/** Primeira compra atribuída a uma campanha: valor e o tempo entre a mensagem e a compra. */
+	primeiraConversao: { em: Date; valor: number; minutos: number | null } | null;
+	/** Primeiro cashback creditado desde o cadastro (saldo migrado de antes não conta). */
+	primeiroCashback: { em: Date; valor: number } | null;
 	clientesSegmentados: number;
 };
 
@@ -59,7 +62,7 @@ export async function loadOrganizationActivity({
 		inArray(interactions.statusEnvio, [...DELIVERED_CAMPAIGN_STATUSES]),
 	);
 
-	const [salesRows, [deliveries], [recentDeliveries], [firstRedemption], [firstConversion], [segmented]] = await Promise.all([
+	const [salesRows, [deliveries], [recentDeliveries], [firstRedemption], [firstConversion], [segmented], [firstCashback]] = await Promise.all([
 		executor
 			.select({
 				origem: origin,
@@ -84,13 +87,27 @@ export async function loadOrganizationActivity({
 			.from(cashbackProgramTransactions)
 			.where(and(eq(cashbackProgramTransactions.organizacaoId, organizationId), eq(cashbackProgramTransactions.tipo, "RESGATE"))),
 		executor
-			.select({ at: min(campaignConversions.dataConversao) })
+			.select({ at: campaignConversions.dataConversao, valor: campaignConversions.vendaValor, minutos: campaignConversions.tempoParaConversaoMinutos })
 			.from(campaignConversions)
-			.where(eq(campaignConversions.organizacaoId, organizationId)),
+			.where(eq(campaignConversions.organizacaoId, organizationId))
+			.orderBy(asc(campaignConversions.dataConversao))
+			.limit(1),
 		executor
 			.select({ total: count() })
 			.from(clients)
 			.where(and(eq(clients.organizacaoId, organizationId), isNotNull(clients.analiseRFMTitulo))),
+		executor
+			.select({ at: cashbackProgramTransactions.dataInsercao, valor: cashbackProgramTransactions.valor })
+			.from(cashbackProgramTransactions)
+			.where(
+				and(
+					eq(cashbackProgramTransactions.organizacaoId, organizationId),
+					eq(cashbackProgramTransactions.tipo, "ACÚMULO"),
+					gte(cashbackProgramTransactions.dataInsercao, criadaEm),
+				),
+			)
+			.orderBy(asc(cashbackProgramTransactions.dataInsercao))
+			.limit(1),
 	]);
 
 	const byOrigin = new Map(
@@ -117,7 +134,10 @@ export async function loadOrganizationActivity({
 			entregas14Dias: recentDeliveries?.total ?? 0,
 		},
 		primeiroResgateEm: toDate(firstRedemption?.at ?? null),
-		primeiraConversaoEm: toDate(firstConversion?.at ?? null),
+		primeiraConversao: firstConversion?.at
+			? { em: toDate(firstConversion.at) as Date, valor: Number(firstConversion.valor) || 0, minutos: firstConversion.minutos ?? null }
+			: null,
+		primeiroCashback: firstCashback?.at ? { em: toDate(firstCashback.at) as Date, valor: Number(firstCashback.valor) || 0 } : null,
 		clientesSegmentados: segmented?.total ?? 0,
 	};
 }

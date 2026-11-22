@@ -6,6 +6,7 @@ import { integrationImportJobs } from "@/services/drizzle/schema/integration-imp
 import { getLaunchChecklist, type TErpChannel } from "./erp-channels";
 import { getUsableOnboardingProducts } from "./erp-catalog";
 import { normalizeShopSettingsConfiguration } from "@/lib/shop/config";
+import { resolveInactivityCutoff } from "./impact";
 import { getStageDefinition } from "./journeys";
 import { isSalesSourceDefined, POI_RECENT_SALES_DAYS, resolveDataSourceMode, type TDataSourceMode } from "./data-source-mode";
 import { resolvePhoneNumberState, resolveWhatsappNumberState, type TWhatsappNumberState } from "@/lib/whatsapp/meta-access";
@@ -25,7 +26,7 @@ import {
 	whatsappConnections,
 	type TOrganizationOnboardingEntity,
 } from "@/services/drizzle/schema";
-import { and, count, desc, eq, gt, gte, inArray, isNotNull, isNull, min } from "drizzle-orm";
+import { and, count, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, min, sql } from "drizzle-orm";
 import {
 	isCampaignReady,
 	resolveCampaignDependencies,
@@ -71,6 +72,11 @@ export type TOnboardingReadiness = {
 		clientesComAniversario: number;
 		coberturaInicio: Date | null;
 		coberturaParcial: boolean;
+		/**
+		 * Clientes que não compram há mais de 60 dias e quanto somam nas vendas da plataforma. Null quando
+		 * a cobertura não permite afirmar ausência de compra (lib/onboarding/impact.ts).
+		 */
+		clientesInativos: { clientes: number; valorTotal: number } | null;
 	};
 	cashback: {
 		estado: "NAO_CONFIGURADO" | "CONFIGURADO_INATIVO" | "ATIVO";
@@ -344,6 +350,15 @@ export async function getOnboardingReadiness({
 	});
 	const poiEmUso = fonteDadosModo === "POI" || fonteDadosModo === "AMBOS";
 
+	const coverageStart = coverage ?? (integrations.length === 0 && poiEmUso ? (salesRow?.primeira ?? null) : null);
+	const inactivityCutoff = resolveInactivityCutoff({ coberturaInicio: coverageStart, coberturaParcial: partialCoverage, now });
+	const [inactiveRow] = inactivityCutoff
+		? await executor
+				.select({ total: count(), valor: sql<number>`coalesce(sum(${clients.metadataValorTotalCompras}), 0)` })
+				.from(clients)
+				.where(and(eq(clients.organizacaoId, organizationId), lt(clients.ultimaCompraData, inactivityCutoff)))
+		: [null];
+
 	const numero = resolveWhatsappNumberState({ connections, now });
 	const usablePhones = connections.flatMap((connection) =>
 		connection.telefones
@@ -457,8 +472,9 @@ export async function getOnboardingReadiness({
 			vendasValidas: salesRow?.total ?? 0,
 			clientes: clientsRow?.total ?? 0,
 			clientesComAniversario: birthdayRow?.total ?? 0,
-			coberturaInicio: coverage ?? (integrations.length === 0 && poiEmUso ? salesRow?.primeira ?? null : null),
+			coberturaInicio: coverageStart,
 			coberturaParcial: partialCoverage,
+			clientesInativos: inactiveRow ? { clientes: inactiveRow.total, valorTotal: Number(inactiveRow.valor) || 0 } : null,
 		},
 		cashback: {
 			estado: cashbackEstado,

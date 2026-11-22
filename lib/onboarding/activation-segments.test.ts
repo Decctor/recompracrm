@@ -26,8 +26,9 @@ function facts(overrides: Partial<TActivationFacts> = {}): TActivationFacts {
 		vendas: { balcao: none, integracao: sold({}), erp: { BALCAO: none, CATALOGO: none, MESAS: none } },
 		canal: { numero: "NENHUM", pagamento: "DESCONHECIDO" },
 		campanhas: { preparadas: [], manuaisAtivas: 0, templates: [] },
-		envios: { primeiraEntregaEm: null, ultimaEntregaEm: null },
+		envios: { primeiraEntregaEm: null, ultimaEntregaEm: null, entregas14Dias: 0 },
 		erp: { produtosUtilizaveis: 0, pendenciasLancamento: [] },
+		resultados: { primeiraConversao: null, primeiroCashback: null },
 		...overrides,
 	};
 }
@@ -122,7 +123,10 @@ test("campanha manual ligada conta como preparada", () => {
 
 test("primeira entrega: ativada e fora da superfície", () => {
 	const activation = resolveActivation(
-		facts({ canal: { numero: "CONECTADO", pagamento: "VERIFICADO" }, envios: { primeiraEntregaEm: daysAgo(3), ultimaEntregaEm: daysAgo(1) } }),
+		facts({
+			canal: { numero: "CONECTADO", pagamento: "VERIFICADO" },
+			envios: { primeiraEntregaEm: daysAgo(3), ultimaEntregaEm: daysAgo(1), entregas14Dias: 0 },
+		}),
 	);
 	assert.equal(activation.ativado, true);
 	assert.equal(activation.regressao, null);
@@ -132,13 +136,19 @@ test("primeira entrega: ativada e fora da superfície", () => {
 
 test("regressão: sem entrega há mais de 14 dias, ou canal perdido", () => {
 	const quiet = resolveActivation(
-		facts({ canal: { numero: "CONECTADO", pagamento: "VERIFICADO" }, envios: { primeiraEntregaEm: daysAgo(90), ultimaEntregaEm: daysAgo(20) } }),
+		facts({
+			canal: { numero: "CONECTADO", pagamento: "VERIFICADO" },
+			envios: { primeiraEntregaEm: daysAgo(90), ultimaEntregaEm: daysAgo(20), entregas14Dias: 0 },
+		}),
 	);
 	assert.equal(quiet.regressao?.motivo, "SEM_ENVIO");
 	assert.equal(quiet.proximaAcao?.chave, "revisar-campanhas");
 	assert.equal(quiet.visivel, true);
 	const lost = resolveActivation(
-		facts({ canal: { numero: "NENHUM", pagamento: "DESCONHECIDO" }, envios: { primeiraEntregaEm: daysAgo(90), ultimaEntregaEm: daysAgo(100) } }),
+		facts({
+			canal: { numero: "NENHUM", pagamento: "DESCONHECIDO" },
+			envios: { primeiraEntregaEm: daysAgo(90), ultimaEntregaEm: daysAgo(100), entregas14Dias: 0 },
+		}),
 	);
 	assert.equal(lost.regressao?.motivo, "CANAL_PERDIDO");
 	assert.equal(lost.proximaAcao?.chave, "reconectar-whatsapp");
@@ -229,4 +239,62 @@ test("sem fonte: definir de onde vêm as vendas, retomando a etapa do onboarding
 	assert.equal(activation.proximaAcao?.chave, "definir-fonte");
 	assert.equal(activation.proximaAcao?.href, "/onboarding?produto=CRM&retomar=true&etapa=fonte-dados");
 	assert.equal(activation.ativado, false);
+});
+
+// ------------------------------------------------------------------ celebrações
+
+test("celebração: a primeira compra de quem recebeu campanha vence as outras", () => {
+	const activation = resolveActivation(
+		facts({
+			canal: { numero: "CONECTADO", pagamento: "VERIFICADO" },
+			envios: { primeiraEntregaEm: daysAgo(5), ultimaEntregaEm: daysAgo(1), entregas14Dias: 48 },
+			resultados: { primeiraConversao: { em: daysAgo(1), valor: 87, minutos: 6 * 24 * 60 }, primeiroCashback: null },
+		}),
+	);
+	assert.equal(activation.celebracao?.titulo, "Um cliente voltou depois da sua campanha");
+	assert.match(activation.celebracao?.texto ?? "", /comprou R\$\s?87,00, 6 dias depois\./);
+	// Ativada e sem regressão: a superfície some, a celebração continua.
+	assert.equal(activation.visivel, false);
+});
+
+test("celebração: primeira campanha entregue, com o número real de mensagens", () => {
+	const activation = resolveActivation(
+		facts({
+			canal: { numero: "CONECTADO", pagamento: "VERIFICADO" },
+			envios: { primeiraEntregaEm: daysAgo(2), ultimaEntregaEm: daysAgo(1), entregas14Dias: 48 },
+		}),
+	);
+	assert.equal(activation.celebracao?.titulo, "Sua primeira campanha saiu");
+	assert.match(activation.celebracao?.texto ?? "", /^48 mensagens entregues desde/);
+	assert.match(activation.celebracao?.chave ?? "", /^primeira-entrega:\d{4}-\d{2}-\d{2}$/);
+});
+
+test("celebração: passou a janela, nada a celebrar", () => {
+	const activation = resolveActivation(
+		facts({
+			canal: { numero: "CONECTADO", pagamento: "VERIFICADO" },
+			envios: { primeiraEntregaEm: daysAgo(30), ultimaEntregaEm: daysAgo(1), entregas14Dias: 48 },
+		}),
+	);
+	assert.equal(activation.celebracao, null);
+});
+
+test("celebração: primeira venda no balcão cita o cashback ganho, só se houve", () => {
+	const counter = (cashback: TActivationFacts["resultados"]["primeiroCashback"]) =>
+		resolveActivation(
+			facts({
+				fonte: { ...facts().fonte, modo: "POI" },
+				vendas: { ...facts().vendas, balcao: sold({ primeiraEm: daysAgo(1) }) },
+				resultados: { primeiraConversao: null, primeiroCashback: cashback },
+			}),
+		);
+	assert.match(counter({ em: daysAgo(1), valor: 5 }).celebracao?.texto ?? "", /R\$\s?5,00 de cashback/);
+	assert.match(counter(null).celebracao?.texto ?? "", /já está na sua base/);
+});
+
+test("celebração: primeira venda pelo canal do ERP", () => {
+	const activation = resolveActivation(
+		erpFacts({ MESAS: sold({ primeiraEm: daysAgo(2), total: 6 }) }, { jornadas: { crm: false, erp: true, erpCanal: "MESAS" } }),
+	);
+	assert.equal(activation.celebracao?.titulo, "Sua primeira comanda fechada");
 });

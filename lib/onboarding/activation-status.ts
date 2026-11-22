@@ -54,8 +54,9 @@ function composeActivationFacts({
 			manuaisAtivas: readiness.campanhasManuais.ativas,
 			templates: readiness.whatsapp.templates.map((template) => ({ nome: template.nome, status: template.status })),
 		},
-		envios: { primeiraEntregaEm: activity.envios.primeiraEntregaEm, ultimaEntregaEm: activity.envios.ultimaEntregaEm },
+		envios: activity.envios,
 		erp: { produtosUtilizaveis: readiness.erp.produtosUtilizaveis, pendenciasLancamento: readiness.erp.pendenciasLancamento },
+		resultados: { primeiraConversao: activity.primeiraConversao, primeiroCashback: activity.primeiroCashback },
 	};
 }
 
