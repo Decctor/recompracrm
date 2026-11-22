@@ -3,6 +3,7 @@
 import TextInput from "@/components/Inputs/TextInput";
 import { OrganizationSlugFeedback } from "@/components/Organizations/OrganizationSlugFeedback";
 import { Checkbox } from "@/components/ui/checkbox";
+import { AppSubscriptionPlans } from "@/config";
 import { OrganizationNicheOptions } from "@/config/onboarding";
 import { formatToCPForCNPJ, formatToPhone } from "@/lib/formatting";
 import { slugifyOrganizationName } from "@/lib/organizations/slug";
@@ -31,6 +32,11 @@ type CompanyStageProps = {
 	 */
 	produto: "CRM" | "ERP";
 };
+
+/** Nome do plano para quem lê ("CRM + ERP"), não a chave ("CRM_ERP"); chave desconhecida passa como veio. */
+function planName(planKey: string) {
+	return planKey in AppSubscriptionPlans ? AppSubscriptionPlans[planKey as keyof typeof AppSubscriptionPlans].name : planKey;
+}
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
 	return <p className="text-[11px] font-extrabold tracking-[0.08em] text-muted-foreground uppercase">{children}</p>;
@@ -68,7 +74,7 @@ export function CompanyStage({ state, updateOrganization, updateOrganizationLogo
 						<p className="text-sm font-bold">Você possui licenças disponíveis</p>
 						<p className="text-sm text-muted-foreground">
 							{dealLicense.licencasUtilizadas} de {dealLicense.deal.quantidadeLicencas} licenças do seu plano estão em uso. Esta organização será ativada no
-							plano {dealLicense.deal.planoBase}, sem período de teste e sem checkout.
+							plano {planName(dealLicense.deal.planoBase)}, sem período de teste e sem checkout.
 						</p>
 					</div>
 				</div>
