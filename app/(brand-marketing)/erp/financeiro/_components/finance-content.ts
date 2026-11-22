@@ -1,3 +1,4 @@
+import { PRICE_LABELS, PRICING } from "@/app/_content/pricing";
 import type { FAQItem } from "@/app/_content/blog-posts";
 
 // Conteúdo da página /erp/financeiro. Mira "fluxo de caixa" (14.800/mês), "controle financeiro"
@@ -120,6 +121,6 @@ export const FINANCE_FAQS: FAQItem[] = [
 	{
 		question: "Quanto custa o financeiro?",
 		answer:
-			"O financeiro faz parte do ERP do RecompraCRM, com proposta sob medida para a sua operação e implantação acompanhada. Fale com um especialista pelo WhatsApp para receber o valor.",
+			`O financeiro faz parte do ERP do RecompraCRM. O plano CRM + ERP custa ${PRICE_LABELS.erpMonthly} por mês, com preço fixo por loja e implantação acompanhada. São ${PRICING.trialDays} dias grátis, sem cartão de crédito.`,
 	},
 ];

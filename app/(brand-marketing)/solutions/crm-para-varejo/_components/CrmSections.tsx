@@ -1,3 +1,4 @@
+import { PRICE_LABELS } from "@/app/_content/pricing";
 import { ArrowRight, Check, FileSpreadsheet, Plug, Plus, ScanLine, ShoppingBag, Smartphone, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { FeatureStage } from "../../../features/_components/FeatureStage";
@@ -231,7 +232,7 @@ export function CrmInbox() {
 						</h2>
 						<p className="mt-5 text-pretty text-[17px] leading-[1.6] text-white/66">
 							As respostas às campanhas e as mensagens novas caem numa caixa de entrada compartilhada, no número da loja, pela API oficial do WhatsApp. A
-							equipe divide as conversas, e o agente de IA responde o que dá para responder sozinho. Disponível como adicional, sob consulta.
+							equipe divide as conversas, e o agente de IA responde o que dá para responder sozinho. É o adicional Hub de Atendimentos, por {PRICE_LABELS.hubMonthly} a mais por mês.
 						</p>
 					</div>
 					<ul className="m-0 flex list-none flex-col gap-3 p-0 text-[15px] leading-[1.5] text-white/80">

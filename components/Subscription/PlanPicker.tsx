@@ -311,18 +311,22 @@ function AddonRow({
 	return (
 		<li className={cn("flex items-start gap-3 p-4", checked && "bg-brand-secondary/[0.06]")}>
 			<Switch id={switchId} checked={checked} disabled={disabled || !available} onCheckedChange={onCheckedChange} className="mt-0.5" />
+			{/* O preço fica na linha do nome, dentro do rótulo: numa coluna própria ele espremia a
+			    descrição em quatro linhas num celular. */}
 			<label htmlFor={switchId} className={cn("flex min-w-0 flex-1 flex-col gap-0.5", available && !disabled && "cursor-pointer")}>
-				<span className="text-sm leading-tight font-bold tracking-tight">{addon.name}</span>
+				<span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+					<span className="text-sm leading-tight font-bold tracking-tight">{addon.name}</span>
+					{pricing ? (
+						<span className="text-sm font-extrabold tracking-tight tabular-nums">
+							+ {formatToMoney(toMonthlyEquivalent(pricing.price, cycle))}
+							<span className="text-[13px] font-medium text-muted-foreground">/mês</span>
+						</span>
+					) : null}
+				</span>
 				<span className="text-[13px] leading-snug text-muted-foreground">
 					{available ? addon.description : `${addon.name} é cobrado mês a mês e não entra no plano anual. Para contratar, escolha o ciclo mensal.`}
 				</span>
 			</label>
-			{pricing ? (
-				<span className="shrink-0 text-sm font-extrabold tracking-tight tabular-nums">
-					+ {formatToMoney(toMonthlyEquivalent(pricing.price, cycle))}
-					<span className="text-[13px] font-medium text-muted-foreground">/mês</span>
-				</span>
-			) : null}
 		</li>
 	);
 }

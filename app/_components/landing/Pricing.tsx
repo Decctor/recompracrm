@@ -102,7 +102,7 @@ export function LandingPricing() {
 					<div>
 						<p className="text-[15px] font-semibold">ERP RecompraCRM</p>
 						<p className="mt-1 text-[14px] text-[#5b6a70]">
-							PDV, emissão fiscal, compras, comandas e loja digital. Proposta sob medida para a sua operação.
+							PDV, emissão fiscal, compras, comandas e loja digital. Plano CRM + ERP por R$ {formatPlanPrice(PRICING.erpMonthly)}/mês.
 						</p>
 					</div>
 					<TrackedAnchor

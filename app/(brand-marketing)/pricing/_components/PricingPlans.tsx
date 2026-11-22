@@ -1,26 +1,28 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { ArrowRight, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import { useState } from "react";
 import { TrackedCta } from "../../features/_components/TrackedCta";
-import { SIGNUP_HREF, whatsappHref } from "../../features/_components/feature-links";
+import { SIGNUP_HREF } from "../../features/_components/feature-links";
 
-// Os dois planos com o seletor mensal/anual, como o PlanPicker do app: no anual só existe o plano
-// Plataforma, porque o Gestor de Crescimento é cobrado mensalmente.
+// Os dois planos-base com o seletor mensal/anual, como o PlanPicker do app. Os adicionais (Hub de
+// Atendimentos e Gestor de Crescimento) ficam na seção seguinte da página: entram em qualquer um
+// dos dois planos, pelo mesmo preço.
 
-type PricingPlansProps = {
-	platformMonthly: string;
-	platformYearly: string;
-	platformYearlyEquivalent: string;
-	yearlySavings: number;
-	bundleMonthly: string;
-	trialDays: number;
-	platformIncluded: string[];
-	consultoriaIncluded: string[];
+type TPublicPlan = {
+	monthly: string;
+	yearly: string;
+	yearlyEquivalent: string;
+	included: string[];
 };
 
-const CONSULTORIA_TEXT = "Olá! Quero agendar um diagnóstico e entender a gestão com gestor de crescimento dedicado do RecompraCRM.";
+type PricingPlansProps = {
+	crm: TPublicPlan;
+	erp: TPublicPlan;
+	yearlySavings: number;
+	trialDays: number;
+};
 
 function Included({ items }: { items: string[] }) {
 	return (
@@ -45,9 +47,29 @@ function Price({ value, period }: { value: string; period: string }) {
 	);
 }
 
+function PlanPrice({ plan, yearly, trialDays }: { plan: TPublicPlan; yearly: boolean; trialDays: number }) {
+	if (yearly) {
+		return (
+			<>
+				<Price value={plan.yearly} period="/ano" />
+				<p className="mt-2 text-[13px] text-[#687a80]">
+					Equivale a R$ {plan.yearlyEquivalent} por mês · {trialDays} dias grátis
+				</p>
+			</>
+		);
+	}
+	return (
+		<>
+			<Price value={plan.monthly} period="/mês" />
+			<p className="mt-2 text-[13px] text-[#687a80]">{trialDays} dias grátis</p>
+		</>
+	);
+}
+
 export function PricingPlans(props: PricingPlansProps) {
 	const [cycle, setCycle] = useState<"monthly" | "yearly">("monthly");
 	const yearly = cycle === "yearly";
+	const cycleSuffix = yearly ? "anual" : "mensal";
 
 	return (
 		<div className="flex flex-col items-center">
@@ -76,29 +98,17 @@ export function PricingPlans(props: PricingPlansProps) {
 				))}
 			</div>
 
-			<div className={cn("mt-10 grid w-full gap-4", yearly ? "max-w-[520px]" : "grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))]")}>
+			<div className="mt-10 grid w-full grid-cols-[repeat(auto-fit,minmax(min(100%,340px),1fr))] gap-4">
 				<div className="flex flex-col rounded-2xl border border-[#e3e8ea] bg-white p-8 max-md:p-6">
-					<p className="text-[17px] font-semibold">Plataforma</p>
-					<p className="mt-1 text-[14px] text-[#687a80]">Você no controle.</p>
-					{yearly ? (
-						<>
-							<Price value={props.platformYearly} period="/ano" />
-							<p className="mt-2 text-[13px] text-[#687a80]">
-								Equivale a R$ {props.platformYearlyEquivalent} por mês · {props.trialDays} dias grátis
-							</p>
-						</>
-					) : (
-						<>
-							<Price value={props.platformMonthly} period="/mês" />
-							<p className="mt-2 text-[13px] text-[#687a80]">{props.trialDays} dias grátis</p>
-						</>
-					)}
-					<div className="mt-7">
-						<Included items={props.platformIncluded} />
+					<p className="text-[17px] font-semibold">CRM</p>
+					<p className="mt-1 text-[14px] text-[#687a80]">Para fazer o cliente voltar.</p>
+					<PlanPrice plan={props.crm} yearly={yearly} trialDays={props.trialDays} />
+					<div className="mt-7 flex flex-1 flex-col">
+						<Included items={props.crm.included} />
 					</div>
 					<TrackedCta
 						href={SIGNUP_HREF}
-						ctaId={yearly ? "pricing_plataforma_anual" : "pricing_plataforma_mensal"}
+						ctaId={`pricing_crm_${cycleSuffix}`}
 						location="pricing_plans"
 						slug="pricing"
 						className="flex justify-center rounded-[10px] border border-[#dfe4e6] p-[13px] text-[15px] font-semibold text-[#0e1214] transition-colors hover:bg-[#f7f8fa]"
@@ -107,37 +117,25 @@ export function PricingPlans(props: PricingPlansProps) {
 					</TrackedCta>
 				</div>
 
-				{yearly ? null : (
-					<div className="flex flex-col rounded-2xl border border-[#24549c] bg-white p-8 shadow-[0_0_0_1px_#24549c] max-md:p-6">
-						<div className="flex items-center justify-between gap-3">
-							<p className="text-[17px] font-semibold">Plataforma + Gestor de Crescimento</p>
-							<span className="whitespace-nowrap rounded-md bg-[rgba(36,84,156,0.08)] px-2 py-[3px] text-[11px] font-semibold text-[#24549c]">
-								Recomendado
-							</span>
-						</div>
-						<p className="mt-1 text-[14px] text-[#687a80]">A gente opera por você.</p>
-						<Price value={props.bundleMonthly} period="/mês" />
-						<p className="mt-2 text-[13px] text-[#687a80]">Plataforma + consultoria · {props.trialDays} dias grátis</p>
-						<p className="mt-7 mb-2.5 text-[12px] font-semibold uppercase tracking-[0.04em] text-[#687a80]">Tudo da Plataforma, mais:</p>
-						<Included items={props.consultoriaIncluded} />
-						<TrackedCta
-							href={whatsappHref(CONSULTORIA_TEXT)}
-							ctaId="pricing_agendar_diagnostico"
-							location="pricing_plans"
-							slug="pricing"
-							className="flex items-center justify-center gap-2 rounded-[10px] bg-[#24549c] p-[13px] text-[15px] font-semibold text-white transition-colors hover:bg-[#1a3d7a]"
-						>
-							Agendar diagnóstico
-							<ArrowRight className="size-4" aria-hidden />
-						</TrackedCta>
+				<div className="flex flex-col rounded-2xl border border-[#e3e8ea] bg-white p-8 max-md:p-6">
+					<p className="text-[17px] font-semibold">CRM + ERP</p>
+					<p className="mt-1 text-[14px] text-[#687a80]">Para vender e fazer o cliente voltar, no mesmo sistema.</p>
+					<PlanPrice plan={props.erp} yearly={yearly} trialDays={props.trialDays} />
+					<p className="mt-7 mb-2.5 text-[12px] font-semibold uppercase tracking-[0.04em] text-[#687a80]">Tudo do CRM, mais:</p>
+					<div className="flex flex-1 flex-col">
+						<Included items={props.erp.included} />
 					</div>
-				)}
+					<TrackedCta
+						href={SIGNUP_HREF}
+						ctaId={`pricing_crm_erp_${cycleSuffix}`}
+						location="pricing_plans"
+						slug="pricing"
+						className="flex justify-center rounded-[10px] border border-[#dfe4e6] p-[13px] text-[15px] font-semibold text-[#0e1214] transition-colors hover:bg-[#f7f8fa]"
+					>
+						Testar {props.trialDays} dias grátis
+					</TrackedCta>
+				</div>
 			</div>
-			{yearly ? (
-				<p className="mt-4 max-w-[520px] text-center text-[13px] text-[#687a80]">
-					O Gestor de Crescimento é cobrado mensalmente e não entra no plano anual. Para contratá-lo, escolha o ciclo mensal.
-				</p>
-			) : null}
 		</div>
 	);
 }

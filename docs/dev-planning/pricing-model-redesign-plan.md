@@ -1,6 +1,6 @@
 # Pricing model redesign — base plans + add-ons
 
-> Status: **planned, nothing implemented** · Last updated: 2026-11-22 · Branch: `claude/pricing-model-redesign-e2bj6j`
+> Status: **implemented in code, not yet live** (see section 10 for what is left) · Last updated: 2026-11-22 · Branch: `claude/pricing-model-redesign-e2bj6j`
 
 The platform stops selling tiers and sells **two base plans and two add-ons**, all flat, with no
 usage limits. Today's commercial reality is already close to this: only one of the three legacy
@@ -31,7 +31,7 @@ tier's capability block.
   default configuration is shared with `recompracrm-chats` and stays as it is (payment method and
   cancellation only).
 - **Partner commissions:** full current rule on the base plan, flat 20% on the Hub, nothing on
-  consulting (section 6). *Recommended; not yet explicitly confirmed.*
+  consulting (section 6). *Recommended and implemented; not yet explicitly confirmed.*
 
 Useful coincidences of these numbers:
 
@@ -64,7 +64,7 @@ Platform snapshot on 2026-11-10: 25 organizations, 6 with an active Stripe subsc
 One behaviour to be aware of: `CRESCIMENTO` has `iaAtendimento.acesso: true` with
 `hubAtendimentos.acesso: false`. `iaAtendimento` gates the AI agents, the chat assist and the AI
 answering in the WhatsApp webhooks, so base-plan organizations can have the AI agent today
-without the inbox. In the new model the AI agent belongs to the Hub add-on (open question 1).
+without the inbox. In the new model the AI agent belongs to the Hub add-on (section 8).
 
 ## 3. Market research (collected 10–11 Nov 2026)
 
@@ -184,17 +184,24 @@ export function resolveSubscriptionEntitlements({ basePlan, addons }: {
 
 ### 4.2 The subscription is the source of truth
 
-A map from Stripe price ID to base plan or add-on key, built from the config, lets the webhook
-turn a subscription's items into entitlements.
+A map from Stripe price ID to base plan or add-on key, built from the config
+(`buildSubscriptionPriceCatalog`), lets the webhook turn a subscription's items into entitlements
+(`lib/subscriptions/entitlements-sync.ts`).
 
 - `customer.subscription.created` and `customer.subscription.updated` read the items, resolve
   base plan + add-ons, and write `assinaturaPlano`, `assinaturaAdicionais`, `consultoriaAtiva`
-  and the governed capability flags. `generate-checkout` stops writing capabilities.
-- **Unknown price IDs leave the organization untouched.** A subscription with no item that maps
-  to a new base plan is a legacy or grandfathered one; its `recursos` must not be recomputed.
-- **Write only on change.** Compare the resolved plan and add-ons with what is stored and write
-  only when they differ, so capabilities granted by hand in the admin modal are not wiped by an
-  unrelated `subscription.updated` (a status change, a renewal).
+  and `configuracao.recursos`. `generate-checkout` no longer writes capabilities.
+- **Only marked subscriptions are synced.** The checkout stamps the subscription with
+  `metadata.pricingModel = "MODULAR"`. A subscription without the mark is a legacy tier and the
+  webhook never touches its capabilities. This is what makes it safe for the `CRM` plan to reuse
+  the old `CRESCIMENTO` price ID: the price alone never decides.
+- **Unknown items leave the organization untouched.** A marked subscription whose items do not
+  describe exactly one known base plan is logged and skipped.
+- **Write only on change.** The resolved plan and add-ons are compared with what is stored, and
+  nothing is written when they match, so capabilities granted by hand in the admin modal are not
+  wiped by an unrelated `subscription.updated` (a status change, a renewal). When they do change,
+  `recursos` is replaced whole, with one exception: the AI spend ceiling already stored is kept
+  while AI stays on.
 - Deal customers are handled before this branch and are not affected (`findDealByStripeCustomerId`).
 - All existing Stripe rules hold: the client comes from
   `getStripeClient(resolveStripeAccount(row.stripeConta))`, new customers are born in the sales
@@ -227,15 +234,21 @@ turn a subscription's items into entitlements.
   from it; the capability write is removed. Consulting stays monthly-only.
 - `webhook/route.ts`: entitlement sync as in section 4.2.
 - New route under the owning resource, e.g. `app/api/organizations/subscription/addons/route.ts`:
-  - **Add:** appends the Hub price to the existing subscription, in the account where it lives,
-    with Stripe's default proration.
-  - **Remove:** removes the item at period end; access ends with the paid period.
+  - **Add:** appends the add-on price to the existing subscription with
+    `proration_behavior: "always_invoice"` and `payment_behavior: "error_if_incomplete"`: the
+    prorated amount is charged now, and a failed charge returns 402 and leaves the subscription
+    unchanged.
+  - **Remove:** deletes the item now with `create_prorations`; the unused time becomes a credit on
+    the next invoice and access ends immediately. Stripe has no per-item "cancel at period end"
+    without subscription schedules.
+  - Only **marked subscriptions in the sales account** can be managed here. Legacy tiers, deal
+    organizations and subscriptions living in the `SYNCRONIZA` account get a "talk to us" message.
+  - Restricted to members with `usuarios.editar`: adding an add-on charges the saved card.
   - A yearly subscription can only take the yearly Hub price, because one subscription cannot mix
     intervals. For the same reason consulting cannot be added to a yearly subscription.
   - The route never writes capabilities; the webhook does.
-- The button lives in Settings → Assinatura and wherever the Hub is locked
-  (`PlanRestrictionComponent`), and is hidden for deal organizations and legacy plans that
-  already include the Hub.
+- The button lives in `SubscriptionManagementMenu`, opened from the plan badge in the sidebar. The
+  same menu shows the plan picker to organizations that are not subscribers yet.
 
 ### Phase 4 — Partner commission
 
@@ -248,8 +261,9 @@ turn a subscription's items into entitlements.
 
 ### Phase 5 — Trial and onboarding
 
-- `app/api/organizations/route.ts`: `FREE-TRIAL` resolves to `CRM`, `FREE-TRIAL-ERP` to `CRM_ERP`
-  (open question 3 decides whether the trial also includes the Hub).
+- `app/api/organizations/route.ts`: `FREE-TRIAL` resolves to `CRM`, `FREE-TRIAL-ERP` to `CRM_ERP`,
+  both with `FREE_TRIAL_ADDONS` (section 8). The legacy paid branch of this route was removed:
+  every organization starts on trial and subscribes later through the checkout.
 - `lib/onboarding/erp-trial.ts`: switches the ERP module on instead of assigning `ESCALA`.
 - The subscription enum accepted by the onboarding route moves to the new shape.
 
@@ -267,7 +281,7 @@ turn a subscription's items into entitlements.
 - `app/_content/pricing.ts` and `app/(brand-marketing)/pricing/`: the four prices replace "Sob
   consulta" and "Proposta sob medida"; the comparison table and FAQ are rewritten; the `/erp`
   page gains its price.
-- FAQ line on Meta's message fees, including service messages (open question 4).
+- FAQ line on Meta's service-message fee: not written, pending verification (section 8).
 - Product documentation and agent-facing descriptions that name the tiers
   (`lib/agent-tools/resources.ts`, `lib/agent-tools/tools/platform.ts`).
 
@@ -298,24 +312,65 @@ gross SaaS plan excluding consulting.
   explicit admin action; the webhook never converts one by itself (section 4.2).
 - Legacy plan definitions can be deleted only when no organization and no deal references them.
 
-## 8. Open questions
+## 8. Defaults taken during implementation
 
-1. **AI agent in the base plan.** `CRESCIMENTO` grants `iaAtendimento` without the inbox. The
-   new `CRM` plan turns it off, so new CRM-only customers get the AI agent only with the Hub.
-   Confirm this is intended.
-2. **AI fair-use ceiling.** Choose the default `limiteCreditos` (USD a month) for the Hub from
-   real spend in `ai_agent_runs`, and decide what the customer sees when it is reached.
-3. **Trial contents.** Does the 15-day trial include the Hub, or only the chosen base plan?
-4. **Meta service-message fee.** Two vendors quote R$ 0,035 per service message after 1.000 free
-   per number per month since 01/10/2026. Verify against Meta's own pricing before writing the FAQ.
-5. **Consulting scope.** At R$ 500 the service needs a written scope (what is delivered each
+Each is a single constant or rule, chosen so the build would not block. Flip them if they are wrong.
+
+| Question | Default taken | Where |
+| --- | --- | --- |
+| AI agent in the base plan | Off in `CRM` and `CRM_ERP`; the Hub turns it on | `AppSubscriptionPlans.CRM.capabilities` |
+| AI fair-use ceiling | US$ 25 a month per organization (highest observed spend until Nov 2026: US$ 2,90) | `HUB_AI_MONTHLY_SPEND_LIMIT_USD` |
+| Trial contents | Chosen base plan plus the Hub, so no trial loses what trials have today | `FREE_TRIAL_ADDONS` |
+| Partner commission | Section 6 | `PLATFORM_PARTNER_ADDON_INVOICE_BPS` |
+| Who may add or remove add-ons | Members with `usuarios.editar` | `canManageSubscriptionAddons` |
+| Deals | Admin picks base plan and whether the Hub is included; consulting stays a per-organization admin toggle | `CreateDealInputSchema` |
+
+Still open:
+
+1. **Meta service-message fee.** Two vendors quote R$ 0,035 per service message after 1.000 free
+   per number per month since 01/10/2026. Verify against Meta's own pricing; the FAQ was left with
+   its existing wording.
+2. **Consulting scope.** At R$ 500 the service needs a written scope (what is delivered each
    month, how many campaigns, response times) so the price holds as the base grows.
-6. **Commission rule.** Confirm section 6.
-7. **ERP price review.** R$ 599,90 and R$ 500 are both "for now"; decide when they are revisited
+3. **ERP price review.** R$ 599,90 and R$ 500 are both "for now"; decide when they are revisited
    and whether the price then applies only to new subscribers.
+4. **Partner programme page.** `app/(brand-marketing)/partnerships` still describes the rule with
+   the CRM monthly fee as the only base. It is accurate for a CRM-only sale; it does not mention
+   the flat rate on the Hub.
+5. **Async payment methods on add-on purchase.** `error_if_incomplete` is documented for failed
+   card charges; Stripe's docs do not say how it treats boleto or a PIX mandate left in
+   `processing`. Test before enabling `STRIPE_PIX_ENABLED` or `STRIPE_BOLETO_ENABLED`.
 
 ## 9. Out of scope
 
 - The `recompracrm-chats` app, its `chats_*` products and its billing portal configuration.
 - Moving any existing customer between Stripe accounts.
 - Usage-based billing of any kind.
+
+## 10. Go-live checklist
+
+Nothing below has been done; all of it is outside the repository.
+
+1. **Apply migration `drizzle/0151_subscription_addons.sql`** before the code is deployed:
+   `npx tsx ./scripts/apply-sql-migration.ts drizzle/0151_subscription_addons.sql`. The code
+   selects the new columns, so a deploy without the migration breaks organization queries.
+2. **Create the Stripe prices** in the sales account of each environment:
+   `npx tsx ./scripts/create-subscription-prices.ts` shows what it would create; `--apply`
+   creates the CRM + ERP and Hub de Atendimentos products and prices and prints the variables.
+3. **Set the four variables** it prints (`NEXT_PUBLIC_STRIPE_CRM_ERP_MONTHLY_PLAN_PRICE_ID`,
+   `NEXT_PUBLIC_STRIPE_CRM_ERP_YEARLY_PLAN_PRICE_ID`,
+   `NEXT_PUBLIC_STRIPE_HUB_ATENDIMENTOS_MONTHLY_PRICE_ID`,
+   `NEXT_PUBLIC_STRIPE_HUB_ATENDIMENTOS_YEARLY_PRICE_ID`) in Vercel for that environment, then
+   redeploy: they are inlined at build. Until they exist, checkout of CRM + ERP or the Hub fails
+   with "Price ID do Stripe não configurado".
+4. **Make sure the webhook endpoints deliver `customer.subscription.created` and
+   `customer.subscription.updated`** in both Stripe accounts (they are already in the handler's
+   allow-list).
+5. **Test one full cycle in the test-mode account:** checkout of CRM, add the Hub in the app,
+   remove it, and a checkout of CRM + ERP + Hub + consulting; confirm capabilities and a partner
+   commission row after each paid invoice.
+
+Not verified in this build: the checkout, the add-on route and the webhook sync were not run
+against Stripe, and `SubscriptionManagementMenu` was not rendered in a browser (it needs an
+authenticated session and a live subscription). The resolver, the commission rule, the public
+pricing page and the plan picker were tested or rendered.

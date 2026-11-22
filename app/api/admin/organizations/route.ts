@@ -78,6 +78,7 @@ async function getOrganizations({ input }: { input: TGetOrganizationInput }) {
 			stripeSubscriptionId: true,
 			stripeSubscriptionStatus: true,
 			assinaturaPlano: true,
+			assinaturaAdicionais: true,
 			dealId: true,
 			periodoTesteInicio: true,
 			periodoTesteFim: true,
