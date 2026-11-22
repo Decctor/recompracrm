@@ -61,6 +61,8 @@ export type TActivationMilestone = {
 	estado: TActivationMilestoneState;
 	/** Complemento com número real ("1.284 clientes", "126 vendas importadas até agora"). */
 	detalhe: string | null;
+	/** O que resolve este marco; null quando feito ou quando ainda não há o que fazer. */
+	acao: TActivationAction | null;
 };
 
 /** `href` nulo = a etapa espera alguém de fora; mostrar o texto, sem botão. */
@@ -116,7 +118,7 @@ export function resolveErpChannel(facts: TActivationFacts): TErpChannel {
 
 // ------------------------------------------------------------------ escadas
 
-type TStep = TActivationMilestone & { acao: TActivationAction | null };
+type TStep = TActivationMilestone;
 
 const done = (chave: string, rotulo: string, detalhe: string | null = null): TStep => ({ chave, rotulo, estado: "FEITO", detalhe, acao: null });
 const waiting = (chave: string, rotulo: string, acao: TActivationAction): TStep => ({
@@ -210,7 +212,7 @@ function firstDeliveryStep(facts: TActivationFacts): TStep {
 		return waiting("primeira-entrega", rotulo, {
 			chave: "aguardando-meta",
 			rotulo: "Aguardando a Meta",
-			descricao: "A Meta está analisando a mensagem das campanhas. Não precisa fazer nada; avisamos quando aprovar.",
+			descricao: "A Meta está analisando a mensagem das campanhas. Não precisa fazer nada: este passo avança sozinho quando ela aprovar.",
 			href: null,
 		});
 	}
@@ -485,7 +487,7 @@ export function resolveActivation(facts: TActivationFacts): TActivation {
 			? null
 			: (steps.find((step) => step.estado === "PENDENTE" && step.acao)?.acao ?? steps.find((step) => step.estado === "EM_ANDAMENTO")?.acao ?? null);
 
-	const marcos: TActivationMilestone[] = steps.map(({ acao: _acao, ...milestone }) => milestone);
+	const marcos: TActivationMilestone[] = steps;
 	return {
 		segmento,
 		canalErp,
