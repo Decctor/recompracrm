@@ -73,7 +73,8 @@ export async function loadOrganizationActivity({
 					ultima: max(sales.dataVenda),
 					semanas: sql<number>`count(distinct floor(extract(epoch from (${sales.dataVenda} - ${criadaEm.toISOString()}::timestamptz)) / ${WEEK_SECONDS}))::integer`,
 					total: count(),
-					diasUltimos7: sql<number>`count(distinct date_trunc('day', ${sales.dataVenda})) filter (where ${sales.dataVenda} >= ${new Date(now.getTime() - 7 * DAY_MS).toISOString()}::timestamptz)::integer`,
+					// Hoje e os 6 dias anteriores, inteiros: uma janela "agora menos 7 dias" toca 8 dias de calendário.
+					diasUltimos7: sql<number>`count(distinct date_trunc('day', ${sales.dataVenda})) filter (where ${sales.dataVenda} >= date_trunc('day', ${now.toISOString()}::timestamptz - interval '6 days'))::integer`,
 				})
 				.from(sales)
 				.where(and(...getValidSaleConditions({ orgId: organizationId }), gte(sales.dataVenda, criadaEm)))
