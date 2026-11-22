@@ -359,3 +359,21 @@ by the same surface, and that surface depends on readiness telling the truth.
    open in Meta's window, and the stage events, `organization_onboardings` and Control milestones already
    show where a store stops.
 7. **ERP stall event to Control:** left out for now.
+
+## 9. Implementation status (22/11/2026)
+
+All nine slices are on branch `claude/cool-lovelace-8ncxdp`, in one PR as decided.
+
+| # | Slice | Where |
+| --- | --- | --- |
+| 1 | Truthful readiness | `lib/whatsapp/meta-access.ts` (health check beats the estimated expiry date), `lib/onboarding/data-source-mode.ts` (counter only when chosen or used; the ERP's PDV is a source), `campanhasManuais` in readiness. Control: `whatsapp_conectado` carries the connection date and is recorded without an event when older than 7 days. |
+| 2 | Activation model | `lib/onboarding/activation.ts` (pure, tested), `lib/onboarding/activity.ts` (shared with the Control sync), `GET /api/organizations/onboarding/activation`, `useOnboardingActivation`. |
+| 3 | Hub block (CRM) | `app/dashboard/_hub/activation-panel.tsx`, `resolveHubEmptyHints`, `Panel.Empty` with `action`. The hub renders for every org; `ActivationPanel` and the `SalesEmptyState` swap are gone. |
+| 4 | Hub block (ERP) | Channel ladders, week-2 step and 7-day regression came with slices 2–3; the launch checklist's comandas link was fixed. |
+| 5 | WhatsApp stage CTA | "Conectar com a Meta" is the only primary action until a number connects; the stage stays 5th. |
+| 6 | Trial message and paywall | `lib/subscriptions/activation-narrative.ts`: next step instead of the clock before activation; up to three exact counts of what the store built on `/subscription`. The trial rule is unchanged. |
+| 7 | Celebrations | First repurchase, first delivery, first counter sale, first ERP channel sale (7 days, closable); entry-stage impact number only with complete coverage (`lib/onboarding/impact.ts`). |
+| 8 | Intent and trial goal | `dorPrincipal` and `metaTesteAceita` in the CRM journey answers; recommended campaign first; goal of 5 clients back tracked in the hub after activation; ERP weekly rhythm. |
+| 9 | Shorter company stage | Logo, slug and e-mail out of the CRM journey; CNPJ required. |
+
+Not done, by decision: session recording (6), the ERP stall event to Control (7), any change to the trial rule (4) or to CNPJ (5).
