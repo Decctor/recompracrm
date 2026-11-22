@@ -7,7 +7,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { formatDateAsLocale, formatToPhone } from "@/lib/formatting";
 import { disconnectInternalGateway } from "@/lib/mutations/internal-gateway";
 import { deleteWhatsappConnection } from "@/lib/mutations/whatsapp-connections";
-import { useWhatsappConnections } from "@/lib/queries/whatsapp-connections";
+import { useWhatsappChannelStatus, useWhatsappConnections } from "@/lib/queries/whatsapp-connections";
 import { cn } from "@/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Calendar, Cloud, Loader2, PlusIcon, QrCode, RefreshCw, Wifi, WifiOff } from "lucide-react";
@@ -19,7 +19,13 @@ import { MetaIcon, RecompraCRMIconColorful, WhatsappIcon } from "../icons";
 import { LoadingButton } from "../loading-button";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
+import { WhatsappChannelSteps } from "../WhatsappConnections/WhatsappChannelSteps";
+import { WhatsappConnectPreparation } from "../WhatsappConnections/WhatsappConnectPreparation";
+import { WhatsappConnectResultNotice } from "../WhatsappConnections/WhatsappConnectResultNotice";
 import { InternalGatewayQRConnect } from "./InternalGatewayQRConnect";
+
+// Sem `redirectTo`, a volta da Meta cai nesta tela (DEFAULT_RETURN do callback).
+const META_CONNECT_HREF = "/api/integrations/whatsapp/auth";
 
 type TWhatsappConnection = TGetWhatsappConnectionsOutput["data"][number];
 type TWhatsappConnectionPhone = TWhatsappConnection["telefones"][number];
@@ -31,9 +37,16 @@ type SettingsWhatsAppConnectionProps = {
 export default function SettingsWhatsAppConnection({ user }: SettingsWhatsAppConnectionProps) {
 	const { data: whatsappConnections, isPending, isError } = useWhatsappConnections();
 	const [selectedPhoneContext, setSelectedPhoneContext] = useState<TViewConnectionPhoneContext | null>(null);
+	const queryClient = useQueryClient();
 
 	return (
 		<div className="flex h-full grow flex-col gap-3">
+			<WhatsappConnectResultNotice
+				onConnected={() => {
+					void queryClient.invalidateQueries({ queryKey: ["whatsapp-connection"] });
+					void queryClient.invalidateQueries({ queryKey: ["whatsapp-channel-status"] });
+				}}
+			/>
 			{isPending ? (
 				<div className="flex w-full items-center justify-center py-8">
 					<Loader2 className="text-foreground/60 h-6 w-6 animate-spin" />
@@ -42,8 +55,8 @@ export default function SettingsWhatsAppConnection({ user }: SettingsWhatsAppCon
 				<ErrorComponent msg="Não foi possível carregar suas conexões do WhatsApp." />
 			) : (
 				<div className="flex w-full flex-col gap-3">
-					<IntegrationWithInternalGateway connections={whatsappConnections || []} onPhoneClick={setSelectedPhoneContext} />
 					<IntegrationWithMetaCloud connections={whatsappConnections || []} onPhoneClick={setSelectedPhoneContext} />
+					<IntegrationWithInternalGateway connections={whatsappConnections || []} onPhoneClick={setSelectedPhoneContext} />
 				</div>
 			)}
 			{selectedPhoneContext ? <ViewConnectionPhone context={selectedPhoneContext} closeMenu={() => setSelectedPhoneContext(null)} /> : null}
@@ -168,6 +181,9 @@ function IntegrationWithMetaCloud({ connections, onPhoneClick }: IntegrationWith
 		})),
 	);
 
+	const [showPreparation, setShowPreparation] = useState(false);
+	const channel = useWhatsappChannelStatus({ enabled: connectionPhones.length > 0 });
+
 	const queryClient = useQueryClient();
 	const { mutate: handleDisconnect, isPending: isDisconnecting } = useMutation({
 		mutationKey: ["delete-whatsapp-connection", primaryConnection?.id],
@@ -205,13 +221,11 @@ function IntegrationWithMetaCloud({ connections, onPhoneClick }: IntegrationWith
 							>
 								DESCONECTAR
 							</LoadingButton>
-						) : !isConnected ? (
-							<Link href="/api/integrations/whatsapp/auth">
-								<Button size="xs" className="flex items-center gap-1">
-									<Cloud className="h-4 w-4" />
-									CONECTAR COM META
-								</Button>
-							</Link>
+						) : !isConnected && !showPreparation ? (
+							<Button size="xs" className="flex items-center gap-1" onClick={() => setShowPreparation(true)}>
+								<Cloud className="h-4 w-4" />
+								CONECTAR COM META
+							</Button>
 						) : null}
 					</div>
 					<p className="text-foreground/70 text-xs font-medium tracking-tight">Conecte seu WhatsApp Cloud API para enviar e receber mensagens.</p>
@@ -220,7 +234,7 @@ function IntegrationWithMetaCloud({ connections, onPhoneClick }: IntegrationWith
 							<>
 								<ConnectionPhonePills phones={connectionPhones} onPhoneClick={onPhoneClick} tone="meta" />
 								<Button variant="ghost" size="xs" className="flex items-center gap-1" asChild>
-									<Link href="/api/integrations/whatsapp/auth">
+									<Link href={META_CONNECT_HREF}>
 										<PlusIcon className="h-4 w-4" />
 										ADICIONAR NOVO
 									</Link>
@@ -230,6 +244,20 @@ function IntegrationWithMetaCloud({ connections, onPhoneClick }: IntegrationWith
 					</div>
 				</div>
 			</div>
+
+			{!isConnected && showPreparation ? (
+				<div className="border-border border-t pt-4">
+					<WhatsappConnectPreparation connectHref={META_CONNECT_HREF} />
+				</div>
+			) : null}
+
+			{channel.data && channel.data.telefones.length > 0 ? (
+				<div className="border-border flex flex-col gap-5 border-t pt-4">
+					{channel.data.telefones.map((phone) => (
+						<WhatsappChannelSteps key={phone.id} phone={phone} destinoSugerido={channel.data.destinoSugerido} connectHref={META_CONNECT_HREF} />
+					))}
+				</div>
+			) : null}
 
 			{isConnected && metaConnections.length === 1 && primaryConnection?.dataExpiracao ? (
 				<ConnectionDetailRow icon={<Calendar className="h-4 w-4" />} label="EXPIRAÇÃO DO TOKEN:">
@@ -349,8 +377,8 @@ function IntegrationWithInternalGateway({ connections, onPhoneClick }: Integrati
 				{isConnected && !isActive ? (
 					<div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3">
 						<p className="text-xs text-yellow-800">
-							<strong>Atenção:</strong> Sua conexão com o WhatsApp está inativa. Para continuar enviando e recebendo mensagens, reconecte escaneando um novo QR
-							Code.
+							<strong>Atenção:</strong> Sua conexão com o WhatsApp está inativa. Para continuar enviando e recebendo mensagens, reconecte escaneando um novo
+							QR Code.
 						</p>
 					</div>
 				) : null}

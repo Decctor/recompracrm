@@ -375,6 +375,8 @@ async function handleStatusUpdate(statusUpdate: ReturnType<typeof parseWebhookSt
 				...(statusUpdate.pricing ? { cobrancaWhatsapp: { ...statusUpdate.pricing, atualizadoEm: new Date(statusUpdate.timestamp).toISOString() } } : {}),
 			},
 		}),
+		// Mensagem de teste da conexão (verifica o pagamento na Meta antes da primeira campanha).
+		observeWhatsappConnectionTest(statusUpdate),
 	]);
 
 	// Interrupção de disparos: erro que se repetiria para todos bloqueia o número/interrompe o
@@ -863,6 +865,7 @@ async function handleMessageEcho(messageEcho: ReturnType<typeof parseWebhookMess
 }
 
 import { observeWhatsappPayment } from "@/lib/onboarding/whatsapp-payment";
+import { observeWhatsappConnectionTest } from "@/lib/whatsapp/connection-test";
 import { reconcileOnboardingCampaigns } from "@/lib/onboarding/reconcile";
 
 type TStoredWhatsappMedia = { storageId: string; publicUrl: string; mimeType: string; fileSize: number };

@@ -315,6 +315,18 @@ export function NewFoo({ closeModal, callbacks }: NewFooProps) {
 - "Today" comes from `useDayKey()` plus `resolveTodayRange()`, never from module-level date constants: the page stays open all day on a counter tablet.
 - The band paints the organization's own primary, darkened until white text passes 4.5:1 (`darkenUntilReadableWithWhite`). Org colors come from the database with no contrast guarantee and the band's caption line is 13px — without the adjustment a light brand color makes it unreadable.
 
+## WhatsApp Connection Activation Conventions
+
+**Location**: `lib/whatsapp/meta-connect.ts`, `lib/whatsapp/channel-activation.ts` (both pure, tested), `lib/whatsapp/channel-status.ts`, `lib/whatsapp/connection-test.ts`, `components/WhatsappConnections/`. Design: `docs/onboarding/whatsapp-connection-activation.md`.
+
+- **The Meta callback never renders JSON.** Every exit redirects back to where the flow started, with `whatsapp=conectado|reconectado` or `whatsappErro=<slug>`; `WhatsappConnectResultNotice` reads the params once and strips them. The `state` is verified against an httpOnly cookie. Reconnecting goes through `planWhatsappConnectionUpsert` (match by Meta phone ID, reuse the org's connection) — never insert a second row for a known phone.
+- **"Connected" is five steps**, from `resolveWhatsappChannelSteps`: number, display name, payment on Meta, templates, first delivery. Screens read them through `GET /api/whatsapp-connections/channel-status` and render `WhatsappChannelSteps`; don't rebuild the checklist per screen.
+- **The store pays Meta directly; we never rebill.** No Meta field proves a payment method, so payment is verified by a charged message: the connection test (`recompracrm_teste_conexao`, UTILITY, on the store's WABA, sent to the user's own WhatsApp, never to the connected number). Delivered → `VERIFICADO`; `131042` on the send call or the status webhook → `PENDENTE`. A user's "já cadastrei" stays "in progress" until a delivery proves it.
+- **Extra Meta phone fields are fetched apart from `?fields=status` and never throw** (`refreshWhatsappPhoneMetaState`): a field Meta refuses would fail the health check and email the store to reconnect a working number. The messaging limit is `whatsapp_business_manager_messaging_limit`; `messaging_limit_tier` is deprecated and read only as fallback.
+- **QR (internal gateway) is not offered in onboarding**; it stays in Settings for organizations that use it.
+- The hub shows `WhatsappChannelNotice` only when the next step is the store's to take (pending or failed), never while Meta reviews, and only to members with `empresa.editar`.
+- Failures, a pending payment and "quero ajuda" are Control events (`lib/control/notices.ts`: `whatsapp_conexao_falhou`, `whatsapp_pagamento_pendente`, `whatsapp_ajuda_pedida`, daily keys); the conversation is Control's.
+
 ## POS Barcode Scanning Conventions
 
 **Location**: `lib/pos/barcode-*.ts`, `lib/hooks/use-barcode-scanner.ts`, `lib/hooks/use-pos-barcode-scan.ts`

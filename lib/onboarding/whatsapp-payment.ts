@@ -1,3 +1,4 @@
+import { notifyControlWhatsappPaymentPending } from "@/lib/control/notices";
 import { db } from "@/services/drizzle";
 import { campaigns, whatsappConnectionPhones } from "@/services/drizzle/schema";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
@@ -46,6 +47,9 @@ export async function observeWhatsappPayment({
 	const organizationId = phone.conexao.organizacaoId;
 	const now = Date.now();
 	const paymentChanged = phone.metadados?.pagamento?.status !== payment;
+	// Só na transição para PENDENTE: o time do Control ajuda a cadastrar o pagamento na Meta antes
+	// que a primeira campanha trave. Chave diária no Control; nunca lança.
+	if (paymentChanged && payment === "PENDENTE") await notifyControlWhatsappPaymentPending({ organizationId, telefoneId: phone.id });
 	if (
 		!shouldReconcileAfterPaymentObservation({
 			previousStatus: phone.metadados?.pagamento?.status,

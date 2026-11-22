@@ -16,6 +16,7 @@ import { OperationsTab } from "./_hub/tabs/operations-tab";
 import { RelationshipTab } from "./_hub/tabs/relationship-tab";
 import { TeamTab } from "./_hub/tabs/team-tab";
 import { useOperationsPending } from "./_hub/use-operations-pending";
+import { WhatsappChannelNotice } from "./_hub/whatsapp-channel-notice";
 
 type DashboardPageProps = {
 	user: TAuthUserSession["user"];
@@ -119,6 +120,9 @@ export function DashboardPage({ user, userOrg, membership, scopeSellersIds }: Da
 					<WhatsappConnectionsPills />
 				</div>
 			</div>
+
+			{/* Quem recebe o aviso de saúde por e-mail é quem pode editar a empresa; o aviso daqui segue a mesma regra. */}
+			<WhatsappChannelNotice enabled={!!membership.permissoes.empresa?.editar} />
 
 			{!hasContent ? (
 				<Empty className="justify-center bg-muted/25 py-12">
