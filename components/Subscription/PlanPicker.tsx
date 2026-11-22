@@ -15,7 +15,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { formatToMoney } from "@/lib/formatting";
 import { generateSubscriptionCheckout, openBillingPortal } from "@/lib/mutations/subscriptions";
 import { useSubscriptionAddons } from "@/lib/queries/subscriptions";
-import { getSubscriptionCycleTotal, isAddonAvailableInCycle, isSubscriptionBasePlanKey } from "@/lib/subscriptions/entitlements";
+import { getSubscriptionCycleTotal, isAddonAvailableInCycle } from "@/lib/subscriptions/entitlements";
 import { cn } from "@/lib/utils";
 import type { TSubscriptionCycleEnum } from "@/schemas/enums";
 import { useMutation } from "@tanstack/react-query";
@@ -53,11 +53,10 @@ export default function PlanPicker({ acao = "ASSINAR", className }: PlanPickerPr
 	const [chosenBasePlan, setChosenBasePlan] = useState<TSubscriptionBasePlanKey | null>(null);
 	const [chosenAddons, setChosenAddons] = useState<TSubscriptionAddonKey[]>([]);
 
-	// Quem está testando o ERP já chega com o CRM + ERP marcado. É só uma sugestão: enquanto a
-	// pessoa não escolher, vale o plano do teste; depois, vale a escolha dela.
+	// Quem já usa o ERP (em teste ou num plano antigo) chega com o CRM + ERP marcado. É só uma
+	// sugestão: enquanto a pessoa não escolher, vale o que ela usa hoje; depois, vale a escolha dela.
 	const { data: currentSubscription } = useSubscriptionAddons();
-	const suggestedBasePlan = isSubscriptionBasePlanKey(currentSubscription?.planoBase) ? currentSubscription.planoBase : "CRM";
-	const basePlan = chosenBasePlan ?? suggestedBasePlan;
+	const basePlan = chosenBasePlan ?? currentSubscription?.planoSugerido ?? "CRM";
 	// Um adicional sem preço no ciclo escolhido (a consultoria, no anual) sai da conta sem ser
 	// desmarcado: voltar para o mensal devolve a escolha.
 	const addons = chosenAddons.filter((addon) => isAddonAvailableInCycle(addon, cycle));

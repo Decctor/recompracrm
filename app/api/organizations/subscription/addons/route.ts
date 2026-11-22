@@ -11,6 +11,7 @@ import type { TAuthUserSession } from "@/lib/authentication/types";
 import {
 	getSubscriptionAddonPriceId,
 	isAddonAvailableInCycle,
+	isSubscriptionBasePlanKey,
 	isModularSubscriptionMetadata,
 	resolveSubscriptionSelectionFromPriceIds,
 	type TSubscriptionSelection,
@@ -46,6 +47,7 @@ async function findOrganizationBillingRow(organizationId: string) {
 			dealId: true,
 			assinaturaPlano: true,
 			assinaturaAdicionais: true,
+			configuracao: true,
 			stripeConta: true,
 			stripeCustomerId: true,
 			stripeSubscriptionId: true,
@@ -119,6 +121,13 @@ async function getSubscriptionAddons({ session }: { session: TAuthUserSession })
 			motivoIndisponivel: unavailableReason,
 			planoBase: planKey,
 			planoNome: plan?.name ?? null,
+			// Plano-base que o checkout deve trazer marcado. Quem testa (ou assinava) um tier antigo
+			// não tem um plano-base gravado: vale o que a organização usa hoje — com ERP, CRM + ERP.
+			planoSugerido: isSubscriptionBasePlanKey(planKey)
+				? planKey
+				: organization.configuracao.recursos.erp.acesso
+					? ("CRM_ERP" as const)
+					: ("CRM" as const),
 			ciclo: cycle,
 			adicionais: SUBSCRIPTION_ADDON_KEYS.map((key) => {
 				const addon = SUBSCRIPTION_ADDONS[key];
