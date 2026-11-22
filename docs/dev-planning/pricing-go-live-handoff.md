@@ -8,7 +8,7 @@ read):
 
 | What | State |
 | --- | --- |
-| Migration `0151_subscription_addons.sql` | **Not applied** in production |
+| Migration `0157_subscription_addons.sql` | **Not applied** in production |
 | CRM + ERP and Hub prices in Stripe | **Not created** (no env var points to them) |
 | `NEXT_PUBLIC_STRIPE_CRM_ERP_*` / `NEXT_PUBLIC_STRIPE_HUB_ATENDIMENTOS_*` | **Missing** in every environment |
 | `NEXT_PUBLIC_STRIPE_CRESCIMENTO_*` (reused by the CRM plan) | Set everywhere |
@@ -65,7 +65,7 @@ timeout).
 `scripts/apply-sql-migration.ts` connects through `SUPABASE_DB_URL`. Point it at the production
 database for this one command:
 ```bash
-SUPABASE_DB_URL='<production connection string>' npx tsx ./scripts/apply-sql-migration.ts drizzle/0151_subscription_addons.sql
+SUPABASE_DB_URL='<production connection string>' npx tsx ./scripts/apply-sql-migration.ts drizzle/0157_subscription_addons.sql
 ```
 
 Check it worked (expects 4 rows):

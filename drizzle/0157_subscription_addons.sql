@@ -11,7 +11,7 @@
 --
 -- Sem backfill: as colunas só passam a ser preenchidas por assinaturas novas.
 --
--- Aplicar com: npx tsx ./scripts/apply-sql-migration.ts drizzle/0151_subscription_addons.sql
+-- Aplicar com: npx tsx ./scripts/apply-sql-migration.ts drizzle/0157_subscription_addons.sql
 -- Idempotente.
 SET LOCAL lock_timeout = '5s';
 

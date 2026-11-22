@@ -351,8 +351,8 @@ Still open:
 
 Nothing below has been done; all of it is outside the repository.
 
-1. **Apply migration `drizzle/0151_subscription_addons.sql`** before the code is deployed:
-   `npx tsx ./scripts/apply-sql-migration.ts drizzle/0151_subscription_addons.sql`. The code
+1. **Apply migration `drizzle/0157_subscription_addons.sql`** before the code is deployed:
+   `npx tsx ./scripts/apply-sql-migration.ts drizzle/0157_subscription_addons.sql`. The code
    selects the new columns, so a deploy without the migration breaks organization queries.
 2. **Create the Stripe prices** in the sales account of each environment:
    `npx tsx ./scripts/create-subscription-prices.ts` shows what it would create; `--apply`
