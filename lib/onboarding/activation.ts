@@ -3,6 +3,7 @@ import type { TOnboardingCampaignStateEnum, TWhatsappPaymentStatusEnum } from "@
 import type { TWhatsappNumberState } from "@/lib/whatsapp/meta-access";
 import type { TDataSourceMode } from "./data-source-mode";
 import type { TErpChannel } from "./erp-channels";
+import { TRIAL_GOAL_TARGET } from "./main-pain";
 
 /**
  * Ativação por segmento, decidida sem I/O. Desenho e dados: docs/onboarding/activation-by-segment.md.
@@ -26,6 +27,8 @@ export type TActivationSalesOrigin = {
 	/** Semanas distintas com venda, contadas em blocos de 7 dias desde o cadastro. */
 	semanas: number;
 	total: number;
+	/** Dias distintos com venda nos últimos 7 dias (o ritmo da semana do ERP). */
+	diasUltimos7: number;
 };
 
 export type TActivationFacts = {
@@ -55,7 +58,11 @@ export type TActivationFacts = {
 	resultados: {
 		primeiraConversao: { em: Date; valor: number; minutos: number | null } | null;
 		primeiroCashback: { em: Date; valor: number } | null;
+		/** Clientes distintos com compra atribuída a uma campanha. */
+		conversoes: number;
 	};
+	/** Período de teste e a meta que a loja aceitou no onboarding ("N clientes de volta"). */
+	teste: { emTeste: boolean; fim: Date | null; metaAceita: boolean };
 };
 
 export type TActivationMilestoneState = "FEITO" | "EM_ANDAMENTO" | "PENDENTE";
@@ -91,12 +98,16 @@ export type TActivation = {
 	visivel: boolean;
 	/** Primeiro resultado dos últimos dias, mostrado uma vez (com ou sem a superfície). */
 	celebracao: TActivationCelebration | null;
+	/** Meta do teste aceita no onboarding, acompanhada depois da ativação enquanto o teste dura. */
+	metaTeste: { atual: number; alvo: number; fim: Date } | null;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const ACTIVATION_DELIVERY_REGRESSION_DAYS = 14;
 export const ACTIVATION_ERP_REGRESSION_DAYS = 7;
 export const ACTIVATION_CELEBRATION_DAYS = 7;
+/** Ritmo da semana no ERP: dias com venda em 7. */
+export const ERP_WEEKLY_DAYS_TARGET = 5;
 const ERP_CHANNELS: TErpChannel[] = ["BALCAO", "CATALOGO", "MESAS"];
 
 const number = (value: number) => value.toLocaleString("pt-BR");
@@ -379,7 +390,10 @@ function erpSteps(facts: TActivationFacts, channel: TErpChannel): TStep[] {
 					"erp-segunda-semana",
 					"Vendas em 2 semanas",
 					sales.primeiraEm
-						? { ...action, descricao: `${plural(sales.total, "venda", "vendas")} até agora. Vender pelo sistema toda semana é o que faz ele valer.` }
+						? {
+								...action,
+								descricao: `Vendas em ${plural(sales.diasUltimos7, "dia", "dias")} dos últimos 7. Meta da semana: vender pelo sistema em ${ERP_WEEKLY_DAYS_TARGET}.`,
+							}
 						: null,
 				),
 	);
@@ -575,5 +589,9 @@ export function resolveActivation(facts: TActivationFacts): TActivation {
 		regressao,
 		visivel: !ativado || regressao !== null,
 		celebracao: resolveActivationCelebration(facts, segmento, canalErp),
+		metaTeste:
+			ativado && facts.teste.emTeste && facts.teste.metaAceita && facts.teste.fim && segmento !== "ERP" && segmento !== "SEM_FONTE"
+				? { atual: facts.resultados.conversoes, alvo: TRIAL_GOAL_TARGET, fim: facts.teste.fim }
+				: null,
 	};
 }

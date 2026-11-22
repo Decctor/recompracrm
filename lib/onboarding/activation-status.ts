@@ -17,7 +17,7 @@ function composeActivationFacts({
 }: {
 	readiness: TOnboardingReadiness;
 	activity: Awaited<ReturnType<typeof loadOrganizationActivity>>;
-	organization: { id: string; dataInsercao: Date; slug: string | null };
+	organization: { id: string; dataInsercao: Date; slug: string | null; periodoTesteFim: Date | null; stripeSubscriptionId: string | null };
 	now: Date;
 }): TActivationFacts {
 	const broken = readiness.fonteDados.integracoes.find((integration) => integration.status !== "CONECTADO");
@@ -56,14 +56,20 @@ function composeActivationFacts({
 		},
 		envios: activity.envios,
 		erp: { produtosUtilizaveis: readiness.erp.produtosUtilizaveis, pendenciasLancamento: readiness.erp.pendenciasLancamento },
-		resultados: { primeiraConversao: activity.primeiraConversao, primeiroCashback: activity.primeiroCashback },
+		resultados: { primeiraConversao: activity.primeiraConversao, primeiroCashback: activity.primeiroCashback, conversoes: activity.conversoes },
+		teste: {
+			// Em teste: com data de fim futura e sem assinatura no Stripe (a mesma regra de `erp.testeDisponivel`).
+			emTeste: !organization.stripeSubscriptionId && !!organization.periodoTesteFim && organization.periodoTesteFim > now,
+			fim: organization.periodoTesteFim,
+			metaAceita: readiness.jornadas.find((journey) => journey.produto === "CRM")?.respostas.metaTesteAceita === true,
+		},
 	};
 }
 
 async function loadActivationContext({ executor, organizationId, now }: { executor: DB | DBTransaction; organizationId: string; now: Date }) {
 	const organization = await executor.query.organizations.findFirst({
 		where: eq(organizations.id, organizationId),
-		columns: { id: true, dataInsercao: true, slug: true },
+		columns: { id: true, dataInsercao: true, slug: true, periodoTesteFim: true, stripeSubscriptionId: true },
 	});
 	if (!organization) throw new Error("Organização não encontrada.");
 	const [readiness, activity] = await Promise.all([

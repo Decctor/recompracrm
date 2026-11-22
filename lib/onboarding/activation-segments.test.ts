@@ -7,12 +7,13 @@ const NOW = new Date("2026-11-22T12:00:00Z");
 const DAY = 24 * 60 * 60 * 1000;
 const daysAgo = (days: number) => new Date(NOW.getTime() - days * DAY);
 
-const none: TActivationSalesOrigin = { primeiraEm: null, ultimaEm: null, semanas: 0, total: 0 };
+const none: TActivationSalesOrigin = { primeiraEm: null, ultimaEm: null, semanas: 0, total: 0, diasUltimos7: 0 };
 const sold = (overrides: Partial<TActivationSalesOrigin>): TActivationSalesOrigin => ({
 	primeiraEm: daysAgo(5),
 	ultimaEm: daysAgo(1),
 	semanas: 1,
 	total: 4,
+	diasUltimos7: 3,
 	...overrides,
 });
 
@@ -28,7 +29,8 @@ function facts(overrides: Partial<TActivationFacts> = {}): TActivationFacts {
 		campanhas: { preparadas: [], manuaisAtivas: 0, templates: [] },
 		envios: { primeiraEntregaEm: null, ultimaEntregaEm: null, entregas14Dias: 0 },
 		erp: { produtosUtilizaveis: 0, pendenciasLancamento: [] },
-		resultados: { primeiraConversao: null, primeiroCashback: null },
+		resultados: { primeiraConversao: null, primeiroCashback: null, conversoes: 0 },
+		teste: { emTeste: true, fim: null, metaAceita: false },
 		...overrides,
 	};
 }
@@ -248,7 +250,7 @@ test("celebração: a primeira compra de quem recebeu campanha vence as outras",
 		facts({
 			canal: { numero: "CONECTADO", pagamento: "VERIFICADO" },
 			envios: { primeiraEntregaEm: daysAgo(5), ultimaEntregaEm: daysAgo(1), entregas14Dias: 48 },
-			resultados: { primeiraConversao: { em: daysAgo(1), valor: 87, minutos: 6 * 24 * 60 }, primeiroCashback: null },
+			resultados: { primeiraConversao: { em: daysAgo(1), valor: 87, minutos: 6 * 24 * 60 }, primeiroCashback: null, conversoes: 1 },
 		}),
 	);
 	assert.equal(activation.celebracao?.titulo, "Um cliente voltou depois da sua campanha");
@@ -285,7 +287,7 @@ test("celebração: primeira venda no balcão cita o cashback ganho, só se houv
 			facts({
 				fonte: { ...facts().fonte, modo: "POI" },
 				vendas: { ...facts().vendas, balcao: sold({ primeiraEm: daysAgo(1) }) },
-				resultados: { primeiraConversao: null, primeiroCashback: cashback },
+				resultados: { primeiraConversao: null, primeiroCashback: cashback, conversoes: 0 },
 			}),
 		);
 	assert.match(counter({ em: daysAgo(1), valor: 5 }).celebracao?.texto ?? "", /R\$\s?5,00 de cashback/);
@@ -297,4 +299,29 @@ test("celebração: primeira venda pelo canal do ERP", () => {
 		erpFacts({ MESAS: sold({ primeiraEm: daysAgo(2), total: 6 }) }, { jornadas: { crm: false, erp: true, erpCanal: "MESAS" } }),
 	);
 	assert.equal(activation.celebracao?.titulo, "Sua primeira comanda fechada");
+});
+
+// ------------------------------------------------------------------ meta do teste e ritmo do ERP
+
+test("meta do teste: aceita, ativada e em teste; conta as compras atribuídas", () => {
+	const activated = (teste: TActivationFacts["teste"]) =>
+		resolveActivation(
+			facts({
+				canal: { numero: "CONECTADO", pagamento: "VERIFICADO" },
+				envios: { primeiraEntregaEm: daysAgo(20), ultimaEntregaEm: daysAgo(1), entregas14Dias: 30 },
+				resultados: { primeiraConversao: { em: daysAgo(15), valor: 50, minutos: 60 }, primeiroCashback: null, conversoes: 3 },
+				teste,
+			}),
+		);
+	const fim = new Date(NOW.getTime() + 4 * DAY);
+	assert.deepEqual(activated({ emTeste: true, fim, metaAceita: true }).metaTeste, { atual: 3, alvo: 5, fim });
+	assert.equal(activated({ emTeste: true, fim, metaAceita: false }).metaTeste, null);
+	assert.equal(activated({ emTeste: false, fim, metaAceita: true }).metaTeste, null);
+	// Antes da ativação, a escada é a meta.
+	assert.equal(resolveActivation(facts({ teste: { emTeste: true, fim, metaAceita: true } })).metaTeste, null);
+});
+
+test("ERP na primeira semana: ritmo da semana com o número real de dias", () => {
+	const activation = resolveActivation(erpFacts({ BALCAO: sold({ semanas: 1, diasUltimos7: 3 }) }));
+	assert.equal(activation.proximaAcao?.descricao, "Vendas em 3 dias dos últimos 7. Meta da semana: vender pelo sistema em 5.");
 });

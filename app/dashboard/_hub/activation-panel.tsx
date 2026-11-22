@@ -37,8 +37,46 @@ export function ActivationSlot({ enabled }: { enabled: boolean }) {
 					</Panel.Body>
 				</Panel>
 			) : null}
+			{data.metaTeste ? <TrialGoalPanel goal={data.metaTeste} /> : null}
 			<WhatsappChannelNotice enabled={enabled} />
 		</>
+	);
+}
+
+/**
+ * A meta que a loja aceitou no onboarding, acompanhada depois da ativação enquanto o teste dura:
+ * compromisso pequeno e fechável, com o progresso à vista.
+ */
+function TrialGoalPanel({ goal }: { goal: NonNullable<TActivation["metaTeste"]> }) {
+	const reached = goal.atual >= goal.alvo;
+	const percent = Math.min(100, Math.round((goal.atual / goal.alvo) * 100));
+	// A data chega como texto (JSON); nada de fuso local deslocando o dia.
+	const until = new Date(goal.fim).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" });
+	return (
+		<Panel>
+			<Panel.Header title="Meta do teste" hint={`até ${until}`} />
+			<Panel.Body>
+				<p className="text-sm">
+					<span className="font-black text-2xl tabular-nums">{goal.atual.toLocaleString("pt-BR")}</span>
+					<span className="text-muted-foreground"> de {goal.alvo} clientes de volta depois de uma campanha</span>
+				</p>
+				<div
+					className="h-2 w-full overflow-hidden rounded-full bg-muted"
+					role="meter"
+					aria-label="Meta do teste"
+					aria-valuemin={0}
+					aria-valuemax={goal.alvo}
+					aria-valuenow={Math.min(goal.atual, goal.alvo)}
+				>
+					<div className={cn("h-full rounded-full", reached ? "bg-success" : "bg-primary")} style={{ width: `${percent}%` }} />
+				</div>
+				<p className="text-sm text-muted-foreground">
+					{reached
+						? "Meta batida: as campanhas estão trazendo clientes de volta."
+						: `${goal.alvo - goal.atual === 1 ? "Falta 1 cliente" : `Faltam ${goal.alvo - goal.atual} clientes`}. Cada compra de quem recebeu uma campanha conta.`}
+				</p>
+			</Panel.Body>
+		</Panel>
 	);
 }
 

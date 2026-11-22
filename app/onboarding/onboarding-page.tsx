@@ -257,6 +257,7 @@ export function OnboardingPage({
 					logoUrl,
 				},
 			});
+			if (activeProduct === "CRM") await persistProgress({ respostas: intentAnswers() });
 			await invalidateReadiness();
 			return true;
 		}
@@ -275,6 +276,15 @@ export function OnboardingPage({
 
 		const created = await createOnboardingJourney({ produto: activeProduct, origemIntencao: intent?.origem ?? "PERGUNTA" });
 		setJourney(created.data.journey);
+		if (activeProduct === "CRM" && state.dorPrincipal) {
+			// A jornada acabou de nascer: `persistProgress` ainda vê a organização antiga nesta renderização.
+			try {
+				const saved = await updateOnboardingProgress({ produto: "CRM", respostas: intentAnswers() });
+				setJourney(saved.data.journey);
+			} catch (error) {
+				console.error("[ONBOARDING] Falha ao salvar a intenção:", error);
+			}
+		}
 		if (activeProduct === "ERP") {
 			await updateOnboardingProgress({ produto: "ERP", etapaAtual: "canal" });
 			window.location.href = "/onboarding?produto=ERP";
@@ -283,6 +293,11 @@ export function OnboardingPage({
 		applyCashbackPresetFromNiche();
 		await refetchReadiness();
 		return true;
+	}
+
+	/** Intenção declarada: só a meta acompanha a resposta; sem resposta, nada a aceitar. */
+	function intentAnswers() {
+		return { dorPrincipal: state.dorPrincipal, metaTesteAceita: !!state.dorPrincipal && state.metaTesteAceita };
 	}
 
 	async function handleDataSourceStep() {
@@ -493,6 +508,7 @@ export function OnboardingPage({
 						updateOrganizationLogoHolder={updateOrganizationLogoHolder}
 						updateOnboarding={updateOnboarding}
 						isEditing={hasOrganization}
+						showIntent={activeProduct === "CRM"}
 					/>
 				);
 			case "fonte-dados":
@@ -509,6 +525,7 @@ export function OnboardingPage({
 						enableSendingWhenReady={state.enableSendingWhenReady}
 						onToggleEnableSending={(value) => updateOnboarding({ enableSendingWhenReady: value })}
 						readiness={readiness ?? null}
+						dorPrincipal={state.dorPrincipal}
 					/>
 				);
 			case "whatsapp":

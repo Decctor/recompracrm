@@ -1285,6 +1285,13 @@ export const OnboardingIntentOriginEnum = z.enum(["LINK", "PARCEIRO", "DEAL", "P
 	required_error: "Origem da intenção do onboarding não informada.",
 	invalid_type_error: "Tipo não válido para a origem da intenção do onboarding.",
 });
+
+/** O que mais incomoda a loja, declarado no onboarding do CRM; escolhe a campanha recomendada. */
+export const OnboardingMainPainEnum = z.enum(["CLIENTES_NAO_VOLTAM", "CLIENTES_PARARAM", "POUCA_FREQUENCIA"], {
+	required_error: "Principal incômodo não informado.",
+	invalid_type_error: "Tipo não válido para o principal incômodo.",
+});
+export type TOnboardingMainPainEnum = z.infer<typeof OnboardingMainPainEnum>;
 export type TOnboardingIntentOriginEnum = z.infer<typeof OnboardingIntentOriginEnum>;
 
 // Estado derivado de uma campanha semeada por preset. PREPARADA = existe e não envia; PRONTA =

@@ -3,7 +3,9 @@
 import { Switch } from "@/components/ui/switch";
 import { getAvailableCampaignPresets, type TOnboardingCampaignPresetKey } from "@/config/onboarding-campaign-presets";
 import { getOnboardingTemplatePreview } from "@/config/onboarding-message-templates";
+import { recommendCampaignPreset } from "@/lib/onboarding/main-pain";
 import type { TOnboardingReadiness } from "@/lib/onboarding/readiness";
+import type { TOnboardingMainPainEnum } from "@/schemas/enums";
 import { Clock } from "lucide-react";
 import { ChoiceList } from "../shared/ChoiceList";
 import { ReadinessPill } from "../shared/ReadinessPill";
@@ -15,6 +17,8 @@ type CampaignsStageProps = {
 	enableSendingWhenReady: boolean;
 	onToggleEnableSending: (value: boolean) => void;
 	readiness: TOnboardingReadiness | null;
+	/** O incômodo declarado na etapa da empresa: a campanha que responde a ele vem primeiro. */
+	dorPrincipal?: TOnboardingMainPainEnum | null;
 };
 
 const STATE_LABEL = { PREPARADA: "Preparada", PRONTA: "Pronta", HABILITADA: "Aguardando dependências", ATIVA: "Enviando" } as const;
@@ -27,9 +31,11 @@ export function CampaignsStage({
 	enableSendingWhenReady,
 	onToggleEnableSending,
 	readiness,
+	dorPrincipal = null,
 }: CampaignsStageProps) {
 	const variant = cashbackAtivo ? "COM_CASHBACK" : "SEM_CASHBACK";
-	const presets = getAvailableCampaignPresets(cashbackAtivo);
+	const recommended = recommendCampaignPreset({ dor: dorPrincipal, cashbackAtivo });
+	const presets = getAvailableCampaignPresets(cashbackAtivo).sort((a, b) => Number(b.key === recommended) - Number(a.key === recommended));
 	const existingByKey = new Map((readiness?.campanhas ?? []).map((campaign) => [campaign.chave, campaign]));
 
 	return (
@@ -51,6 +57,7 @@ export function CampaignsStage({
 						value: preset.key,
 						titulo: preset.titulo,
 						descricao: preset.descricao,
+						badge: preset.key === recommended ? "Para o que você contou" : null,
 						extra: (
 							<span className="flex flex-col gap-2 pt-1">
 								<span className="flex flex-wrap items-center gap-2">

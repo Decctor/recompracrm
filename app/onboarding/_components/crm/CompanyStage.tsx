@@ -12,6 +12,8 @@ import { BadgeCheck, ImagePlus } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
+import { MAIN_PAIN_OPTIONS, TRIAL_GOAL_TARGET } from "@/lib/onboarding/main-pain";
+import type { TOnboardingMainPainEnum } from "@/schemas/enums";
 import { ChoiceList } from "../shared/ChoiceList";
 
 type CompanyStageProps = {
@@ -21,13 +23,22 @@ type CompanyStageProps = {
 	updateOnboarding: TUseOrganizationOnboardingState["updateOnboarding"];
 	/** Organização já existe: a etapa vira edição e os termos já foram aceitos. */
 	isEditing: boolean;
+	/** Pergunta de intenção e meta do teste: só na jornada do CRM. */
+	showIntent: boolean;
 };
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
 	return <p className="text-[11px] font-extrabold tracking-[0.08em] text-muted-foreground uppercase">{children}</p>;
 }
 
-export function CompanyStage({ state, updateOrganization, updateOrganizationLogoHolder, updateOnboarding, isEditing }: CompanyStageProps) {
+export function CompanyStage({
+	state,
+	updateOrganization,
+	updateOrganizationLogoHolder,
+	updateOnboarding,
+	isEditing,
+	showIntent,
+}: CompanyStageProps) {
 	// Licença de deal (venda B2B multi-licença): org ativada sem trial e sem checkout.
 	const { data: dealLicense } = useAvailableDealLicense();
 	// O endereço acompanha o nome até o usuário mexer nele.
@@ -147,6 +158,37 @@ export function CompanyStage({ state, updateOrganization, updateOrganizationLogo
 					options={OrganizationNicheOptions.map((niche) => ({ value: niche.value, titulo: niche.label, icon: niche.renderIcon("size-4") }))}
 				/>
 			</section>
+
+			{showIntent ? (
+				<section className="flex flex-col gap-3">
+					<div className="flex flex-col gap-1">
+						<SectionLabel>O que mais te incomoda hoje?</SectionLabel>
+						<p className="text-sm text-muted-foreground">Opcional. A resposta escolhe a campanha que sugerimos primeiro.</p>
+					</div>
+					<ChoiceList<TOnboardingMainPainEnum>
+						label="O que mais te incomoda hoje"
+						value={state.dorPrincipal}
+						onChange={(value) => updateOnboarding({ dorPrincipal: value })}
+						options={MAIN_PAIN_OPTIONS.map((option) => ({ value: option.value, titulo: option.titulo, descricao: option.descricao }))}
+					/>
+					{state.dorPrincipal ? (
+						<div className="flex items-start gap-2 rounded-xl border border-border p-4">
+							<Checkbox
+								id="trial-goal"
+								checked={state.metaTesteAceita}
+								onCheckedChange={(checked) => updateOnboarding({ metaTesteAceita: checked === true })}
+								className="mt-0.5"
+							/>
+							<label htmlFor="trial-goal" className="flex cursor-pointer flex-col gap-0.5">
+								<span className="text-sm font-bold">Meta do teste: {TRIAL_GOAL_TARGET} clientes de volta</span>
+								<span className="text-sm text-muted-foreground">
+									Clientes que voltam a comprar depois de receber uma campanha, até o fim do teste. Acompanhe no painel.
+								</span>
+							</label>
+						</div>
+					) : null}
+				</section>
+			) : null}
 
 			{!isEditing ? (
 				<div className="flex items-start gap-2">

@@ -121,6 +121,7 @@ export default function Preview() {
 						updateOrganizationLogoHolder={form.updateOrganizationLogoHolder}
 						updateOnboarding={form.updateOnboarding}
 						isEditing
+						showIntent={produto === "CRM"}
 					/>
 				);
 			case "whatsapp":
@@ -137,6 +138,7 @@ export default function Preview() {
 						enableSendingWhenReady={false}
 						onToggleEnableSending={noop}
 						readiness={null}
+						dorPrincipal={form.state.dorPrincipal}
 					/>
 				);
 			case "fonte-dados":

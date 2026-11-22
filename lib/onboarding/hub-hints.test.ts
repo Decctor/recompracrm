@@ -23,6 +23,7 @@ function activation(segmento: TActivation["segmento"], marcos: TActivationMilest
 		regressao: null,
 		visivel: !ativado,
 		celebracao: null,
+		metaTeste: null,
 	};
 }
 

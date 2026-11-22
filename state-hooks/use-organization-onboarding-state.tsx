@@ -1,6 +1,8 @@
 import { getOrganizationNicheByValue } from "@/config/onboarding";
 import { OnboardingCampaignPresets, type TOnboardingCampaignPresetKey } from "@/config/onboarding-campaign-presets";
 import type { TOnboardingReadiness } from "@/lib/onboarding/readiness";
+import { OnboardingMainPainEnum } from "@/schemas/enums";
+import type { TOnboardingAnswers } from "@/schemas/onboarding";
 import { OrganizationSchema } from "@/schemas/organizations";
 import { useCallback, useMemo, useState } from "react";
 import { z } from "zod";
@@ -42,6 +44,9 @@ const OrganizationOnboardingStateSchema = z.object({
 	dataSourceMode: z.enum(["INTEGRACAO", "POI", "DEPOIS"]).nullable(),
 	indicadorCodigo: z.string().optional().nullable(),
 	termsAccepted: z.boolean(),
+	// Declaração de intenção (opcional) e a meta do teste que ela oferece.
+	dorPrincipal: OnboardingMainPainEnum.nullable(),
+	metaTesteAceita: z.boolean(),
 });
 export type TOrganizationOnboardingState = z.infer<typeof OrganizationOnboardingStateSchema>;
 
@@ -98,7 +103,7 @@ type TUseOrganizationOnboardingStateProps = {
 	existingOrganization?: TExistingOrganization | null;
 	readiness?: TOnboardingReadiness | null;
 	/** Respostas já gravadas na jornada (retomada). */
-	answers?: { campanhasSelecionadas: string[]; campanhasComEnvioHabilitado: string[]; fonteDadosModo: "INTEGRACAO" | "POI" | "DEPOIS" | null } | null;
+	answers?: Pick<TOnboardingAnswers, "campanhasSelecionadas" | "campanhasComEnvioHabilitado" | "fonteDadosModo" | "dorPrincipal" | "metaTesteAceita"> | null;
 };
 
 export function useOrganizationOnboardingState({ existingOrganization, readiness, answers }: TUseOrganizationOnboardingStateProps) {
@@ -159,6 +164,9 @@ export function useOrganizationOnboardingState({ existingOrganization, readiness
 			dataSourceMode: answers?.fonteDadosModo ?? null,
 			indicadorCodigo: null,
 			termsAccepted: false,
+			dorPrincipal: answers?.dorPrincipal ?? null,
+			// Meta do teste ligada por padrão quando há resposta: aceitar é o caminho de menor esforço.
+			metaTesteAceita: answers ? answers.metaTesteAceita : true,
 		};
 	}, [existingOrganization, readiness, answers]);
 

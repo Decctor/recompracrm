@@ -1,7 +1,7 @@
 import { getValidSaleConditions } from "@/lib/sales/valid-sale";
 import type { DB, DBTransaction } from "@/services/drizzle";
 import { campaignConversions, cashbackProgramTransactions, clients, interactions, sales } from "@/services/drizzle/schema";
-import { and, asc, count, eq, gte, inArray, isNotNull, max, min, sql } from "drizzle-orm";
+import { and, asc, count, countDistinct, eq, gte, inArray, isNotNull, max, min, sql } from "drizzle-orm";
 import type { TActivationSalesOrigin } from "./activation";
 import type { TErpChannel } from "./erp-channels";
 
@@ -29,10 +29,12 @@ export type TOrganizationActivity = {
 	primeiraConversao: { em: Date; valor: number; minutos: number | null } | null;
 	/** Primeiro cashback creditado desde o cadastro (saldo migrado de antes não conta). */
 	primeiroCashback: { em: Date; valor: number } | null;
+	/** Clientes distintos com compra atribuída a uma campanha. */
+	conversoes: number;
 	clientesSegmentados: number;
 };
 
-const EMPTY_ORIGIN: TActivationSalesOrigin = { primeiraEm: null, ultimaEm: null, semanas: 0, total: 0 };
+const EMPTY_ORIGIN: TActivationSalesOrigin = { primeiraEm: null, ultimaEm: null, semanas: 0, total: 0, diasUltimos7: 0 };
 
 const toDate = (value: Date | string | null) => (value === null ? null : value instanceof Date ? value : new Date(value));
 
@@ -62,58 +64,71 @@ export async function loadOrganizationActivity({
 		inArray(interactions.statusEnvio, [...DELIVERED_CAMPAIGN_STATUSES]),
 	);
 
-	const [salesRows, [deliveries], [recentDeliveries], [firstRedemption], [firstConversion], [segmented], [firstCashback]] = await Promise.all([
-		executor
-			.select({
-				origem: origin,
-				primeira: min(sales.dataVenda),
-				ultima: max(sales.dataVenda),
-				semanas: sql<number>`count(distinct floor(extract(epoch from (${sales.dataVenda} - ${criadaEm.toISOString()}::timestamptz)) / ${WEEK_SECONDS}))::integer`,
-				total: count(),
-			})
-			.from(sales)
-			.where(and(...getValidSaleConditions({ orgId: organizationId }), gte(sales.dataVenda, criadaEm)))
-			.groupBy(origin),
-		executor
-			.select({ primeira: min(interactions.dataInsercao), ultima: max(interactions.dataInsercao) })
-			.from(interactions)
-			.where(deliveredCampaignMessages),
-		executor
-			.select({ total: count() })
-			.from(interactions)
-			.where(and(deliveredCampaignMessages, gte(interactions.dataInsercao, new Date(now.getTime() - 14 * DAY_MS)))),
-		executor
-			.select({ at: min(cashbackProgramTransactions.dataInsercao) })
-			.from(cashbackProgramTransactions)
-			.where(and(eq(cashbackProgramTransactions.organizacaoId, organizationId), eq(cashbackProgramTransactions.tipo, "RESGATE"))),
-		executor
-			.select({ at: campaignConversions.dataConversao, valor: campaignConversions.vendaValor, minutos: campaignConversions.tempoParaConversaoMinutos })
-			.from(campaignConversions)
-			.where(eq(campaignConversions.organizacaoId, organizationId))
-			.orderBy(asc(campaignConversions.dataConversao))
-			.limit(1),
-		executor
-			.select({ total: count() })
-			.from(clients)
-			.where(and(eq(clients.organizacaoId, organizationId), isNotNull(clients.analiseRFMTitulo))),
-		executor
-			.select({ at: cashbackProgramTransactions.dataInsercao, valor: cashbackProgramTransactions.valor })
-			.from(cashbackProgramTransactions)
-			.where(
-				and(
-					eq(cashbackProgramTransactions.organizacaoId, organizationId),
-					eq(cashbackProgramTransactions.tipo, "ACÚMULO"),
-					gte(cashbackProgramTransactions.dataInsercao, criadaEm),
-				),
-			)
-			.orderBy(asc(cashbackProgramTransactions.dataInsercao))
-			.limit(1),
-	]);
+	const [salesRows, [deliveries], [recentDeliveries], [firstRedemption], [firstConversion], [segmented], [firstCashback], [conversions]] =
+		await Promise.all([
+			executor
+				.select({
+					origem: origin,
+					primeira: min(sales.dataVenda),
+					ultima: max(sales.dataVenda),
+					semanas: sql<number>`count(distinct floor(extract(epoch from (${sales.dataVenda} - ${criadaEm.toISOString()}::timestamptz)) / ${WEEK_SECONDS}))::integer`,
+					total: count(),
+					diasUltimos7: sql<number>`count(distinct date_trunc('day', ${sales.dataVenda})) filter (where ${sales.dataVenda} >= ${new Date(now.getTime() - 7 * DAY_MS).toISOString()}::timestamptz)::integer`,
+				})
+				.from(sales)
+				.where(and(...getValidSaleConditions({ orgId: organizationId }), gte(sales.dataVenda, criadaEm)))
+				.groupBy(origin),
+			executor
+				.select({ primeira: min(interactions.dataInsercao), ultima: max(interactions.dataInsercao) })
+				.from(interactions)
+				.where(deliveredCampaignMessages),
+			executor
+				.select({ total: count() })
+				.from(interactions)
+				.where(and(deliveredCampaignMessages, gte(interactions.dataInsercao, new Date(now.getTime() - 14 * DAY_MS)))),
+			executor
+				.select({ at: min(cashbackProgramTransactions.dataInsercao) })
+				.from(cashbackProgramTransactions)
+				.where(and(eq(cashbackProgramTransactions.organizacaoId, organizationId), eq(cashbackProgramTransactions.tipo, "RESGATE"))),
+			executor
+				.select({ at: campaignConversions.dataConversao, valor: campaignConversions.vendaValor, minutos: campaignConversions.tempoParaConversaoMinutos })
+				.from(campaignConversions)
+				.where(eq(campaignConversions.organizacaoId, organizationId))
+				.orderBy(asc(campaignConversions.dataConversao))
+				.limit(1),
+			executor
+				.select({ total: count() })
+				.from(clients)
+				.where(and(eq(clients.organizacaoId, organizationId), isNotNull(clients.analiseRFMTitulo))),
+			executor
+				.select({ at: cashbackProgramTransactions.dataInsercao, valor: cashbackProgramTransactions.valor })
+				.from(cashbackProgramTransactions)
+				.where(
+					and(
+						eq(cashbackProgramTransactions.organizacaoId, organizationId),
+						eq(cashbackProgramTransactions.tipo, "ACÚMULO"),
+						gte(cashbackProgramTransactions.dataInsercao, criadaEm),
+					),
+				)
+				.orderBy(asc(cashbackProgramTransactions.dataInsercao))
+				.limit(1),
+			// Clientes distintos: a meta fala em "clientes de volta", e um cliente pode converter mais de uma vez.
+			executor
+				.select({ total: countDistinct(campaignConversions.clienteId) })
+				.from(campaignConversions)
+				.where(eq(campaignConversions.organizacaoId, organizationId)),
+		]);
 
 	const byOrigin = new Map(
 		salesRows.map((row) => [
 			row.origem,
-			{ primeiraEm: toDate(row.primeira), ultimaEm: toDate(row.ultima), semanas: Number(row.semanas) || 0, total: Number(row.total) || 0 },
+			{
+				primeiraEm: toDate(row.primeira),
+				ultimaEm: toDate(row.ultima),
+				semanas: Number(row.semanas) || 0,
+				total: Number(row.total) || 0,
+				diasUltimos7: Number(row.diasUltimos7) || 0,
+			},
 		]),
 	);
 	const originOf = (key: TSalesOriginKey) => byOrigin.get(key) ?? EMPTY_ORIGIN;
@@ -138,6 +153,7 @@ export async function loadOrganizationActivity({
 			? { em: toDate(firstConversion.at) as Date, valor: Number(firstConversion.valor) || 0, minutos: firstConversion.minutos ?? null }
 			: null,
 		primeiroCashback: firstCashback?.at ? { em: toDate(firstCashback.at) as Date, valor: Number(firstCashback.valor) || 0 } : null,
+		conversoes: conversions?.total ?? 0,
 		clientesSegmentados: segmented?.total ?? 0,
 	};
 }
