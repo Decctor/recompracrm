@@ -206,6 +206,8 @@ export default function Preview() {
 				canGoBack={index > 0}
 				onBack={() => setStage(definition.etapas[index - 1].id)}
 				deferLabel={current.adiarRotulo}
+				// Como no fluxo real: sem número conectado, a ação principal é a de dentro da etapa.
+				continueLabel={stage === "whatsapp" ? null : undefined}
 				onDefer={() => setStage(definition.etapas[Math.min(index + 1, definition.etapas.length - 1)].id)}
 				onContinue={() => setStage(definition.etapas[Math.min(index + 1, definition.etapas.length - 1)].id)}
 				isLoading={false}

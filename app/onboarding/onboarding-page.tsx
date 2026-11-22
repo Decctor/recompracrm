@@ -608,8 +608,10 @@ export function OnboardingPage({
 					continueLabel={
 						isPickingJourney
 							? "Começar"
-							: navigation.stage === "whatsapp" && readiness?.whatsapp.numero !== "CONECTADO"
-								? "Continuar sem conectar"
+							: // Sem número, a ação principal é "Conectar com a Meta", dentro da etapa. O rodapé não oferece um
+								// segundo caminho principal: pular fica em "Conectar depois", como ação secundária.
+								navigation.stage === "whatsapp" && readiness?.whatsapp.numero !== "CONECTADO"
+								? null
 								: "Continuar"
 					}
 					onContinue={() => {
