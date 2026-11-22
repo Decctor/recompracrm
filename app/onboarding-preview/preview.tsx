@@ -121,7 +121,7 @@ export default function Preview() {
 						updateOrganizationLogoHolder={form.updateOrganizationLogoHolder}
 						updateOnboarding={form.updateOnboarding}
 						isEditing
-						showIntent={produto === "CRM"}
+						produto={produto}
 					/>
 				);
 			case "whatsapp":

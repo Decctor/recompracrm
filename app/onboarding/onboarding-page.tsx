@@ -508,7 +508,7 @@ export function OnboardingPage({
 						updateOrganizationLogoHolder={updateOrganizationLogoHolder}
 						updateOnboarding={updateOnboarding}
 						isEditing={hasOrganization}
-						showIntent={activeProduct === "CRM"}
+						produto={activeProduct}
 					/>
 				);
 			case "fonte-dados":

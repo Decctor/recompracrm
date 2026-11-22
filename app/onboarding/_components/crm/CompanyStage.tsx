@@ -23,22 +23,22 @@ type CompanyStageProps = {
 	updateOnboarding: TUseOrganizationOnboardingState["updateOnboarding"];
 	/** Organização já existe: a etapa vira edição e os termos já foram aceitos. */
 	isEditing: boolean;
-	/** Pergunta de intenção e meta do teste: só na jornada do CRM. */
-	showIntent: boolean;
+	/**
+	 * Jornada da etapa. No CRM ficam só os dados que mudam o percurso ou o cadastro exige (nome, CNPJ,
+	 * telefone, segmento) mais a pergunta de intenção; logo, endereço da loja online e e-mail ficam
+	 * para quando forem usados (o servidor gera o endereço a partir do nome). No ERP, a loja digital
+	 * usa o endereço e a logo, então eles continuam aqui.
+	 */
+	produto: "CRM" | "ERP";
 };
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
 	return <p className="text-[11px] font-extrabold tracking-[0.08em] text-muted-foreground uppercase">{children}</p>;
 }
 
-export function CompanyStage({
-	state,
-	updateOrganization,
-	updateOrganizationLogoHolder,
-	updateOnboarding,
-	isEditing,
-	showIntent,
-}: CompanyStageProps) {
+export function CompanyStage({ state, updateOrganization, updateOrganizationLogoHolder, updateOnboarding, isEditing, produto }: CompanyStageProps) {
+	const isCrm = produto === "CRM";
+	const showIntent = isCrm;
 	// Licença de deal (venda B2B multi-licença): org ativada sem trial e sem checkout.
 	const { data: dealLicense } = useAvailableDealLicense();
 	// O endereço acompanha o nome até o usuário mexer nele.
@@ -77,29 +77,31 @@ export function CompanyStage({
 			<section className="flex flex-col gap-4">
 				<SectionLabel>Identificação</SectionLabel>
 				<div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-					<label
-						htmlFor="onboarding-logo"
-						className="relative flex size-28 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-border bg-muted/40 text-muted-foreground transition-colors hover:bg-muted/70"
-					>
-						{previewUrl ? (
-							<Image alt="Logo da organização" fill className="object-cover" src={previewUrl} />
-						) : (
-							<span className="flex flex-col items-center gap-1 text-center">
-								<ImagePlus className="size-5" />
-								<span className="text-[11px] font-semibold">Logo</span>
-							</span>
-						)}
-						<input
-							id="onboarding-logo"
-							type="file"
-							accept=".png,.jpeg,.jpg"
-							className="absolute inset-0 cursor-pointer opacity-0"
-							onChange={(event) => {
-								const file = event.target.files?.[0] ?? null;
-								updateOrganizationLogoHolder({ file, previewUrl: file ? URL.createObjectURL(file) : null });
-							}}
-						/>
-					</label>
+					{isCrm ? null : (
+						<label
+							htmlFor="onboarding-logo"
+							className="relative flex size-28 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-border bg-muted/40 text-muted-foreground transition-colors hover:bg-muted/70"
+						>
+							{previewUrl ? (
+								<Image alt="Logo da organização" fill className="object-cover" src={previewUrl} />
+							) : (
+								<span className="flex flex-col items-center gap-1 text-center">
+									<ImagePlus className="size-5" />
+									<span className="text-[11px] font-semibold">Logo</span>
+								</span>
+							)}
+							<input
+								id="onboarding-logo"
+								type="file"
+								accept=".png,.jpeg,.jpg"
+								className="absolute inset-0 cursor-pointer opacity-0"
+								onChange={(event) => {
+									const file = event.target.files?.[0] ?? null;
+									updateOrganizationLogoHolder({ file, previewUrl: file ? URL.createObjectURL(file) : null });
+								}}
+							/>
+						</label>
+					)}
 					<div className="flex w-full flex-col gap-3">
 						<TextInput
 							value={state.organization.nome}
@@ -108,16 +110,18 @@ export function CompanyStage({
 							handleChange={handleNomeChange}
 							required
 						/>
-						<div className="flex flex-col gap-1">
-							<TextInput
-								value={state.organization.slug}
-								label="Endereço da loja online"
-								placeholder="endereco-da-sua-loja"
-								handleChange={handleSlugChange}
-								handleOnBlur={() => updateOrganization({ slug: slugifyOrganizationName(state.organization.slug) })}
-							/>
-							<OrganizationSlugFeedback slug={state.organization.slug} onApplySuggestion={(suggestion) => updateOrganization({ slug: suggestion })} />
-						</div>
+						{isCrm ? null : (
+							<div className="flex flex-col gap-1">
+								<TextInput
+									value={state.organization.slug}
+									label="Endereço da loja online"
+									placeholder="endereco-da-sua-loja"
+									handleChange={handleSlugChange}
+									handleOnBlur={() => updateOrganization({ slug: slugifyOrganizationName(state.organization.slug) })}
+								/>
+								<OrganizationSlugFeedback slug={state.organization.slug} onApplySuggestion={(suggestion) => updateOrganization({ slug: suggestion })} />
+							</div>
+						)}
 						<TextInput
 							value={state.organization.cnpj || ""}
 							label="CNPJ"
@@ -125,13 +129,15 @@ export function CompanyStage({
 							handleChange={(value) => updateOrganization({ cnpj: formatToCPForCNPJ(value) })}
 							required
 						/>
-						<div className="grid gap-3 sm:grid-cols-2">
-							<TextInput
-								value={state.organization.email || ""}
-								label="E-mail corporativo"
-								placeholder="contato@sualoja.com.br"
-								handleChange={(value) => updateOrganization({ email: value })}
-							/>
+						<div className={isCrm ? "grid gap-3" : "grid gap-3 sm:grid-cols-2"}>
+							{isCrm ? null : (
+								<TextInput
+									value={state.organization.email || ""}
+									label="E-mail corporativo"
+									placeholder="contato@sualoja.com.br"
+									handleChange={(value) => updateOrganization({ email: value })}
+								/>
+							)}
 							<TextInput
 								value={state.organization.telefone || ""}
 								label="Telefone ou WhatsApp"
