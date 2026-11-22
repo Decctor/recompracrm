@@ -1,11 +1,12 @@
 import {
-	AppSubscriptionPlans,
 	DEFAULT_ORGANIZATION_CONFIGURATION_DEFAULTS,
 	DEFAULT_ORGANIZATION_CONFIGURATION_PREFERENCES,
 	DEFAULT_ORGANIZATION_CONFIGURATION_RESOURCES,
 	DEFAULT_ORGANIZATION_OWNER_PERMISSIONS,
 	DEFAULT_ORGANIZATION_RFM_CONFIG,
+	FREE_TRIAL_ADDONS,
 	FREE_TRIAL_DURATION_DAYS,
+	type TSubscriptionBasePlanKey,
 } from "@/config";
 import {
 	buildOrganizationAccountingDefaults,
@@ -19,6 +20,7 @@ import { captureServerEvent } from "@/lib/analytics/posthog-server";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { getDealWithAvailableLicense, linkOrganizationToDeal } from "@/lib/deals";
+import { resolveSubscriptionEntitlements } from "@/lib/subscriptions/entitlements";
 import { getDefaultFinancialAccountConfiguration } from "@/lib/finances/financial-account-configuration";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import {
@@ -38,10 +40,9 @@ import {
 	sellers,
 	utils,
 } from "@/services/drizzle/schema";
-import { getStripeClient, getStripeSalesAccount } from "@/services/stripe";
 import { eq } from "drizzle-orm";
 import createHttpError from "http-errors";
-import { generateOrganizationPoiQrCodes, getAppBaseUrl } from "@/lib/organizations/poi-qr-codes";
+import { generateOrganizationPoiQrCodes } from "@/lib/organizations/poi-qr-codes";
 import { isValidOrganizationSlug, ORGANIZATION_SLUG_INVALID_MESSAGE } from "@/lib/organizations/slug";
 import { getUniqueOrganizationSlug, isOrganizationSlugTaken } from "@/lib/organizations/slug-server";
 import { type NextRequest, NextResponse } from "next/server";
@@ -62,10 +63,9 @@ export const CreateOrganizationInputSchema = z.object({
 		// O endereço da loja é opcional no cadastro: sem um válido, o servidor gera a partir do nome.
 		slug: OrganizationSlugCreateInputSchema,
 	}),
-	subscription: z
-		.enum(["ESSENCIAL-MONTHLY", "ESSENCIAL-YEARLY", "CRESCIMENTO-MONTHLY", "CRESCIMENTO-YEARLY", "ESCALA-MONTHLY", "ESCALA-YEARLY", "FREE-TRIAL", "FREE-TRIAL-ERP"])
-		.optional()
-		.nullable(),
+	// Toda organização nasce em período de teste; a assinatura paga é contratada depois, pelo
+	// checkout (app/api/integrations/stripe/generate-checkout). O valor só escolhe o plano-base do teste.
+	subscription: z.enum(["FREE-TRIAL", "FREE-TRIAL-ERP"]).optional().nullable(),
 	indicadorCodigo: z.string({ invalid_type_error: "Tipo invalido para o codigo de indicacao." }).optional().nullable(),
 });
 
@@ -379,133 +379,48 @@ async function createOrganization({
 		};
 	}
 
-	if (!subscription || subscription === "FREE-TRIAL" || subscription === "FREE-TRIAL-ERP") {
-		console.log("[INFO] [CREATE_ORGANIZATION] Free trial selected. Defining free trial period.");
-		// FREE-TRIAL logic
-		const periodoTesteInicio = new Date();
-		const periodoTesteFim = new Date();
-		periodoTesteFim.setDate(periodoTesteFim.getDate() + FREE_TRIAL_DURATION_DAYS);
+	console.log("[INFO] [CREATE_ORGANIZATION] Free trial selected. Defining free trial period.");
+	const periodoTesteInicio = new Date();
+	const periodoTesteFim = new Date();
+	periodoTesteFim.setDate(periodoTesteFim.getDate() + FREE_TRIAL_DURATION_DAYS);
 
-		const trialPlan = subscription === "FREE-TRIAL-ERP" ? "ESCALA" : "CRESCIMENTO";
-		const freeTrialConfig = AppSubscriptionPlans[trialPlan].capabilities;
-		await db.transaction(async (tx) => {
-			await tx
-				.update(organizations)
-				.set({
-					configuracao: {
-						recursos: freeTrialConfig,
-						preferencias: {
-							...DEFAULT_ORGANIZATION_CONFIGURATION_PREFERENCES,
-							rastreamentoEstoque: freeTrialConfig.erp.acesso === true,
-						},
-						defaults: organizationDefaults,
-					},
-					periodoTesteInicio,
-					periodoTesteFim,
-					assinaturaPlano: trialPlan,
-				})
-				.where(eq(organizations.id, insertedOrgId));
-		});
-
-		console.log("[INFO] [CREATE_ORGANIZATION] Free trial period defined successfully.");
-
-		// Founder notification, owner welcome message and the `onboarding_completed` event are
-		// fired by the onboarding completion endpoint (POST /api/organizations/onboarding), not here —
-		// the org is created at stage 1 but the onboarding is only "done" once the user concludes it.
-
-		return {
-			data: {
-				insertedId: insertedOrgId,
-				redirectTo: "/dashboard",
-			},
-			message: "Organização criada com sucesso! Período de teste iniciado.",
-		};
-	}
-
-	console.log("[INFO] [CREATE_ORGANIZATION] Paid plan selected, starting Stripe checkout processing.", {
-		organizationId: insertedOrgId,
-		subscription,
-	});
-	// Paid plans logic
-	// Parse subscription format: "ESSENCIAL-MONTHLY" -> plan: "ESSENCIAL", modality: "monthly"
-	const [planName, modalityName] = subscription.split("-") as [keyof typeof AppSubscriptionPlans, "MONTHLY" | "YEARLY"];
-	const modality = modalityName.toLowerCase() as "monthly" | "yearly";
-
-	const plan = AppSubscriptionPlans[planName];
-	if (!plan) throw new createHttpError.BadRequest("Plano de assinatura inválido.");
-
-	const stripePriceId = plan.pricing[modality].stripePriceId;
-	if (!stripePriceId) throw new createHttpError.InternalServerError("Price ID do Stripe não configurado para este plano.");
-
-	// Create Stripe customer
-	const customerEmail = organization.email || sessionUser.email;
-	if (!customerEmail) throw new createHttpError.BadRequest("Email é necessário para criar assinatura.");
-
-	const salesAccount = getStripeSalesAccount();
-	const stripe = getStripeClient(salesAccount);
-	const stripeCustomer = await stripe.customers.create({
-		email: customerEmail,
-		name: organization.nome,
-		metadata: {
-			organizationId: insertedOrgId,
-			indicadorCodigo: indicadorCodigo ?? "",
-		},
-	});
-	console.log("[INFO] [CREATE_ORGANIZATION] Stripe customer created successfully with ID:", stripeCustomer.id);
-
-	// Create checkout session
-	const baseUrl = getAppBaseUrl();
-	const checkoutSession = await stripe.checkout.sessions.create({
-		customer: stripeCustomer.id,
-		line_items: [
-			{
-				price: stripePriceId,
-				quantity: 1,
-			},
-		],
-		mode: "subscription",
-		allow_promotion_codes: true,
-		success_url: `${baseUrl}/onboarding/success?session_id={CHECKOUT_SESSION_ID}`,
-		cancel_url: `${baseUrl}/onboarding`,
-		subscription_data: {
-			metadata: {
-				organizationId: insertedOrgId,
-				indicadorCodigo: indicadorCodigo ?? "",
-			},
-		},
-	});
-	if (!checkoutSession.url) throw new createHttpError.InternalServerError("Erro ao criar sessão de checkout.");
-	console.log("[INFO] [CREATE_ORGANIZATION] Stripe checkout session created successfully with URL:", checkoutSession.url);
-
-	// Pós-Stripe: grava dados locais derivados das APIs externas em nova transação curta.
+	// O teste abre o plano-base escolhido com os adicionais de teste (FREE_TRIAL_ADDONS). O que
+	// fica depois dele é o que o lojista contratar: o webhook reescreve os recursos a partir dos
+	// itens da assinatura.
+	const trialPlan: TSubscriptionBasePlanKey = subscription === "FREE-TRIAL-ERP" ? "CRM_ERP" : "CRM";
+	const freeTrialConfig = resolveSubscriptionEntitlements({ basePlan: trialPlan, addons: FREE_TRIAL_ADDONS });
 	await db.transaction(async (tx) => {
 		await tx
 			.update(organizations)
 			.set({
 				configuracao: {
-					recursos: plan.capabilities,
+					recursos: freeTrialConfig,
 					preferencias: {
 						...DEFAULT_ORGANIZATION_CONFIGURATION_PREFERENCES,
-						rastreamentoEstoque: plan.capabilities.erp.acesso === true,
+						rastreamentoEstoque: freeTrialConfig.erp.acesso === true,
 					},
 					defaults: organizationDefaults,
 				},
-				stripeCustomerId: stripeCustomer.id,
-				stripeConta: salesAccount,
-				assinaturaPlano: planName,
+				periodoTesteInicio,
+				periodoTesteFim,
+				assinaturaPlano: trialPlan,
+				assinaturaAdicionais: FREE_TRIAL_ADDONS,
 			})
 			.where(eq(organizations.id, insertedOrgId));
 	});
 
-	// Founder notification, owner welcome message and the onboarding completion event are fired by
-	// POST /api/organizations/onboarding once the user concludes the flow, not at org creation.
+	console.log("[INFO] [CREATE_ORGANIZATION] Free trial period defined successfully.");
+
+	// Founder notification, owner welcome message and the `onboarding_completed` event are
+	// fired by the onboarding completion endpoint (POST /api/organizations/onboarding), not here —
+	// the org is created at stage 1 but the onboarding is only "done" once the user concludes it.
 
 	return {
 		data: {
 			insertedId: insertedOrgId,
-			redirectTo: checkoutSession.url,
+			redirectTo: "/dashboard",
 		},
-		message: "Organização criada com sucesso! Redirecionando para pagamento.",
+		message: "Organização criada com sucesso! Período de teste iniciado.",
 	};
 }
 

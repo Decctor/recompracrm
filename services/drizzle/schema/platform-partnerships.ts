@@ -159,6 +159,10 @@ export const platformPartnerCommissions = newTable(
 		valorConsultoriaCentavos: integer("valor_consultoria_centavos").notNull().default(0),
 		valorBaseComissionavelCentavos: integer("valor_base_comissionavel_centavos").notNull(),
 		percentualComissaoBps: integer("percentual_comissao_bps").notNull(),
+		// Adicionais comissionáveis (Hub de Atendimentos): taxa fixa própria, fora da regra de bônus
+		// do plano-base. `valorComissaoCentavos` já soma as duas parcelas.
+		valorAdicionaisCentavos: integer("valor_adicionais_centavos").notNull().default(0),
+		percentualComissaoAdicionaisBps: integer("percentual_comissao_adicionais_bps").notNull().default(0),
 		valorComissaoCentavos: integer("valor_comissao_centavos").notNull(),
 		regraVersao: text("regra_versao").notNull(),
 		regraSnapshot: jsonb("regra_snapshot").$type<TPlatformPartnerRuleSnapshot>().notNull().default({}),

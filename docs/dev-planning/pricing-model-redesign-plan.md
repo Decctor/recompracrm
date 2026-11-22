@@ -35,7 +35,7 @@ tier's capability block.
 
 Useful coincidences of these numbers:
 
-- The largest monthly combination is 599,90 + 299,90 + 500,00 = **R$ 1.399,70**, just under the
+- The largest monthly combination is 599,90 + 299,90 + 500,00 = **R$ 1.399,80**, just under the
   current PIX Automático mandate ceiling of R$ 1.399,90 (`PIX_MANDATE_MAX_AMOUNT_CENTS`). The
   ceiling does not need to move, but it must stop being derived from `ESCALA` (section 5.2).
 - All software together is **R$ 899,80**, effectively the legacy `ESCALA` price (R$ 899,90), so

@@ -1,8 +1,10 @@
+import CheckboxInput from "@/components/Inputs/CheckboxInput";
 import NumberInput from "@/components/Inputs/NumberInput";
 import SelectInput from "@/components/Inputs/SelectInput";
 import TextareaInput from "@/components/Inputs/TextareaInput";
 import TextInput from "@/components/Inputs/TextInput";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
+import { AppSubscriptionPlans, DEAL_PLAN_KEY, SUBSCRIPTION_ADDONS, SUBSCRIPTION_BASE_PLAN_KEYS, type TAppSubscriptionPlanKey } from "@/config";
 import { formatToMoney } from "@/lib/formatting";
 import type { TUseInternalDealState } from "@/state-hooks/use-internal-deal-state";
 import { Handshake } from "lucide-react";
@@ -17,6 +19,17 @@ type DealGeneralBlockProps = {
 export default function DealGeneralBlock({ deal, updateDeal, commercialTermsEditable = true }: DealGeneralBlockProps) {
 	const valorTotal = deal.valorUnitarioCentavos * deal.quantidadeLicencas;
 	const intervaloLabel = deal.intervalo === "ANUAL" ? "ano" : "mês";
+	const includesHub = (deal.adicionais ?? []).includes("HUB_ATENDIMENTOS");
+	// Deal antigo pode carregar um tier que não é mais vendido: ele aparece na lista só para ser
+	// exibido (as condições comerciais de um deal existente não são editáveis).
+	const planKeys: string[] = (SUBSCRIPTION_BASE_PLAN_KEYS as string[]).includes(deal.planoBase)
+		? SUBSCRIPTION_BASE_PLAN_KEYS
+		: [...SUBSCRIPTION_BASE_PLAN_KEYS, deal.planoBase];
+	const planOptions = planKeys.map((key, index) => ({
+		id: index + 1,
+		value: key,
+		label: (AppSubscriptionPlans[key as TAppSubscriptionPlanKey]?.name ?? key).toUpperCase(),
+	}));
 
 	return (
 		<ResponsiveMenuSection title="INFORMAÇÕES GERAIS" icon={<Handshake className="h-3 w-3 min-w-3 min-h-3" />}>
@@ -33,8 +46,17 @@ export default function DealGeneralBlock({ deal, updateDeal, commercialTermsEdit
 				placeholder="Observações internas sobre a negociação..."
 				handleChange={(value) => updateDeal({ descricao: value })}
 			/>
-			{/* Não há seletor de plano: todo deal usa o único plano comercializado (DEAL_PLAN_KEY). */}
 			<div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
+				<SelectInput
+					label="PLANO-BASE"
+					value={deal.planoBase}
+					options={planOptions}
+					resetOptionLabel="PLANO-BASE"
+					handleChange={(value) => updateDeal({ planoBase: value as typeof deal.planoBase })}
+					onReset={() => updateDeal({ planoBase: DEAL_PLAN_KEY })}
+					editable={commercialTermsEditable}
+					required
+				/>
 				<SelectInput
 					label="CICLO DE COBRANÇA"
 					value={deal.intervalo}
@@ -49,6 +71,15 @@ export default function DealGeneralBlock({ deal, updateDeal, commercialTermsEdit
 					required
 				/>
 			</div>
+			<CheckboxInput
+				checked={includesHub}
+				labelTrue={`${SUBSCRIPTION_ADDONS.HUB_ATENDIMENTOS.name.toUpperCase()} INCLUÍDO`}
+				labelFalse={`INCLUIR ${SUBSCRIPTION_ADDONS.HUB_ATENDIMENTOS.name.toUpperCase()}`}
+				description="Caixa de entrada do WhatsApp e agente de IA em todas as organizações do deal. O valor por licença já deve considerar o adicional."
+				handleChange={(checked) => updateDeal({ adicionais: checked ? ["HUB_ATENDIMENTOS"] : [] })}
+				editable={commercialTermsEditable}
+				justify="justify-start"
+			/>
 			<div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
 				<NumberInput
 					label="QUANTIDADE DE LICENÇAS"

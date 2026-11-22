@@ -1,20 +1,15 @@
-import { BOLETO_COMPENSATION_DAYS, CONSULTORIA_ADDON, PENDING_FIRST_CHARGE_FALLBACK_DAYS } from "@/config";
+import { BOLETO_COMPENSATION_DAYS, CONSULTORIA_ADDON, PENDING_FIRST_CHARGE_FALLBACK_DAYS, SUBSCRIPTION_ADDONS } from "@/config";
 import { findDealByStripeCustomerId, syncDealSubscriptionState } from "@/lib/deals";
 import { archiveExternalEvent, runArchivedEventProcessing } from "@/lib/external-events/archive";
 import { consolidatePaidAccess, grantProvisionalAccess } from "@/lib/subscriptions/access";
-import {
-	PLATFORM_PARTNER_COMMISSION_RULE_VERSION,
-	PLATFORM_PARTNER_MONTHLY_FIRST_INVOICE_BPS,
-	PLATFORM_PARTNER_MONTHLY_SUBSEQUENT_INVOICE_BPS,
-	PLATFORM_PARTNER_MONTHLY_THIRD_INVOICE_BPS,
-	PLATFORM_PARTNER_RULE_SNAPSHOT,
-	PLATFORM_PARTNER_YEARLY_INVOICE_BPS,
-} from "@/lib/platform-partnerships/constants";
+import { syncOrganizationEntitlementsFromSubscription } from "@/lib/subscriptions/entitlements-sync";
+import { resolveInvoiceCommission, splitInvoiceCommissionBase } from "@/lib/platform-partnerships/commission";
+import { PLATFORM_PARTNER_COMMISSION_RULE_VERSION, PLATFORM_PARTNER_RULE_SNAPSHOT } from "@/lib/platform-partnerships/constants";
 import { db } from "@/services/drizzle";
 import { organizations, platformPartnerCommissions, platformPartnerReferrals } from "@/services/drizzle/schema";
 import { constructStripeWebhookEvent, getStripeClient } from "@/services/stripe";
 import { waitUntil } from "@vercel/functions";
-import { and, count, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, count, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { type NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
@@ -23,6 +18,14 @@ import type Stripe from "stripe";
 // RECOMPRACRM, mas as assinaturas antigas continuam faturando com ele — sem reconhecê-lo, a
 // consultoria entraria na base comissionável do parceiro.
 const SYNCRONIZA_CONSULTORIA_PRICE_ID = "price_1TeyrbJu49WpVubjENhMHgzK";
+
+// Prices dos adicionais comissionáveis a taxa fixa (hoje, o Hub de Atendimentos). Só existem na
+// conta de vendas: nenhuma assinatura da SYNCRONIZA tem esses itens.
+const COMMISSIONABLE_ADDON_PRICE_IDS = new Set(
+	[SUBSCRIPTION_ADDONS.HUB_ATENDIMENTOS.pricing.monthly.stripePriceId, SUBSCRIPTION_ADDONS.HUB_ATENDIMENTOS.pricing.yearly?.stripePriceId].filter(
+		(priceId): priceId is string => !!priceId,
+	),
+);
 
 const allowedStripeEvents: Stripe.Event.Type[] = [
 	"customer.subscription.created",
@@ -176,7 +179,7 @@ async function processEvent({ event, stripe }: { event: Stripe.Event; stripe: St
 			event,
 			eventObject: event.data.object,
 		});
-		return await db
+		await db
 			.update(organizations)
 			.set({
 				stripeSubscriptionStatus: status,
@@ -184,6 +187,12 @@ async function processEvent({ event, stripe }: { event: Stripe.Event; stripe: St
 				stripeSubscriptionStatusUltimaAlteracao: new Date(),
 			})
 			.where(eq(organizations.stripeCustomerId, customerId));
+		// customer.discount.updated cai neste mesmo ramo, mas o objeto dele é um Discount: só o
+		// evento de assinatura carrega itens para sincronizar.
+		if (event.type === "customer.subscription.created") {
+			await syncOrganizationEntitlementsFromSubscription({ customerId, subscription: event.data.object as Stripe.Subscription });
+		}
+		return;
 	}
 
 	if (event.type === "customer.subscription.updated") {
@@ -193,7 +202,7 @@ async function processEvent({ event, stripe }: { event: Stripe.Event; stripe: St
 			eventObject: event.data.object,
 		});
 		const { id, status } = event.data.object as Stripe.Subscription;
-		return await db
+		await db
 			.update(organizations)
 			.set({
 				stripeSubscriptionStatus: status,
@@ -203,6 +212,9 @@ async function processEvent({ event, stripe }: { event: Stripe.Event; stripe: St
 				stripeSubscriptionStatusUltimaAlteracao: sql`CASE WHEN ${organizations.stripeSubscriptionStatus} IS DISTINCT FROM ${status} THEN NOW() ELSE ${organizations.stripeSubscriptionStatusUltimaAlteracao} END`,
 			})
 			.where(eq(organizations.stripeCustomerId, customerId));
+		// Adicional contratado ou cancelado, troca de plano-base: é aqui que o acesso acompanha.
+		await syncOrganizationEntitlementsFromSubscription({ customerId, subscription: event.data.object as Stripe.Subscription });
+		return;
 	}
 	return;
 }
@@ -412,24 +424,22 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
 	if (!referral || referral.partner.status !== "ATIVO") return;
 
 	const consultoriaPriceIds = new Set([CONSULTORIA_ADDON.stripePriceId, SYNCRONIZA_CONSULTORIA_PRICE_ID].filter(Boolean));
-	let valorConsultoriaCentavos = 0;
-	let valorBaseComissionavelCentavos = 0;
-	let hasYearlyLine = false;
+	const { valorConsultoriaCentavos, valorAdicionaisCentavos, valorBaseComissionavelCentavos, hasYearlyBaseLine } = splitInvoiceCommissionBase({
+		lines: invoice.lines.data.map((line) => ({
+			amount: getInvoiceLineAmount(line),
+			priceId: getInvoiceLinePriceId(line),
+			isYearly: isYearlyInvoiceLine(line),
+		})),
+		consultoriaPriceIds,
+		addonPriceIds: COMMISSIONABLE_ADDON_PRICE_IDS,
+	});
 
-	for (const line of invoice.lines.data) {
-		const amount = getInvoiceLineAmount(line);
-		const priceId = getInvoiceLinePriceId(line);
-		if (priceId && consultoriaPriceIds.has(priceId)) {
-			valorConsultoriaCentavos += amount;
-			continue;
-		}
+	// Um invoice só de adicional (o proporcional cobrado ao contratar o Hub no meio do ciclo)
+	// também gera comissão; só não há nada a pagar quando as duas parcelas são nulas.
+	if (valorBaseComissionavelCentavos <= 0 && valorAdicionaisCentavos <= 0) return;
 
-		valorBaseComissionavelCentavos += amount;
-		if (isYearlyInvoiceLine(line)) hasYearlyLine = true;
-	}
-
-	if (valorBaseComissionavelCentavos <= 0) return;
-
+	// A numeração que decide o bônus conta só invoices com plano-base. Sem isso, o invoice
+	// avulso de um adicional ocuparia a posição 2 ou 3 e deslocaria o bônus da 3ª mensalidade.
 	const previousCommissionsResult = await db
 		.select({ count: count(platformPartnerCommissions.id) })
 		.from(platformPartnerCommissions)
@@ -438,17 +448,16 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
 				eq(platformPartnerCommissions.referralId, referral.id),
 				isNotNull(platformPartnerCommissions.stripeInvoiceId),
 				isNull(platformPartnerCommissions.ajusteOrigemCommissionId),
+				gt(platformPartnerCommissions.valorBaseComissionavelCentavos, 0),
 			),
 		);
-	const numeroInvoiceAssinatura = (previousCommissionsResult[0]?.count ?? 0) + 1;
-	const percentualComissaoBps = hasYearlyLine
-		? PLATFORM_PARTNER_YEARLY_INVOICE_BPS
-		: numeroInvoiceAssinatura === 1
-			? PLATFORM_PARTNER_MONTHLY_FIRST_INVOICE_BPS
-			: numeroInvoiceAssinatura === 3
-				? PLATFORM_PARTNER_MONTHLY_THIRD_INVOICE_BPS
-				: PLATFORM_PARTNER_MONTHLY_SUBSEQUENT_INVOICE_BPS;
-	const valorComissaoCentavos = Math.round((valorBaseComissionavelCentavos * percentualComissaoBps) / 10000);
+	const previousBaseInvoices = previousCommissionsResult[0]?.count ?? 0;
+	const { numeroInvoiceAssinatura, percentualComissaoBps, percentualComissaoAdicionaisBps, valorComissaoCentavos } = resolveInvoiceCommission({
+		previousBaseInvoices,
+		valorBaseComissionavelCentavos,
+		valorAdicionaisCentavos,
+		hasYearlyBaseLine,
+	});
 	const now = new Date();
 
 	await db.transaction(async (tx) => {
@@ -460,10 +469,12 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
 			stripeSubscriptionId: getInvoiceSubscriptionId(invoice),
 			stripeCustomerId: customerId,
 			numeroInvoiceAssinatura,
-			valorInvoiceBrutoCentavos: invoice.amount_paid ?? invoice.total ?? valorBaseComissionavelCentavos + valorConsultoriaCentavos,
+			valorInvoiceBrutoCentavos: invoice.amount_paid ?? invoice.total ?? valorBaseComissionavelCentavos + valorAdicionaisCentavos + valorConsultoriaCentavos,
 			valorConsultoriaCentavos,
 			valorBaseComissionavelCentavos,
 			percentualComissaoBps,
+			valorAdicionaisCentavos,
+			percentualComissaoAdicionaisBps,
 			valorComissaoCentavos,
 			regraVersao: PLATFORM_PARTNER_COMMISSION_RULE_VERSION,
 			regraSnapshot: PLATFORM_PARTNER_RULE_SNAPSHOT,

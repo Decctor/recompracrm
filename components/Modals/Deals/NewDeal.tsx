@@ -1,6 +1,8 @@
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
 import { Button } from "@/components/ui/button";
+import { DEAL_PLAN_KEY } from "@/config";
 import { getErrorMessage } from "@/lib/errors";
+import { isSubscriptionBasePlanKey } from "@/lib/subscriptions/entitlements";
 import { createDeal } from "@/lib/mutations/deals";
 import { copyToClipboard } from "@/lib/utils";
 import { useInternalDealState } from "@/state-hooks/use-internal-deal-state";
@@ -55,7 +57,10 @@ export default function NewDeal({ closeModal, callbacks }: NewDealProps) {
 			menuCancelButtonText="CANCELAR"
 			actionFunction={() => {
 				if (generatedCheckoutUrl) return closeModal();
-				handleCreateDealMutation({ deal: state.deal });
+				// Deal novo só nasce com um plano-base vendido hoje (o estado também serve a deals antigos).
+				handleCreateDealMutation({
+					deal: { ...state.deal, planoBase: isSubscriptionBasePlanKey(state.deal.planoBase) ? state.deal.planoBase : DEAL_PLAN_KEY },
+				});
 			}}
 			actionIsLoading={isPending}
 			stateIsLoading={false}

@@ -1,13 +1,12 @@
 "use client";
-import type { TBillingPortalOutput } from "@/app/api/integrations/stripe/billing-portal/route";
 import { RecompraCRMIcon } from "@/components/icons";
 import PlanSelectionMenu from "@/components/Subscription/PlanSelectionMenu";
+import SubscriptionManagementMenu from "@/components/Subscription/SubscriptionManagementMenu";
 import { SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AppSubscriptionPlans, type TAppSubscriptionPlanKey } from "@/config";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { useMutation } from "@tanstack/react-query";
-import { Loader2, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { useState } from "react";
 
 const TRIAL_BADGE_COLOR = "hsl(0 0% 0%)";
@@ -20,26 +19,14 @@ type TSubscriptionBadgeProps = {
 export default function SubscriptionBadge({ organization }: TSubscriptionBadgeProps) {
 	const { open } = useSidebar();
 	const [showPlansMenu, setShowPlansMenu] = useState(false);
-
-	// Abre o portal de cobrança do Stripe (gestão da assinatura) para quem já paga.
-	const portalMutation = useMutation({
-		mutationFn: async () => {
-			const response = await fetch("/api/integrations/stripe/billing-portal", { method: "POST" });
-			if (!response.ok) {
-				const error = await response.json();
-				throw new Error(error.message || "Erro ao abrir o portal de cobrança");
-			}
-			return response.json() as Promise<TBillingPortalOutput>;
-		},
-		onSuccess: (data) => {
-			window.location.href = data.data.portalUrl;
-		},
-	});
+	const [showManagementMenu, setShowManagementMenu] = useState(false);
 
 	const isPaying = organization.assinaturaAtiva && !!organization.assinaturaPlano;
 	const isOnTrial = organization.assinaturaAtiva && !organization.assinaturaPlano;
 
-	// Assinante pagante → clicar abre o portal do Stripe para gerir a assinatura.
+	// Com plano gravado → clicar abre o menu da assinatura: o plano, os adicionais que dá para
+	// incluir e o atalho para o portal do Stripe. O menu decide o que mostrar pela assinatura real
+	// (quem está em teste também tem `assinaturaPlano`, e lá vê as opções de contratação).
 	if (isPaying) {
 		const planKey = organization.assinaturaPlano as TAppSubscriptionPlanKey;
 		const plan = AppSubscriptionPlans[planKey] ?? null;
@@ -48,8 +35,7 @@ export default function SubscriptionBadge({ organization }: TSubscriptionBadgePr
 
 		const badgeContent = (
 			<SidebarMenuButton
-				onClick={() => portalMutation.mutate()}
-				disabled={portalMutation.isPending}
+				onClick={() => setShowManagementMenu(true)}
 				className="h-10 flex items-center gap-2 justify-center transition-all duration-200 hover:opacity-90 rounded-4xl border-0"
 				style={{
 					background: `linear-gradient(135deg, ${planColor} 0%, ${planColor}D9 100%)`,
@@ -57,28 +43,27 @@ export default function SubscriptionBadge({ organization }: TSubscriptionBadgePr
 					boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
 				}}
 			>
-				{portalMutation.isPending ? (
-					<Loader2 className="h-4 w-4 shrink-0 animate-spin text-white" />
-				) : (
-					<RecompraCRMIcon className="h-4 w-4 shrink-0 text-white" />
-				)}
+				<RecompraCRMIcon className="h-4 w-4 shrink-0 text-white" />
 				{open && <span className="truncate font-bold text-xs tracking-wide text-white drop-shadow-sm">PLANO {displayName}</span>}
 			</SidebarMenuButton>
 		);
 
 		return (
-			<SidebarMenuItem>
-				{open ? (
-					badgeContent
-				) : (
-					<Tooltip>
-						<TooltipTrigger render={badgeContent} />
-						<TooltipContent side="right" sideOffset={8}>
-							Gerenciar assinatura
-						</TooltipContent>
-					</Tooltip>
-				)}
-			</SidebarMenuItem>
+			<>
+				<SidebarMenuItem>
+					{open ? (
+						badgeContent
+					) : (
+						<Tooltip>
+							<TooltipTrigger render={badgeContent} />
+							<TooltipContent side="right" sideOffset={8}>
+								Gerenciar assinatura
+							</TooltipContent>
+						</Tooltip>
+					)}
+				</SidebarMenuItem>
+				{showManagementMenu && <SubscriptionManagementMenu closeMenu={() => setShowManagementMenu(false)} />}
+			</>
 		);
 	}
 

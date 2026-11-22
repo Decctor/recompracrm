@@ -5,6 +5,7 @@ import {
 	OrganizationIntegrationTypeEnum,
 	PoiRegistrationFlowEnum,
 	ScaleBarcodeValueTypeEnum,
+	SubscriptionAddonEnum,
 } from "./enums";
 import { OrganizationFiscalConfigSchema } from "./fiscal";
 import { DataSourceIntegrationConfigSchema } from "./integrations";
@@ -484,6 +485,9 @@ export const OrganizationSchema = z.object({
 	origemLead: z.string({ invalid_type_error: "Tipo não válido para a origem dos leads da organização." }).optional().nullable(),
 
 	assinaturaPlano: z.string({ invalid_type_error: "Tipo não válido para o plano de assinatura da organização." }).optional().nullable(),
+	assinaturaAdicionais: z
+		.array(SubscriptionAddonEnum, { invalid_type_error: "Tipo não válido para os adicionais da assinatura da organização." })
+		.optional(),
 	dadosViaERP: z
 		.boolean({
 			invalid_type_error: "Tipo não válido para se os dados da organização foram via ERP.",

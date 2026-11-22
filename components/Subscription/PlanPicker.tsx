@@ -1,87 +1,42 @@
 "use client";
 
-import type { TBillingPortalOutput } from "@/app/api/integrations/stripe/billing-portal/route";
-import type { TGenerateCheckoutOutput } from "@/app/api/integrations/stripe/generate-checkout/route";
 import type { TSubscriptionStatusAction } from "@/app/api/organizations/subscription-status/route";
 import { Button } from "@/components/ui/button";
-import { AppSubscriptionPlans, CONSULTORIA_ADDON } from "@/config";
+import { Switch } from "@/components/ui/switch";
+import {
+	AppSubscriptionPlans,
+	SUBSCRIPTION_ADDONS,
+	SUBSCRIPTION_ADDON_KEYS,
+	SUBSCRIPTION_BASE_PLAN_KEYS,
+	type TSubscriptionAddonKey,
+	type TSubscriptionBasePlanKey,
+} from "@/config";
+import { getErrorMessage } from "@/lib/errors";
 import { formatToMoney } from "@/lib/formatting";
+import { generateSubscriptionCheckout, openBillingPortal } from "@/lib/mutations/subscriptions";
+import { useSubscriptionAddons } from "@/lib/queries/subscriptions";
+import { getSubscriptionCycleTotal, isAddonAvailableInCycle, isSubscriptionBasePlanKey } from "@/lib/subscriptions/entitlements";
 import { cn } from "@/lib/utils";
+import type { TSubscriptionCycleEnum } from "@/schemas/enums";
 import { useMutation } from "@tanstack/react-query";
-import { Check, CreditCard, LayoutGrid, Loader2, Rocket } from "lucide-react";
-import { useState } from "react";
+import { Check, CreditCard, LayoutGrid, Loader2, Store } from "lucide-react";
+import { useId, useState } from "react";
 
 /**
  * Fonte única das opções comerciais — o paywall (`/subscription`) e o modal de upsell
- * (`PlanSelectionMenu`) renderizam este mesmo componente. Antes eram dois arquivos com o mesmo
- * card copiado, que já tinham divergido (um tratava dark mode, o outro não).
+ * (`PlanSelectionMenu`) renderizam este mesmo componente.
  *
- * Hoje vendemos uma configuração só: a plataforma (internamente o plano CRESCIMENTO) com ou sem o
- * Gestor de Crescimento. Os outros planos existem em `AppSubscriptionPlans` mas não são ofertados.
+ * O que se vende é um plano-base (CRM ou CRM + ERP) e adicionais sobre ele (Hub de Atendimentos,
+ * Gestor de Crescimento), tudo a preço fixo e sem limite de uso. Por isso a tela é "monte e
+ * confirme", com um único botão e o total à vista: clicar numa coluna para ir ao checkout, como
+ * antes, não deixaria escolher adicional nenhum.
  *
- * As duas opções vivem numa moldura única dividida ao meio, não em dois cards soltos: o pai já é
- * um wrapper claro, e card dentro de card duplica borda e padding — altura que fazia o preço cair
- * abaixo da dobra num notebook.
+ * Os planos-base vivem numa moldura única dividida ao meio, não em dois cards soltos: o pai já é
+ * um wrapper claro, e card dentro de card duplica borda e padding.
  */
 
-const PLATFORM_PLAN = AppSubscriptionPlans.CRESCIMENTO;
 const MONTHS_IN_YEAR = 12;
-
-type TBillingCycle = "monthly" | "yearly";
-
-type TPlanOption = {
-	id: "PLATAFORMA_COM_GESTOR" | "PLATAFORMA";
-	nome: string;
-	descricao: string;
-	/** Valor cobrado no ciclo escolhido. */
-	preco: number;
-	/** Equivalente mensal — igual a `preco` no mensal, o duodécimo no anual. */
-	precoMensalEquivalente: number;
-	recursos: { checked: boolean; label: string }[];
-	recomendado: boolean;
-	textoBotao: string;
-	icone: typeof Rocket;
-	checkout: { subscription: string; consultoria?: boolean };
-};
-
-function buildPlanOptions(cycle: TBillingCycle): TPlanOption[] {
-	const platformPrice = PLATFORM_PLAN.pricing[cycle].price;
-	const platformMonthlyEquivalent = cycle === "yearly" ? platformPrice / MONTHS_IN_YEAR : platformPrice;
-
-	const platformOption: TPlanOption = {
-		id: "PLATAFORMA",
-		nome: "Plataforma",
-		descricao: "A plataforma completa, operada por você e pela sua equipe.",
-		preco: platformPrice,
-		precoMensalEquivalente: platformMonthlyEquivalent,
-		recursos: PLATFORM_PLAN.pricingTableFeatures,
-		recomendado: false,
-		textoBotao: "Escolher plataforma",
-		icone: LayoutGrid,
-		checkout: { subscription: `CRESCIMENTO-${cycle === "yearly" ? "YEARLY" : "MONTHLY"}` },
-	};
-
-	// O add-on só existe no ciclo mensal: o Stripe não aceita intervalos diferentes na mesma
-	// assinatura, e a rota de checkout recusa a combinação. Por isso a oferta some no anual em vez
-	// de aparecer desabilitada.
-	if (cycle === "yearly") return [platformOption];
-
-	const bundlePrice = platformPrice + CONSULTORIA_ADDON.monthlyPrice;
-	const bundleOption: TPlanOption = {
-		id: "PLATAFORMA_COM_GESTOR",
-		nome: `Plataforma + ${CONSULTORIA_ADDON.name}`,
-		descricao: "A gente opera o CRM por você. O entregável é crescimento em receita.",
-		preco: bundlePrice,
-		precoMensalEquivalente: bundlePrice,
-		recursos: [{ checked: true, label: "Tudo que está no plano Plataforma" }, ...CONSULTORIA_ADDON.pricingTableFeatures],
-		recomendado: true,
-		textoBotao: "Contratar com gestor",
-		icone: Rocket,
-		checkout: { subscription: "CRESCIMENTO-MONTHLY", consultoria: true },
-	};
-
-	return [bundleOption, platformOption];
-}
+const BASE_PLAN_ICONS: Record<TSubscriptionBasePlanKey, typeof LayoutGrid> = { CRM: LayoutGrid, CRM_ERP: Store };
 
 type PlanPickerProps = {
 	/** Vindo de `useOrganizationSubscriptionStatus`. Em `ATUALIZAR_PAGAMENTO` a ação principal é o portal do Stripe. */
@@ -89,54 +44,48 @@ type PlanPickerProps = {
 	className?: string;
 };
 
+function toMonthlyEquivalent(value: number, cycle: TSubscriptionCycleEnum) {
+	return cycle === "ANUAL" ? value / MONTHS_IN_YEAR : value;
+}
+
 export default function PlanPicker({ acao = "ASSINAR", className }: PlanPickerProps) {
-	const [cycle, setCycle] = useState<TBillingCycle>("monthly");
-	const [pendingOptionId, setPendingOptionId] = useState<TPlanOption["id"] | null>(null);
+	const [cycle, setCycle] = useState<TSubscriptionCycleEnum>("MENSAL");
+	const [chosenBasePlan, setChosenBasePlan] = useState<TSubscriptionBasePlanKey | null>(null);
+	const [chosenAddons, setChosenAddons] = useState<TSubscriptionAddonKey[]>([]);
+
+	// Quem está testando o ERP já chega com o CRM + ERP marcado. É só uma sugestão: enquanto a
+	// pessoa não escolher, vale o plano do teste; depois, vale a escolha dela.
+	const { data: currentSubscription } = useSubscriptionAddons();
+	const suggestedBasePlan = isSubscriptionBasePlanKey(currentSubscription?.planoBase) ? currentSubscription.planoBase : "CRM";
+	const basePlan = chosenBasePlan ?? suggestedBasePlan;
+	// Um adicional sem preço no ciclo escolhido (a consultoria, no anual) sai da conta sem ser
+	// desmarcado: voltar para o mensal devolve a escolha.
+	const addons = chosenAddons.filter((addon) => isAddonAvailableInCycle(addon, cycle));
 
 	const checkoutMutation = useMutation({
-		mutationFn: async (vars: { subscription: string; consultoria?: boolean }) => {
-			const response = await fetch("/api/integrations/stripe/generate-checkout", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(vars),
-			});
-			if (!response.ok) {
-				const error = await response.json();
-				throw new Error(error.message || "Não conseguimos abrir o checkout. Tente novamente.");
-			}
-			return response.json() as Promise<TGenerateCheckoutOutput>;
-		},
+		mutationFn: generateSubscriptionCheckout,
 		onSuccess: (data) => {
 			window.location.href = data.data.checkoutUrl;
 		},
-		onError: () => setPendingOptionId(null),
 	});
-
 	const portalMutation = useMutation({
-		mutationFn: async () => {
-			const response = await fetch("/api/integrations/stripe/billing-portal", { method: "POST" });
-			if (!response.ok) {
-				const error = await response.json();
-				throw new Error(error.message || "Não conseguimos abrir o portal de cobrança. Tente novamente.");
-			}
-			return response.json() as Promise<TBillingPortalOutput>;
-		},
+		mutationFn: openBillingPortal,
 		onSuccess: (data) => {
 			window.location.href = data.data.portalUrl;
 		},
 	});
 
 	const isRedirecting = checkoutMutation.isPending || checkoutMutation.isSuccess || portalMutation.isPending || portalMutation.isSuccess;
-	const errorMessage = checkoutMutation.error?.message ?? portalMutation.error?.message ?? null;
+	const mutationError = checkoutMutation.error ?? portalMutation.error;
+	const errorMessage = mutationError ? getErrorMessage(mutationError) : null;
 
-	const options = buildPlanOptions(cycle);
 	const isPaymentUpdate = acao === "ATUALIZAR_PAGAMENTO";
-	const yearlySavings = Math.round((1 - PLATFORM_PLAN.pricing.yearly.price / (PLATFORM_PLAN.pricing.monthly.price * MONTHS_IN_YEAR)) * 100);
+	const referencePlan = AppSubscriptionPlans[basePlan];
+	const yearlySavings = Math.round((1 - referencePlan.pricing.yearly.price / (referencePlan.pricing.monthly.price * MONTHS_IN_YEAR)) * 100);
+	const total = getSubscriptionCycleTotal({ basePlan, addons, cycle });
 
-	function handleSelect(option: TPlanOption) {
-		if (isRedirecting) return;
-		setPendingOptionId(option.id);
-		checkoutMutation.mutate(option.checkout);
+	function toggleAddon(addon: TSubscriptionAddonKey, checked: boolean) {
+		setChosenAddons((previous) => (checked ? [...previous.filter((key) => key !== addon), addon] : previous.filter((key) => key !== addon)));
 	}
 
 	return (
@@ -152,7 +101,13 @@ export default function PlanPicker({ acao = "ASSINAR", className }: PlanPickerPr
 							</p>
 						</div>
 					</div>
-					<Button type="button" variant="brand" disabled={isRedirecting} onClick={() => portalMutation.mutate()} className="w-full shrink-0 font-bold sm:w-auto">
+					<Button
+						type="button"
+						variant="brand"
+						disabled={isRedirecting}
+						onClick={() => portalMutation.mutate()}
+						className="w-full shrink-0 font-bold sm:w-auto"
+					>
 						{portalMutation.isPending || portalMutation.isSuccess ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
 						Atualizar pagamento
 					</Button>
@@ -160,34 +115,63 @@ export default function PlanPicker({ acao = "ASSINAR", className }: PlanPickerPr
 			)}
 
 			<div className="flex items-center gap-3">
-				{isPaymentUpdate && <h3 className="text-sm font-bold tracking-tight text-muted-foreground">Ou escolha outro plano</h3>}
+				<h3 className="text-sm font-bold tracking-tight text-muted-foreground">{isPaymentUpdate ? "Ou monte outro plano" : "1. Escolha o plano"}</h3>
 				<BillingCycleToggle cycle={cycle} onChange={setCycle} disabled={isRedirecting} yearlySavings={yearlySavings} />
 			</div>
 
 			<div
-				className={cn(
-					"grid divide-y divide-border overflow-hidden rounded-2xl border border-border",
-					options.length > 1 && "md:grid-cols-2 md:divide-x md:divide-y-0",
-				)}
+				role="radiogroup"
+				aria-label="Plano-base"
+				className="grid divide-y divide-border overflow-hidden rounded-2xl border border-border md:grid-cols-2 md:divide-x md:divide-y-0"
 			>
-				{options.map((option) => (
-					<PlanColumn
-						key={option.id}
-						option={option}
+				{SUBSCRIPTION_BASE_PLAN_KEYS.map((key) => (
+					<BasePlanColumn
+						key={key}
+						planKey={key}
 						cycle={cycle}
-						onSelect={() => handleSelect(option)}
-						isRedirecting={isRedirecting}
-						isPending={pendingOptionId === option.id && (checkoutMutation.isPending || checkoutMutation.isSuccess)}
-						demoted={isPaymentUpdate}
+						selected={basePlan === key}
+						disabled={isRedirecting}
+						onSelect={() => setChosenBasePlan(key)}
 					/>
 				))}
 			</div>
 
-			{cycle === "yearly" && (
-				<p className="text-[13px] leading-snug text-muted-foreground">
-					O {CONSULTORIA_ADDON.name} é cobrado mensalmente e não entra no plano anual. Para contratá-lo, escolha o ciclo mensal.
-				</p>
-			)}
+			<h3 className="text-sm font-bold tracking-tight text-muted-foreground">2. Adicionais, se quiser</h3>
+			<ul className="flex flex-col divide-y divide-border overflow-hidden rounded-2xl border border-border">
+				{SUBSCRIPTION_ADDON_KEYS.map((key) => (
+					<AddonRow
+						key={key}
+						addonKey={key}
+						cycle={cycle}
+						checked={addons.includes(key)}
+						disabled={isRedirecting}
+						onCheckedChange={(checked) => toggleAddon(key, checked)}
+					/>
+				))}
+			</ul>
+
+			<div className="flex flex-col gap-3 rounded-2xl bg-muted/70 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-5">
+				<div className="flex flex-col">
+					<div className="flex items-baseline gap-1.5">
+						<span className="text-2xl font-extrabold tracking-tight tabular-nums">{formatToMoney(toMonthlyEquivalent(total, cycle))}</span>
+						<span className="text-[13px] font-medium text-muted-foreground">/mês</span>
+					</div>
+					<p className="text-xs font-medium text-muted-foreground">
+						{cycle === "ANUAL" ? `${formatToMoney(total)} cobrados uma vez por ano.` : "Cobrado mensalmente. Cancele quando quiser."} Sem limite de
+						campanhas, clientes ou usuários.
+					</p>
+				</div>
+				<Button
+					type="button"
+					variant="brand"
+					disabled={isRedirecting}
+					onClick={() => checkoutMutation.mutate({ basePlan, cycle, addons })}
+					className="w-full shrink-0 font-bold sm:w-auto"
+				>
+					{checkoutMutation.isPending || checkoutMutation.isSuccess ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+					Assinar agora
+				</Button>
+			</div>
 
 			{errorMessage && (
 				<div role="alert" className="rounded-2xl border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm font-medium text-destructive">
@@ -204,14 +188,14 @@ function BillingCycleToggle({
 	disabled,
 	yearlySavings,
 }: {
-	cycle: TBillingCycle;
-	onChange: (cycle: TBillingCycle) => void;
+	cycle: TSubscriptionCycleEnum;
+	onChange: (cycle: TSubscriptionCycleEnum) => void;
 	disabled: boolean;
 	yearlySavings: number;
 }) {
-	const options: { value: TBillingCycle; label: string }[] = [
-		{ value: "monthly", label: "Mensal" },
-		{ value: "yearly", label: `Anual · -${yearlySavings}%` },
+	const options: { value: TSubscriptionCycleEnum; label: string }[] = [
+		{ value: "MENSAL", label: "Mensal" },
+		{ value: "ANUAL", label: `Anual · -${yearlySavings}%` },
 	];
 
 	return (
@@ -238,73 +222,107 @@ function BillingCycleToggle({
 	);
 }
 
-function PlanColumn({
-	option,
+function BasePlanColumn({
+	planKey,
 	cycle,
+	selected,
+	disabled,
 	onSelect,
-	isRedirecting,
-	isPending,
-	demoted,
 }: {
-	option: TPlanOption;
-	cycle: TBillingCycle;
+	planKey: TSubscriptionBasePlanKey;
+	cycle: TSubscriptionCycleEnum;
+	selected: boolean;
+	disabled: boolean;
 	onSelect: () => void;
-	isRedirecting: boolean;
-	isPending: boolean;
-	demoted: boolean;
 }) {
-	const Icon = option.icone;
-	// A hierarquia vem do banho de cor, do selo e da ordem — nunca de um bloco saturado. Quando o
-	// pagamento pendente é a ação principal, nenhuma coluna se destaca: o destaque já está acima.
-	const highlighted = option.recomendado && !demoted;
+	const plan = AppSubscriptionPlans[planKey];
+	const Icon = BASE_PLAN_ICONS[planKey];
+	const price = plan.pricing[cycle === "ANUAL" ? "yearly" : "monthly"].price;
 
 	return (
-		<section className={cn("flex flex-col gap-3.5 p-5", highlighted && "bg-brand-secondary/[0.05]")}>
-			<div className="flex items-center justify-between gap-3">
-				<div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-brand-secondary/10 text-brand-secondary">
+		// A coluna inteira é o alvo: é um radio, e a marca de seleção sozinha seria um alvo de 20px.
+		<button
+			type="button"
+			role="radio"
+			aria-checked={selected}
+			disabled={disabled}
+			onClick={onSelect}
+			className={cn(
+				"flex flex-col gap-3.5 p-5 text-left transition-colors duration-150 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none focus-visible:ring-inset disabled:pointer-events-none disabled:opacity-60",
+				selected ? "bg-brand-secondary/[0.06]" : "hover:bg-muted/50",
+			)}
+		>
+			{/* Só spans: dentro de <button> o HTML não aceita título, parágrafo nem lista. */}
+			<span className="flex w-full items-center justify-between gap-3">
+				<span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-brand-secondary/10 text-brand-secondary">
 					<Icon className="size-4" aria-hidden />
-				</div>
-				{option.recomendado && (
-					<span className="rounded-full bg-brand-secondary/12 px-2.5 py-1 text-[10px] font-extrabold tracking-[0.08em] text-brand-secondary uppercase">
-						Recomendado
-					</span>
-				)}
-			</div>
+				</span>
+				<span
+					aria-hidden
+					className={cn(
+						"flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors duration-150",
+						selected ? "border-brand-secondary bg-brand-secondary text-brand-secondary-foreground" : "border-border",
+					)}
+				>
+					{selected ? <Check className="size-3" strokeWidth={3} /> : null}
+				</span>
+			</span>
 
-			<div className="flex flex-col gap-1">
-				<h4 className="text-base leading-tight font-extrabold tracking-tight text-balance">{option.nome}</h4>
-				<p className="text-[13px] leading-snug text-muted-foreground">{option.descricao}</p>
-			</div>
+			<span className="flex flex-col gap-1">
+				<span className="text-base leading-tight font-extrabold tracking-tight text-balance">{plan.name}</span>
+				<span className="text-[13px] leading-snug text-muted-foreground">{plan.description}</span>
+			</span>
 
-			<div className="flex flex-col">
-				<div className="flex items-baseline gap-1.5">
-					<span className="text-2xl font-extrabold tracking-tight tabular-nums">{formatToMoney(option.precoMensalEquivalente)}</span>
-					<span className="text-[13px] font-medium text-muted-foreground">/mês</span>
-				</div>
-				<p className="text-xs font-medium text-muted-foreground">
-					{cycle === "yearly" ? `${formatToMoney(option.preco)} cobrados uma vez por ano` : "Cobrado mensalmente. Cancele quando quiser."}
-				</p>
-			</div>
+			<span className="flex items-baseline gap-1.5">
+				<span className="text-2xl font-extrabold tracking-tight tabular-nums">{formatToMoney(toMonthlyEquivalent(price, cycle))}</span>
+				<span className="text-[13px] font-medium text-muted-foreground">/mês</span>
+			</span>
 
-			<ul className="flex flex-col gap-2">
-				{option.recursos.map((recurso) => (
-					<li key={recurso.label} className="flex items-start gap-2 text-[13px] leading-snug text-foreground">
+			<span className="flex flex-col gap-2">
+				{plan.pricingTableFeatures.map((feature) => (
+					<span key={feature.label} className="flex items-start gap-2 text-[13px] leading-snug text-foreground">
 						<Check className="mt-0.5 size-3.5 shrink-0 text-brand-secondary" aria-hidden />
-						<span>{recurso.label}</span>
-					</li>
+						<span>{feature.label}</span>
+					</span>
 				))}
-			</ul>
+			</span>
+		</button>
+	);
+}
 
-			<Button
-				type="button"
-				variant={highlighted ? "brand" : "outline"}
-				disabled={isRedirecting}
-				onClick={onSelect}
-				className="mt-auto w-full font-bold"
-			>
-				{isPending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-				{option.textoBotao}
-			</Button>
-		</section>
+function AddonRow({
+	addonKey,
+	cycle,
+	checked,
+	disabled,
+	onCheckedChange,
+}: {
+	addonKey: TSubscriptionAddonKey;
+	cycle: TSubscriptionCycleEnum;
+	checked: boolean;
+	disabled: boolean;
+	onCheckedChange: (checked: boolean) => void;
+}) {
+	const switchId = useId();
+	const addon = SUBSCRIPTION_ADDONS[addonKey];
+	const available = isAddonAvailableInCycle(addonKey, cycle);
+	const pricing = addon.pricing[cycle === "ANUAL" ? "yearly" : "monthly"];
+
+	return (
+		<li className={cn("flex items-start gap-3 p-4", checked && "bg-brand-secondary/[0.06]")}>
+			<Switch id={switchId} checked={checked} disabled={disabled || !available} onCheckedChange={onCheckedChange} className="mt-0.5" />
+			<label htmlFor={switchId} className={cn("flex min-w-0 flex-1 flex-col gap-0.5", available && !disabled && "cursor-pointer")}>
+				<span className="text-sm leading-tight font-bold tracking-tight">{addon.name}</span>
+				<span className="text-[13px] leading-snug text-muted-foreground">
+					{available ? addon.description : `${addon.name} é cobrado mês a mês e não entra no plano anual. Para contratar, escolha o ciclo mensal.`}
+				</span>
+			</label>
+			{pricing ? (
+				<span className="shrink-0 text-sm font-extrabold tracking-tight tabular-nums">
+					+ {formatToMoney(toMonthlyEquivalent(pricing.price, cycle))}
+					<span className="text-[13px] font-medium text-muted-foreground">/mês</span>
+				</span>
+			) : null}
+		</li>
 	);
 }

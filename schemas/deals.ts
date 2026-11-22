@@ -1,5 +1,5 @@
 import z from "zod";
-import { DealIntervaloEnum, DealStatusEnum, StripeAccountEnum } from "./enums";
+import { DealIntervaloEnum, DealStatusEnum, StripeAccountEnum, SubscriptionAddonEnum, SubscriptionBasePlanEnum } from "./enums";
 
 // Deal personalizado (venda B2B multi-licença): uma assinatura Stripe única cobre
 // quantidadeLicencas organizações. Espelha a tabela ampmais_deals.
@@ -16,10 +16,13 @@ export const DealSchema = z.object({
 		.string({ required_error: "Email do obtentor não informado.", invalid_type_error: "Tipo não válido para o email do obtentor." })
 		.email("Email do obtentor inválido."),
 	telefoneObtentor: z.string({ invalid_type_error: "Tipo não válido para o telefone do obtentor." }).optional().nullable(),
-	planoBase: z.enum(["ESSENCIAL", "CRESCIMENTO", "ESCALA"], {
+	// Os tiers antigos seguem aceitos porque deals anteriores os têm gravados; deals novos só
+	// nascem com um plano-base (ver CreateDealInputSchema).
+	planoBase: z.enum(["ESSENCIAL", "CRESCIMENTO", "ESCALA", ...SubscriptionBasePlanEnum.options], {
 		required_error: "Plano base do deal não informado.",
 		invalid_type_error: "Tipo não válido para o plano base do deal.",
 	}),
+	adicionais: z.array(SubscriptionAddonEnum, { invalid_type_error: "Tipo não válido para os adicionais do deal." }).optional().default([]),
 	quantidadeLicencas: z
 		.number({
 			required_error: "Quantidade de licenças não informada.",

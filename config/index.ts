@@ -1,3 +1,4 @@
+import type { TSubscriptionAddonEnum, TSubscriptionBasePlanEnum, TSubscriptionCycleEnum } from "@/schemas/enums";
 import type { TOrganizationDefaults, TOrganizationConfiguration } from "@/schemas/organizations";
 import type { TUserPermissions } from "@/schemas/users";
 import { DEFAULT_SCALE_BARCODE_CONFIG } from "@/lib/pos/scale-barcode";
@@ -151,7 +152,20 @@ export const DEFAULT_ORGANIZATION_RFM_CONFIG = {
 
 export const FREE_TRIAL_DURATION_DAYS = 15;
 
-export type TAppSubscriptionPlanKey = "ESSENCIAL" | "CRESCIMENTO" | "ESCALA";
+// Modelo comercial: dois planos-base (CRM, CRM_ERP) e adicionais sobre eles, tudo com preço fixo
+// e sem limite de uso. Os três tiers antigos não são mais vendidos; continuam no config porque
+// organizações e deals anteriores ainda os têm gravados em `assinaturaPlano` / `planoBase`.
+export type TSubscriptionBasePlanKey = TSubscriptionBasePlanEnum;
+export type TSubscriptionAddonKey = TSubscriptionAddonEnum;
+export type TLegacySubscriptionPlanKey = "ESSENCIAL" | "CRESCIMENTO" | "ESCALA";
+export type TAppSubscriptionPlanKey = TLegacySubscriptionPlanKey | TSubscriptionBasePlanKey;
+
+// As chaves de `pricing` nasceram em inglês; o ciclo que trafega como dado é MENSAL/ANUAL.
+export type TSubscriptionPricingKey = "monthly" | "yearly";
+export const SUBSCRIPTION_CYCLE_PRICING_KEY: Record<TSubscriptionCycleEnum, TSubscriptionPricingKey> = {
+	MENSAL: "monthly",
+	ANUAL: "yearly",
+};
 
 // Consultoria (add-on FDE): produto Stripe separado, adicionado como 2ª line-item no
 // checkout. NÃO altera as capabilities do plano — apenas marca consultoriaAtiva +
@@ -336,12 +350,6 @@ export const AppSubscriptionPlans: {
 		description: string;
 		badgeColor: string;
 		badgeForeground: string;
-		routes: {
-			[key: string]: {
-				accessible: boolean;
-				redirectTo: string | null;
-			};
-		};
 		capabilities: TOrganizationConfiguration["recursos"];
 		pricingTableFeatures: {
 			checked: boolean;
@@ -369,56 +377,6 @@ export const AppSubscriptionPlans: {
 		description: "Comece hoje. Cashback + PDV em tablet + campanhas básicas. Sem integração obrigatória.",
 		badgeColor: "hsl(357 100% 45%)",
 		badgeForeground: "hsl(222.2 47.4% 11.2%)",
-		routes: {
-			dashboard: {
-				accessible: false,
-				redirectTo: "/dashboard/growth/cashback",
-			},
-			"/dashboard/sales": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/customers/segments": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/customers": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/management/partners": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/catalog/products": {
-				accessible: false,
-				redirectTo: "/dashboard/catalog/products",
-			},
-			"/dashboard/growth/campaigns": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/growth/cashback": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/management/sellers": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/management/goals": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/conversations": {
-				accessible: false,
-				redirectTo: "/dashboard/growth/campaigns",
-			},
-			"/dashboard/settings": {
-				accessible: true,
-				redirectTo: null,
-			},
-		},
 		capabilities: {
 			analytics: {
 				acesso: true,
@@ -488,56 +446,6 @@ export const AppSubscriptionPlans: {
 		description: "BI completo + IA que sugere ações + integração com ERP. O mais escolhido.",
 		badgeColor: "hsl(216 62% 38%)",
 		badgeForeground: "hsl(355.7 100% 97.3%)",
-		routes: {
-			dashboard: {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/sales": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/customers/segments": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/customers": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/management/partners": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/catalog/products": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/growth/campaigns": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/growth/cashback": {
-				accessible: true,
-				redirectTo: "/dashboard/growth/cashback",
-			},
-			"/dashboard/management/sellers": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/management/goals": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/conversations": {
-				accessible: false,
-				redirectTo: "/dashboard/growth/campaigns",
-			},
-			"/dashboard/settings": {
-				accessible: true,
-				redirectTo: null,
-			},
-		},
 		capabilities: {
 			analytics: {
 				acesso: true,
@@ -615,56 +523,6 @@ export const AppSubscriptionPlans: {
 		description: "Tudo do Crescimento + Hub de atendimentos + IA que responde clientes 24/7.",
 		badgeColor: "hsl(44 100% 50%)",
 		badgeForeground: "hsl(210 40% 98%)",
-		routes: {
-			dashboard: {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/sales": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/customers/segments": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/customers": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/management/partners": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/catalog/products": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/growth/campaigns": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/growth/cashback": {
-				accessible: true,
-				redirectTo: "/dashboard/growth/cashback",
-			},
-			"/dashboard/management/sellers": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/management/goals": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/conversations": {
-				accessible: true,
-				redirectTo: null,
-			},
-			"/dashboard/settings": {
-				accessible: true,
-				redirectTo: null,
-			},
-		},
 		capabilities: {
 			analytics: {
 				acesso: true,
@@ -745,27 +603,280 @@ export const AppSubscriptionPlans: {
 		},
 		color: "#FFB900",
 	},
+	CRM: {
+		name: "CRM",
+		description: "Cashback, campanhas no WhatsApp, segmentação de clientes e BI de vendas.",
+		badgeColor: "hsl(216 62% 38%)",
+		badgeForeground: "hsl(355.7 100% 97.3%)",
+		capabilities: {
+			analytics: {
+				acesso: true,
+			},
+			campanhas: {
+				acesso: true,
+				limiteAtivas: null,
+			},
+			programasCashback: {
+				acesso: true,
+			},
+			integracoes: {
+				acesso: true,
+				limiteAtivas: null,
+			},
+			relatoriosWhatsapp: {
+				acesso: true,
+			},
+			// A caixa de entrada e o agente de IA são o adicional HUB_ATENDIMENTOS.
+			hubAtendimentos: {
+				acesso: false,
+				limiteAtendentes: null,
+			},
+			iaAtendimento: {
+				acesso: false,
+				limiteCreditos: null,
+			},
+			erp: {
+				acesso: false,
+			},
+		},
+		pricingTableFeatures: [
+			{
+				checked: true,
+				label: "Programa de cashback e Ponto de Interação",
+			},
+			{
+				checked: true,
+				label: "Campanhas e jornadas automáticas no WhatsApp, sem limite",
+			},
+			{
+				checked: true,
+				label: "Segmentação RFM e públicos",
+			},
+			{
+				checked: true,
+				label: "BI completo de vendas, produtos e equipe",
+			},
+			{
+				checked: true,
+				label: "Integração com o sistema da loja",
+			},
+			{
+				checked: true,
+				label: "Relatórios de vendas no seu WhatsApp",
+			},
+		],
+		pricing: {
+			// O plano CRM cobra o mesmo price do antigo CRESCIMENTO enquanto não houver um próprio.
+			monthly: {
+				price: 399.9,
+				currency: "BRL",
+				interval: "month",
+				stripePriceId: (process.env.NEXT_PUBLIC_STRIPE_CRM_MONTHLY_PLAN_PRICE_ID ??
+					process.env.NEXT_PUBLIC_STRIPE_CRESCIMENTO_MONTHLY_PLAN_PRICE_ID) as string,
+			},
+			yearly: {
+				price: 3839.9,
+				currency: "BRL",
+				interval: "year",
+				stripePriceId: (process.env.NEXT_PUBLIC_STRIPE_CRM_YEARLY_PLAN_PRICE_ID ??
+					process.env.NEXT_PUBLIC_STRIPE_CRESCIMENTO_YEARLY_PLAN_PRICE_ID) as string,
+			},
+		},
+		color: "#24549C",
+	},
+	CRM_ERP: {
+		name: "CRM + ERP",
+		description: "Tudo do CRM, mais PDV, nota fiscal, estoque e financeiro no mesmo cadastro de clientes.",
+		badgeColor: "hsl(216 62% 28%)",
+		badgeForeground: "hsl(355.7 100% 97.3%)",
+		capabilities: {
+			analytics: {
+				acesso: true,
+			},
+			campanhas: {
+				acesso: true,
+				limiteAtivas: null,
+			},
+			programasCashback: {
+				acesso: true,
+			},
+			integracoes: {
+				acesso: true,
+				limiteAtivas: null,
+			},
+			relatoriosWhatsapp: {
+				acesso: true,
+			},
+			hubAtendimentos: {
+				acesso: false,
+				limiteAtendentes: null,
+			},
+			iaAtendimento: {
+				acesso: false,
+				limiteCreditos: null,
+			},
+			erp: {
+				acesso: true,
+			},
+		},
+		pricingTableFeatures: [
+			{
+				checked: true,
+				label: "Tudo que está no plano CRM",
+			},
+			{
+				checked: true,
+				label: "PDV (frente de caixa)",
+			},
+			{
+				checked: true,
+				label: "Emissão de nota fiscal",
+			},
+			{
+				checked: true,
+				label: "Controle de estoque",
+			},
+			{
+				checked: true,
+				label: "Financeiro",
+			},
+			{
+				checked: true,
+				label: "Cardápio digital, mesas e comandas",
+			},
+		],
+		pricing: {
+			monthly: {
+				price: 599.9,
+				currency: "BRL",
+				interval: "month",
+				stripePriceId: process.env.NEXT_PUBLIC_STRIPE_CRM_ERP_MONTHLY_PLAN_PRICE_ID as string,
+			},
+			yearly: {
+				price: 5759.9,
+				currency: "BRL",
+				interval: "year",
+				stripePriceId: process.env.NEXT_PUBLIC_STRIPE_CRM_ERP_YEARLY_PLAN_PRICE_ID as string,
+			},
+		},
+		color: "#1B3F75",
+	},
 };
 
-// Plano comercializado hoje. A separação em três tiers está deprecada: o self-serve já vende
-// apenas este plano (ver components/Subscription/PlanSelectionMenu.tsx) e os deals B2B seguem a
-// mesma regra — o admin não escolhe tier ao fechar um deal. Os outros tiers seguem no config
-// porque organizações antigas ainda os têm gravados em `assinaturaPlano` (capabilities/paywall).
-export const DEAL_PLAN_KEY: TAppSubscriptionPlanKey = "CRESCIMENTO";
+// Planos-base à venda, na ordem em que aparecem para o lojista.
+export const SUBSCRIPTION_BASE_PLAN_KEYS: TSubscriptionBasePlanKey[] = ["CRM", "CRM_ERP"];
 
-// Teto do mandato PIX Automático (Stripe), em centavos. Cobre o maior combo mensal
-// possível — plano ESCALA + consultoria (Gestor de Crescimento) — para que upgrade,
-// downgrade ou adição da consultoria nunca exijam reautorização do débito no banco.
+// Teto mensal de gasto com IA (USD estimados, ver lib/ai/agent/spend.ts) gravado em
+// `iaAtendimento.limiteCreditos` quando o Hub entra. Não é tier nem aparece para o lojista: é o
+// freio de uso justo de um adicional de preço fixo. O maior gasto mensal de uma organização até
+// nov/2026 foi de US$ 2,90.
+export const HUB_AI_MONTHLY_SPEND_LIMIT_USD = 25;
+
+type TSubscriptionAddonPricing = { price: number; currency: string; stripePriceId: string };
+
+// Adicionais sobre o plano-base. HUB_ATENDIMENTOS é o módulo de atendimentos DESTE app (caixa de
+// entrada + agente de IA) — nada a ver com o app recompracrm-chats, que divide a conta Stripe
+// RECOMPRACRM (produtos chats_*). CONSULTORIA é serviço: não libera recurso, só marca
+// `consultoriaAtiva`, e por isso não tem ciclo anual.
+export const SUBSCRIPTION_ADDONS: {
+	[key in TSubscriptionAddonKey]: {
+		name: string;
+		description: string;
+		capabilities: Partial<TOrganizationConfiguration["recursos"]>;
+		pricingTableFeatures: { checked: boolean; label: string }[];
+		pricing: { monthly: TSubscriptionAddonPricing; yearly: TSubscriptionAddonPricing | null };
+	};
+} = {
+	HUB_ATENDIMENTOS: {
+		name: "Hub de Atendimentos",
+		description: "A caixa de entrada do WhatsApp da loja para a equipe, com o agente de IA que responde os clientes.",
+		capabilities: {
+			hubAtendimentos: {
+				acesso: true,
+				limiteAtendentes: null,
+			},
+			iaAtendimento: {
+				acesso: true,
+				limiteCreditos: HUB_AI_MONTHLY_SPEND_LIMIT_USD,
+			},
+		},
+		pricingTableFeatures: [
+			{
+				checked: true,
+				label: "Caixa de entrada compartilhada no número da loja",
+			},
+			{
+				checked: true,
+				label: "Atendentes ilimitados",
+			},
+			{
+				checked: true,
+				label: "Agente de IA que consulta compras, produtos e cashback",
+			},
+			{
+				checked: true,
+				label: "A IA passa a conversa para a equipe quando precisa",
+			},
+		],
+		pricing: {
+			monthly: {
+				price: 299.9,
+				currency: "BRL",
+				stripePriceId: process.env.NEXT_PUBLIC_STRIPE_HUB_ATENDIMENTOS_MONTHLY_PRICE_ID as string,
+			},
+			yearly: {
+				price: 2879.9,
+				currency: "BRL",
+				stripePriceId: process.env.NEXT_PUBLIC_STRIPE_HUB_ATENDIMENTOS_YEARLY_PRICE_ID as string,
+			},
+		},
+	},
+	CONSULTORIA: {
+		name: CONSULTORIA_ADDON.name,
+		description: CONSULTORIA_ADDON.description,
+		capabilities: {},
+		pricingTableFeatures: CONSULTORIA_ADDON.pricingTableFeatures,
+		pricing: {
+			monthly: {
+				price: CONSULTORIA_ADDON.monthlyPrice,
+				currency: CONSULTORIA_ADDON.currency,
+				stripePriceId: CONSULTORIA_ADDON.stripePriceId,
+			},
+			yearly: null,
+		},
+	},
+};
+
+// Adicionais na ordem em que aparecem para o lojista.
+export const SUBSCRIPTION_ADDON_KEYS: TSubscriptionAddonKey[] = ["HUB_ATENDIMENTOS", "CONSULTORIA"];
+
+// O período de teste abre o plano-base escolhido e o Hub de Atendimentos: é quando o lojista
+// decide se quer o adicional. A consultoria é serviço e não entra em teste.
+export const FREE_TRIAL_ADDONS: TSubscriptionAddonKey[] = ["HUB_ATENDIMENTOS"];
+
+// Marca, no metadata da assinatura Stripe, as assinaturas do modelo plano-base + adicionais. Só
+// elas têm os recursos sincronizados a partir dos itens (lib/subscriptions/entitlements.ts): uma
+// assinatura sem a marca é de um tier antigo e o webhook não toca nos recursos dela.
+export const SUBSCRIPTION_PRICING_MODEL_METADATA_KEY = "pricingModel";
+export const SUBSCRIPTION_PRICING_MODEL_MODULAR = "MODULAR";
+
+// Plano-base padrão dos deals B2B. O admin escolhe o plano e os adicionais ao fechar o deal.
+export const DEAL_PLAN_KEY: TSubscriptionBasePlanKey = "CRM";
+
+// Teto do mandato PIX Automático (Stripe), em centavos. Cobre o maior combo mensal possível —
+// o plano-base mais caro com todos os adicionais — para que trocar de plano ou contratar um
+// adicional nunca exija reautorização do débito no banco. Nunca fica abaixo do teto dos mandatos
+// já emitidos (ESCALA + consultoria, R$ 1.399,90): um mandato novo com teto menor que o dos
+// antigos seria uma regressão silenciosa.
 // PIX Automático só se aplica ao ciclo mensal (payment_schedule "monthly").
-export const PIX_MANDATE_MAX_AMOUNT_CENTS = Math.round((AppSubscriptionPlans.ESCALA.pricing.monthly.price + CONSULTORIA_ADDON.monthlyPrice) * 100);
+const LEGACY_PIX_MANDATE_MAX_AMOUNT_CENTS = Math.round((AppSubscriptionPlans.ESCALA.pricing.monthly.price + CONSULTORIA_ADDON.monthlyPrice) * 100);
+const MODULAR_PIX_MANDATE_MAX_AMOUNT_CENTS = Math.round(
+	(Math.max(...SUBSCRIPTION_BASE_PLAN_KEYS.map((key) => AppSubscriptionPlans[key].pricing.monthly.price)) +
+		SUBSCRIPTION_ADDON_KEYS.reduce((total, key) => total + SUBSCRIPTION_ADDONS[key].pricing.monthly.price, 0)) *
+		100,
+);
+export const PIX_MANDATE_MAX_AMOUNT_CENTS = Math.max(LEGACY_PIX_MANDATE_MAX_AMOUNT_CENTS, MODULAR_PIX_MANDATE_MAX_AMOUNT_CENTS);
 
-export function getOrganizationAccessToRoute({ organizationPlan, path }: { organizationPlan: keyof typeof AppSubscriptionPlans; path: string }) {
-	const plan = AppSubscriptionPlans[organizationPlan];
-	const route = plan.routes[path as keyof typeof plan.routes];
-	if (!route) return { access: false, redirectTo: "/" };
-	if (!route.accessible) return { access: false, redirectTo: route.redirectTo || "/" };
-	return { access: true, redirectTo: null };
-}
 // `as const` deriva TAppRoutePath, que faz o mapa de ícones (config/app-route-icons)
 // ser verificado pelo compilador: rota nova sem ícone não compila.
 export const AppRoutes = [
