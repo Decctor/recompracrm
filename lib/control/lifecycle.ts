@@ -29,6 +29,8 @@ export type TControlLifecycleSnapshot = {
 	campanhasPreparadas: number;
 	fonteDadosDefinida: boolean;
 	whatsappOficialConectado: boolean;
+	/** Quando a conexão oficial ainda utilizável nasceu (reconectar reaproveita a linha). */
+	whatsappOficialConectadoEm: Date | null;
 	primeiraVendaEm: Date | null;
 	primeiroEnvioCampanhaEm: Date | null;
 	primeiroResgateEm: Date | null;
@@ -48,6 +50,13 @@ export type TControlMilestone = {
 	titulo: string;
 	alcancado: (snapshot: TControlLifecycleSnapshot) => boolean;
 	quando: (snapshot: TControlLifecycleSnapshot) => Date | null;
+	/**
+	 * O evento só sai se o marco aconteceu há no máximo estes dias (`quando`); mais antigo, ele é só
+	 * registrado como entregue. Para marcos cujo estado pode ser descoberto tarde: o WhatsApp oficial
+	 * ficou meses lido como "expirado" (data estimada pelo callback) em números que entregavam campanha,
+	 * e corrigir a leitura não pode mandar parabéns pela conexão de agosto.
+	 */
+	eventoAteDias?: number;
 };
 
 /** Na ordem do quadro. A posição é o que decide "mais adiantado". */
@@ -90,7 +99,8 @@ export const CONTROL_SUCCESS_MILESTONES: TControlMilestone[] = [
 		evento: "whatsapp_oficial_conectado",
 		titulo: "Conectou o WhatsApp oficial",
 		alcancado: (s) => s.whatsappOficialConectado,
-		quando: () => null,
+		quando: (s) => s.whatsappOficialConectadoEm,
+		eventoAteDias: 7,
 	},
 	{
 		chave: "primeira_venda",
@@ -179,6 +189,14 @@ export function shouldMoveSuccessStage({ estagioAtual, estagioAlvo }: { estagioA
 }
 
 const SILENT_BACKFILL_MIN_AGE_MS = 2 * DAY_MS;
+
+/** O evento de um marco novo ainda deve sair? Falso para os que têm `eventoAteDias` e ficaram para trás. */
+export function isMilestoneEventDue({ milestone, snapshot }: { milestone: TControlMilestone; snapshot: TControlLifecycleSnapshot }) {
+	if (milestone.eventoAteDias === undefined) return true;
+	const at = milestone.quando(snapshot);
+	if (!at) return true;
+	return snapshot.now.getTime() - at.getTime() <= milestone.eventoAteDias * DAY_MS;
+}
 
 /**
  * Primeira sincronização de uma organização que já existia: os marcos alcançados no passado são só

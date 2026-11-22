@@ -23,7 +23,8 @@ const readiness: TOnboardingReadiness = {
 	organizacao: { id: "preview", nome: "Loja de exemplo", atuacaoNicho: "VAREJO", dataOnboardingConclusao: null, produtosHabilitados: ["CRM", "ERP"] },
 	fonteDados: {
 		modo: "INTEGRACAO",
-		poi: { registroAtivo: false },
+		definida: true,
+		poi: { registroAtivo: false, vendasRecentes: 0 },
 		integracoes: [
 			{
 				id: "preview",
@@ -76,7 +77,8 @@ const readiness: TOnboardingReadiness = {
 			],
 		},
 	],
-	whatsapp: { numero: "CONECTADO", tipoConexao: "META_CLOUD_API", telefones: [], pagamento: "DESCONHECIDO", templates: [] },
+	campanhasManuais: { ativas: 0 },
+	whatsapp: { numero: "CONECTADO", tipoConexao: "META_CLOUD_API", oficialConectadoEm: new Date("2026-11-20T12:00:00Z"), telefones: [], pagamento: "DESCONHECIDO", templates: [] },
 	erp: {
 		acesso: true,
 		testeDisponivel: true,

@@ -57,7 +57,8 @@ function describeSource(readiness: TOnboardingReadiness): { value: string; tone:
 		case "POI":
 			return { value: "Registro no balcão", tone: "ok" };
 		default:
-			return { value: "Não definida", tone: "adiado" };
+			// Com ERP, as vendas nascem no PDV: a fonte existe mesmo sem integração nem balcão.
+			return readiness.fonteDados.definida ? { value: "PDV do ERP", tone: "ok" } : { value: "Não definida", tone: "adiado" };
 	}
 }
 
@@ -76,7 +77,9 @@ function describeWhatsapp(readiness: TOnboardingReadiness): { value: string; ton
 
 function describeCampaigns(readiness: TOnboardingReadiness): { value: string; tone: TReadinessTone } {
 	const total = readiness.campanhas.length;
-	if (total === 0) return { value: "Nenhuma por enquanto", tone: "adiado" };
+	const manual = readiness.campanhasManuais.ativas;
+	if (total === 0)
+		return manual > 0 ? { value: formatCount(manual, "ativa", "ativas"), tone: "ok" } : { value: "Nenhuma por enquanto", tone: "adiado" };
 	const active = readiness.campanhas.filter((campaign) => campaign.estado === "ATIVA").length;
 	const ready = readiness.campanhas.filter((campaign) => campaign.estado === "PRONTA").length;
 	if (active === total) return { value: `${formatCount(active, "enviando", "enviando")}`, tone: "ok" };

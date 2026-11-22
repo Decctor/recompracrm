@@ -14,7 +14,7 @@ export function getConclusionCopy(readiness: TOnboardingReadiness): { titulo: st
 				: "O cashback já vale para as próximas compras. Veja o que já funciona e qual é a próxima ação.",
 		};
 	}
-	if (importing || readiness.fonteDados.modo !== "NENHUMA") {
+	if (importing || readiness.fonteDados.definida) {
 		return {
 			titulo: "Sua base está chegando",
 			descricao: "As vendas estão entrando. Cashback e campanhas ficam preparados para quando você quiser ativar.",

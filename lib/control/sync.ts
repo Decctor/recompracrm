@@ -23,6 +23,7 @@ import {
 	CONTROL_COMMERCIAL_TRIAL_STAGE_NAME,
 	CONTROL_SUCCESS_BOARD_NAME,
 	controlOrganizationReference,
+	isMilestoneEventDue,
 	normalizeStageName,
 	planControlLifecycleSync,
 	resolveStuckNotices,
@@ -133,8 +134,9 @@ async function loadSnapshot(organization: TSyncOrganization, now: Date) {
 		onboardingConcluidoEm: organization.dataOnboardingConclusao,
 		cashbackConfigurado: readiness.cashback.estado !== "NAO_CONFIGURADO",
 		campanhasPreparadas,
-		fonteDadosDefinida: readiness.fonteDados.modo !== "NENHUMA",
-		whatsappOficialConectado: readiness.whatsapp.numero === "CONECTADO" && readiness.whatsapp.tipoConexao === "META_CLOUD_API",
+		fonteDadosDefinida: readiness.fonteDados.definida,
+		whatsappOficialConectado: readiness.whatsapp.oficialConectadoEm !== null,
+		whatsappOficialConectadoEm: readiness.whatsapp.oficialConectadoEm,
 		primeiraVendaEm: firstSale?.at ?? null,
 		primeiroEnvioCampanhaEm: firstDelivery?.at ?? null,
 		primeiroResgateEm: firstRedemption?.at ?? null,
@@ -260,13 +262,17 @@ export async function syncControlLifecycle({
 	}
 	for (const milestone of isBackfill ? [] : plan.novosMarcos) {
 		const occurredAt = (milestone.quando(snapshot) ?? now).toISOString();
-		await sendControlEvent({
-			evento: milestone.evento,
-			eventId: `${reference}:${milestone.chave}`,
-			oportunidadeId: opportunityId,
-			propriedades: { organizacaoId: organizationId, marco: milestone.chave },
-			dataOcorrencia: occurredAt,
-		});
+		// Marco descoberto tarde (ver `eventoAteDias`): fica na linha do tempo com a data real, mas sem
+		// evento, para nenhum workflow comemorar algo de meses atrás.
+		if (isMilestoneEventDue({ milestone, snapshot })) {
+			await sendControlEvent({
+				evento: milestone.evento,
+				eventId: `${reference}:${milestone.chave}`,
+				oportunidadeId: opportunityId,
+				propriedades: { organizacaoId: organizationId, marco: milestone.chave },
+				dataOcorrencia: occurredAt,
+			});
+		}
 		await logControlInteraction(
 			{ oportunidadeId: opportunityId, titulo: milestone.titulo, canal: "SITE", dataInteracao: occurredAt },
 			`${reference}:interacao:${milestone.chave}`,

@@ -5,6 +5,7 @@ import {
 	buildControlCustomFields,
 	CONTROL_SUCCESS_MILESTONES,
 	controlOrganizationReference,
+	isMilestoneEventDue,
 	planControlLifecycleSync,
 	shouldBackfillSilently,
 	shouldMoveSuccessStage,
@@ -23,6 +24,7 @@ function snapshot(overrides: Partial<TControlLifecycleSnapshot> = {}): TControlL
 		campanhasPreparadas: 0,
 		fonteDadosDefinida: false,
 		whatsappOficialConectado: false,
+		whatsappOficialConectadoEm: null,
 		primeiraVendaEm: null,
 		primeiroEnvioCampanhaEm: null,
 		primeiroResgateEm: null,
@@ -173,4 +175,19 @@ test("avisos de parado: pelo estado atual, só para conta viva, sem campanha ant
 	// Teste vencido e sem assinatura: nenhum empurrão. Pagante: sim.
 	assert.deepEqual(keys(trezz, new Date(NOW.getTime() - DAY)), []);
 	assert.deepEqual(keys(trezz, new Date(NOW.getTime() - DAY), "active"), ["whatsapp_pendente"]);
+});
+
+test("WhatsApp conectado descoberto tarde: registrado sem evento; conexão recente ainda gera evento", () => {
+	const milestone = CONTROL_SUCCESS_MILESTONES.find((item) => item.chave === "whatsapp_conectado");
+	assert.ok(milestone);
+	const connected = (daysAgo: number | null) =>
+		snapshot({ whatsappOficialConectado: true, whatsappOficialConectadoEm: daysAgo === null ? null : new Date(NOW.getTime() - daysAgo * DAY) });
+	assert.equal(isMilestoneEventDue({ milestone, snapshot: connected(1) }), true);
+	assert.equal(isMilestoneEventDue({ milestone, snapshot: connected(7) }), true);
+	assert.equal(isMilestoneEventDue({ milestone, snapshot: connected(90) }), false);
+	assert.equal(isMilestoneEventDue({ milestone, snapshot: connected(null) }), true);
+	// Marcos sem `eventoAteDias` seguem como antes, mesmo antigos.
+	const firstSale = CONTROL_SUCCESS_MILESTONES.find((item) => item.chave === "primeira_venda");
+	assert.ok(firstSale);
+	assert.equal(isMilestoneEventDue({ milestone: firstSale, snapshot: snapshot({ primeiraVendaEm: new Date(NOW.getTime() - 90 * DAY) }) }), true);
 });

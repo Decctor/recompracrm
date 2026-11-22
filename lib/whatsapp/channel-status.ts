@@ -2,6 +2,7 @@ import { db } from "@/services/drizzle";
 import { messageTemplates, whatsappConnections } from "@/services/drizzle/schema";
 import { and, eq, ne } from "drizzle-orm";
 import { resolveWhatsappChannelSteps, type TChannelActivationInput } from "./channel-activation";
+import { resolveMetaPhoneAccess } from "./meta-access";
 
 /**
  * Os cinco passos do canal (lib/whatsapp/channel-activation.ts) de cada número oficial da
@@ -21,13 +22,16 @@ export async function getWhatsappChannelStatus({ organizationId }: { organizatio
 		}),
 	]);
 
-	const now = Date.now();
+	const now = new Date();
 	const telefones = connections.flatMap((connection) =>
 		connection.telefones.map((phone) => {
 			const metadados = phone.metadados ?? {};
 			const perPhone = templates.map((template) => template.metadados.porNumeroTelefone?.[phone.id]).filter((entry) => !!entry);
+			// A data de expiração gravada é estimativa; a checagem de saúde depois dela vence (meta-access.ts).
+			// A falha da checagem segue em `saudeFalha`, com a mensagem da Meta.
+			const access = resolveMetaPhoneAccess({ dataExpiracao: connection.dataExpiracao, saude: metadados.saude, now });
 			const input: TChannelActivationInput = {
-				numero: connection.dataExpiracao && connection.dataExpiracao.getTime() <= now ? "EXPIRADO" : "CONECTADO",
+				numero: access === "EXPIRADO" ? "EXPIRADO" : "CONECTADO",
 				saudeFalha: metadados.saude?.status === "FALHA" ? (metadados.saude.mensagem ?? "A Meta recusou o acesso a este número.") : null,
 				meta: metadados.meta ?? null,
 				pagamento: metadados.pagamento?.status ?? "DESCONHECIDO",

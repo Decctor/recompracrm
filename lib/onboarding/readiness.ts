@@ -7,6 +7,8 @@ import { getLaunchChecklist, type TErpChannel } from "./erp-channels";
 import { getUsableOnboardingProducts } from "./erp-catalog";
 import { normalizeShopSettingsConfiguration } from "@/lib/shop/config";
 import { getStageDefinition } from "./journeys";
+import { isSalesSourceDefined, POI_RECENT_SALES_DAYS, resolveDataSourceMode, type TDataSourceMode } from "./data-source-mode";
+import { resolvePhoneNumberState, resolveWhatsappNumberState, type TWhatsappNumberState } from "@/lib/whatsapp/meta-access";
 import type { TOnboardingCampaignStateEnum, TOnboardingProductEnum, TWhatsappPaymentStatusEnum } from "@/schemas/enums";
 import type { TMessageTemplateMetadata } from "@/schemas/message-templates";
 import type { DB, DBTransaction } from "@/services/drizzle";
@@ -23,7 +25,7 @@ import {
 	whatsappConnections,
 	type TOrganizationOnboardingEntity,
 } from "@/services/drizzle/schema";
-import { and, count, desc, eq, gt, inArray, isNotNull, min } from "drizzle-orm";
+import { and, count, desc, eq, gt, gte, inArray, isNotNull, isNull, min } from "drizzle-orm";
 import {
 	isCampaignReady,
 	resolveCampaignDependencies,
@@ -35,7 +37,7 @@ import {
 
 export type TOnboardingReadinessExecutor = DB | DBTransaction;
 
-export type TOnboardingWhatsappNumberState = "NENHUM" | "CONECTADO" | "EXPIRADO" | "DESCONECTADO";
+export type TOnboardingWhatsappNumberState = TWhatsappNumberState;
 
 export type TOnboardingNextAction = { chave: string; rotulo: string; descricao: string; href: string };
 
@@ -48,8 +50,11 @@ export type TOnboardingReadiness = {
 		produtosHabilitados: TOnboardingProductEnum[];
 	};
 	fonteDados: {
-		modo: "NENHUMA" | "POI" | "INTEGRACAO" | "AMBOS";
-		poi: { registroAtivo: boolean };
+		/** Ver `resolveDataSourceMode`: o registro do balcão ligado sozinho não é escolha da loja. */
+		modo: TDataSourceMode;
+		/** Há por onde as vendas entrarem: `modo` diferente de NENHUMA ou o PDV do ERP. */
+		definida: boolean;
+		poi: { registroAtivo: boolean; vendasRecentes: number };
 		integracoes: Array<{
 			id: string;
 			tipo: TDataSourceIntegrationType;
@@ -86,9 +91,13 @@ export type TOnboardingReadiness = {
 		pronta: boolean;
 		dependencias: TOnboardingCampaignDependency[];
 	}>;
+	/** Campanhas criadas fora do onboarding (sem `chavePreset`). As de cima são só as semeadas. */
+	campanhasManuais: { ativas: number };
 	whatsapp: {
 		numero: TOnboardingWhatsappNumberState;
 		tipoConexao: "META_CLOUD_API" | "INTERNAL_GATEWAY" | null;
+		/** Primeira conexão oficial (Meta) ainda utilizável; reconectar reaproveita a linha. */
+		oficialConectadoEm: Date | null;
 		telefones: Array<{ id: string; nome: string; numero: string; pagamento: TWhatsappPaymentStatusEnum | "NAO_APLICAVEL" }>;
 		pagamento: TWhatsappPaymentStatusEnum | "NAO_APLICAVEL";
 		templates: Array<{ id: string; nome: string; status: "RASCUNHO" | "EM_ANALISE" | "APROVADO" | "REJEITADO" | "PAUSADO" }>;
@@ -107,28 +116,6 @@ export type TOnboardingReadiness = {
 	jornadas: TOrganizationOnboardingEntity[];
 	proximaAcao: TOnboardingNextAction | null;
 };
-
-function resolveWhatsappNumberState(
-	connections: Array<{
-		tipoConexao: "META_CLOUD_API" | "INTERNAL_GATEWAY";
-		dataExpiracao: Date | null;
-		gatewayStatus: string | null;
-		telefones: Array<{ id: string }>;
-	}>,
-): TOnboardingWhatsappNumberState {
-	const withPhones = connections.filter((connection) => connection.telefones.length > 0);
-	if (withPhones.length === 0) return "NENHUM";
-	const now = Date.now();
-	const healthy = withPhones.some((connection) => {
-		if (connection.tipoConexao === "META_CLOUD_API") return !connection.dataExpiracao || connection.dataExpiracao.getTime() > now;
-		return connection.gatewayStatus === "connected";
-	});
-	if (healthy) return "CONECTADO";
-	const expired = withPhones.some(
-		(connection) => connection.tipoConexao === "META_CLOUD_API" && connection.dataExpiracao && connection.dataExpiracao.getTime() <= now,
-	);
-	return expired ? "EXPIRADO" : "DESCONECTADO";
-}
 
 function summarizeTemplateStatus(
 	template: { status: "RASCUNHO" | "ATIVO" | "ARQUIVADO"; metadados: TMessageTemplateMetadata },
@@ -211,7 +198,7 @@ function resolveNextAction(readiness: Omit<TOnboardingReadiness, "proximaAcao">)
 		const pending = readiness.erp.pendenciasLancamento[0];
 		return pending ? { chave: pending.chave, rotulo: "Preparar canal", descricao: pending.rotulo, href: "/onboarding?produto=ERP&retomar=true" } : null;
 	}
-	if (readiness.fonteDados.modo === "NENHUMA") {
+	if (!readiness.fonteDados.definida) {
 		return {
 			chave: "fonte-dados",
 			rotulo: "Definir de onde vêm as vendas",
@@ -242,6 +229,7 @@ export async function getOnboardingReadiness({
 		columns: { id: true, nome: true, atuacaoNicho: true, configuracao: true, poiConfiguracao: true, dataOnboardingConclusao: true, periodoTesteFim: true, stripeSubscriptionId: true },
 	});
 	if (!organization) throw new Error("Organização não encontrada.");
+	const now = new Date();
 
 	const [
 		integrations,
@@ -254,6 +242,8 @@ export async function getOnboardingReadiness({
 		shop,
 		[servicePointsRow],
 		journeys,
+		[poiSalesRow],
+		[manualCampaignsRow],
 	] = await Promise.all([
 		getActiveDataSourceIntegrations({ executor, organizationId }),
 		executor
@@ -290,7 +280,7 @@ export async function getOnboardingReadiness({
 			.where(and(eq(campaigns.organizacaoId, organizationId), isNotNull(campaigns.chavePreset))),
 		executor.query.whatsappConnections.findMany({
 			where: eq(whatsappConnections.organizacaoId, organizationId),
-			columns: { id: true, tipoConexao: true, dataExpiracao: true, gatewayStatus: true },
+			columns: { id: true, tipoConexao: true, dataExpiracao: true, gatewayStatus: true, dataInsercao: true },
 			with: { telefones: { columns: { id: true, nome: true, numero: true, metadados: true } } },
 		}),
 		executor.query.shopSettings.findFirst({
@@ -302,6 +292,22 @@ export async function getOnboardingReadiness({
 			.from(servicePoints)
 			.where(and(eq(servicePoints.organizacaoId, organizationId), eq(servicePoints.ativo, true))),
 		executor.query.organizationOnboardings.findMany({ where: eq(organizationOnboardings.organizacaoId, organizationId) }),
+		// Venda do Ponto de Interação: processamento interno sem canal (PDV, comanda e loja gravam o seu).
+		executor
+			.select({ total: count() })
+			.from(sales)
+			.where(
+				and(
+					...getValidSaleConditions({ orgId: organizationId }),
+					eq(sales.processamentoOrigem, "INTERNO"),
+					isNull(sales.canal),
+					gte(sales.dataVenda, new Date(now.getTime() - POI_RECENT_SALES_DAYS * 24 * 60 * 60 * 1000)),
+				),
+			),
+		executor
+			.select({ total: count() })
+			.from(campaigns)
+			.where(and(eq(campaigns.organizacaoId, organizationId), isNull(campaigns.chavePreset), eq(campaigns.ativo, true))),
 	]);
 
 	const balancesWithValidity = cashbackProgram
@@ -328,13 +334,27 @@ export async function getOnboardingReadiness({
 	const templatesById = new Map(templates.map((template) => [template.id, { status: template.status, metadados: template.metadados }]));
 
 	const poiRegistroAtivo = organization.poiConfiguracao?.vendas?.registroAtivo === true;
-	const hasIntegration = integrations.length > 0;
-	const fonteDadosModo: TOnboardingReadiness["fonteDados"]["modo"] =
-		hasIntegration && poiRegistroAtivo ? "AMBOS" : hasIntegration ? "INTEGRACAO" : poiRegistroAtivo ? "POI" : "NENHUMA";
+	const poiVendasRecentes = poiSalesRow?.total ?? 0;
+	const crmAnswers = journeys.find((journey) => journey.produto === "CRM")?.respostas ?? null;
+	const fonteDadosModo = resolveDataSourceMode({
+		integracoesAtivas: integrations.length,
+		poiRegistroAtivo,
+		modoDeclarado: crmAnswers?.fonteDadosModo ?? null,
+		vendasPoiRecentes: poiVendasRecentes,
+	});
+	const poiEmUso = fonteDadosModo === "POI" || fonteDadosModo === "AMBOS";
 
-	const numero = resolveWhatsappNumberState(connections);
-	const primaryConnection = connections.find((connection) => connection.telefones.length > 0 && resolveWhatsappNumberState([connection]) === "CONECTADO") ?? connections.find((connection) => connection.telefones.length > 0) ?? null;
-	const primaryPhone = primaryConnection?.telefones[0] ?? null;
+	const numero = resolveWhatsappNumberState({ connections, now });
+	const usablePhones = connections.flatMap((connection) =>
+		connection.telefones
+			.filter((phone) => resolvePhoneNumberState({ connection, phone, now }) === "CONECTADO")
+			.map((phone) => ({ connection, phone })),
+	);
+	const primaryConnection = usablePhones[0]?.connection ?? connections.find((connection) => connection.telefones.length > 0) ?? null;
+	const primaryPhone = usablePhones[0]?.phone ?? primaryConnection?.telefones[0] ?? null;
+	const officialConnectedAt = usablePhones
+		.filter(({ connection }) => connection.tipoConexao === "META_CLOUD_API")
+		.reduce<Date | null>((earliest, { connection }) => (!earliest || connection.dataInsercao < earliest ? connection.dataInsercao : earliest), null);
 	const tipoConexao = primaryConnection?.tipoConexao ?? null;
 	const telefones = connections.flatMap((connection) =>
 		connection.telefones.map((phone) => ({
@@ -389,9 +409,12 @@ export async function getOnboardingReadiness({
 			const row: TOnboardingCampaignRow = campaign;
 			const ownConnection = connections.find((connection) => connection.telefones.some((phone) => phone.id === campaign.whatsappConexaoTelefoneId));
 			const ownPhone = ownConnection?.telefones.find((phone) => phone.id === campaign.whatsappConexaoTelefoneId);
+			// O estado é do número da campanha, não da conexão: numa conexão com um número sem acesso e
+			// outro saudável, só a campanha do primeiro fica sem canal.
+			const ownNumber = ownConnection && ownPhone ? resolvePhoneNumberState({ connection: ownConnection, phone: ownPhone, now }) : "NENHUM";
 			const context: TCampaignDependencyContext = {
 				...dependencyContextBase,
-				whatsapp: { numero: ownConnection ? resolveWhatsappNumberState([ownConnection]) : "NENHUM", tipoConexao: ownConnection?.tipoConexao ?? null, telefoneId: ownPhone?.id ?? null, pagamento: ownConnection?.tipoConexao === "INTERNAL_GATEWAY" ? "NAO_APLICAVEL" : ownPhone?.metadados?.pagamento?.status ?? "DESCONHECIDO" },
+				whatsapp: { numero: ownNumber, tipoConexao: ownConnection?.tipoConexao ?? null, telefoneId: ownPhone?.id ?? null, pagamento: ownConnection?.tipoConexao === "INTERNAL_GATEWAY" ? "NAO_APLICAVEL" : ownPhone?.metadados?.pagamento?.status ?? "DESCONHECIDO" },
 				envioHabilitadoPeloUsuario: enabledKeys.has(campaign.chavePreset) || campaign.ativo,
 			};
 			const dependencias = resolveCampaignDependencies({ campaign: row, context });
@@ -418,7 +441,8 @@ export async function getOnboardingReadiness({
 		},
 		fonteDados: {
 			modo: fonteDadosModo,
-			poi: { registroAtivo: poiRegistroAtivo },
+			definida: isSalesSourceDefined({ modo: fonteDadosModo, erpAcesso: organization.configuracao.recursos.erp.acesso }),
+			poi: { registroAtivo: poiRegistroAtivo, vendasRecentes: poiVendasRecentes },
 			integracoes: integrations.map((integration) => ({
 				id: integration.id,
 				tipo: integration.tipo,
@@ -433,7 +457,7 @@ export async function getOnboardingReadiness({
 			vendasValidas: salesRow?.total ?? 0,
 			clientes: clientsRow?.total ?? 0,
 			clientesComAniversario: birthdayRow?.total ?? 0,
-			coberturaInicio: coverage ?? (integrations.length === 0 && poiRegistroAtivo ? salesRow?.primeira ?? null : null),
+			coberturaInicio: coverage ?? (integrations.length === 0 && poiEmUso ? salesRow?.primeira ?? null : null),
 			coberturaParcial: partialCoverage,
 		},
 		cashback: {
@@ -443,9 +467,11 @@ export async function getOnboardingReadiness({
 			saldosComValidade: balancesWithValidity[0]?.total ?? 0,
 		},
 		campanhas,
+		campanhasManuais: { ativas: manualCampaignsRow?.total ?? 0 },
 		whatsapp: {
 			numero,
 			tipoConexao,
+			oficialConectadoEm: officialConnectedAt,
 			telefones,
 			pagamento,
 			templates: templates.map((template) => ({
