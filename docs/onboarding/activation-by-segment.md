@@ -337,24 +337,25 @@ by the same surface, and that surface depends on readiness telling the truth.
 | 1 | **Truthful readiness** | WhatsApp state from `metadados.saude` (readiness and `channel-status`, which fixes the live hub notice); data-source mode from answer, integrations and observed sales; all active campaigns counted. Pure resolvers with tests. | All |
 | 2 | **Activation model** | `lib/onboarding/activation.ts` (segment, ladders, next action, progress, activated, regression) with node:test; a facts loader shared with `lib/control/sync.ts`; GET route and hook. No UI. | All |
 | 3 | **Hub activation block (CRM)** | Block in the hub frame; replaces `SalesEmptyState` and the `WhatsappChannelNotice` slot; empty states with actions; `ActivationPanel` deleted. Checked at 1440 and 390 px. | A, B, F, E (CRM half) |
-| 4 | **Hub activation (ERP)** | Channel ladders and the week-2 counter; optional Control event `erp_semana_sem_venda` for a Control workflow. | D, E |
-| 5 | **WhatsApp stage CTA** (+ reorder, if approved) | Footer and stage; template submission at campaign seeding. | A, B |
-| 6 | **Trial narrative and `/subscription` loss summary** | Status copy by activation state; numbers per segment. The trial rule itself waits for decision 4. | All in trial |
+| 4 | **Hub activation (ERP)** | Channel ladders and the week-2 counter; regression after 7 days without a channel sale. No Control event for now. | D, E |
+| 5 | **WhatsApp stage CTA** | Until a number connects, "Conectar com a Meta" is the only primary action and the footer offers only "Conectar depois". The stage stays 5th. | A, B |
+| 6 | **Trial message and `/subscription` summary** | Status copy by activation state; what the store built, with exact numbers per segment. The trial rule stays manual. | All in trial |
 | 7 | **Celebrations** | Entry-stage impact number (A); first counter sale (B); first channel sale (D); first delivery and first repurchase moments. | All |
-| 8 | **Intent and trial goal** (+ recording, if consented) | Declarative step, goal counter. | A, B, D |
-| 9 | **Leaner company stage** | Logo and e-mail out of CRM now; CNPJ after decision 5. | All |
+| 8 | **Intent and trial goal** | Declarative step after the CRM/ERP choice; goal counter. No session recording. | A, B, D |
+| 9 | **Leaner company stage** | Logo, slug and e-mail out of the CRM journey. CNPJ stays required. | All |
 
-## 8. Decisions I need
+## 8. Decisions (22/11/2026)
 
-1. **Segments and activation:** approve the ladders in §5.1, in particular B (activation = first delivery,
-   with counter use in 2 weeks as the precondition) and D (activation = sales in week 2).
-2. **Regression mode:** the block reappears for activated orgs that stopped (recommended, given that 4 of 7
-   A orgs stopped), or it disappears for good once activated.
-3. **WhatsApp stage order:** move it to 3rd place, or keep it 5th with only the CTA change.
-4. **Trial rule (commercial):** an automatic extension while the pending step is external, a trial counted
-   from first value, or manual as today (narrative only).
-5. **CNPJ (contract/legal):** optional at signup or not. Also confirm the legacy CNPJ-password route is
-   dead.
-6. **Session recording (LGPD):** enable it on `/onboarding` and the Meta screens, with masking.
-7. **ERP stall event to Control:** add `erp_semana_sem_venda`. The Control workflow would be built by the
-   team.
+1. **Segments and activation ladders (§5.1):** approved.
+2. **Regression mode:** yes. The block comes back, with a single action, when an activated store stops.
+3. **WhatsApp stage order:** stays 5th; only the CTA changes. Moving it earlier would put the heaviest step
+   (8 Meta screens, a Facebook login and a card) before the only value previews in the journey (cashback and
+   ready campaigns), and the weeks are lost after the skip, not inside onboarding. Revisit if stores keep
+   skipping it after the CTA change.
+4. **Trial rule:** stays manual. Only the message changes (slice 6).
+5. **CNPJ:** stays required. Open: confirm the legacy route that uses the first 4 CNPJ digits as the
+   operator password (`app/api/sales/route.ts:757`) is dead.
+6. **Session recording:** left out. At about 2 signups a month replays would take months, the Meta screens
+   open in Meta's window, and the stage events, `organization_onboardings` and Control milestones already
+   show where a store stops.
+7. **ERP stall event to Control:** left out for now.
