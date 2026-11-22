@@ -1,4 +1,5 @@
 import { AppSubscriptionPlans, type TAppSubscriptionPlanKey } from "@/config";
+import { applySubscriptionSelectionToConfiguration, isSubscriptionBasePlanKey, normalizeSubscriptionAddons } from "@/lib/subscriptions/entitlements";
 import { hasChargeableStripeSubscription } from "@/lib/subscriptions/stripe-status";
 import type { TDealStatusEnum } from "@/schemas/enums";
 import { db } from "@/services/drizzle";
@@ -111,21 +112,27 @@ export async function linkOrganizationToDeal({
 	if (!organization) throw new Error("Organização não encontrada.");
 
 	const planKey = getDealPlanKey(deal);
-	const plan = AppSubscriptionPlans[planKey];
+	const addons = normalizeSubscriptionAddons(deal.adicionais);
+	// Deal novo: plano-base + adicionais do próprio deal. Deal anterior ao modelo (tier antigo
+	// em `planoBase`): o bloco de recursos do tier, como sempre foi.
+	const configuracao = isSubscriptionBasePlanKey(planKey)
+		? applySubscriptionSelectionToConfiguration({ configuracao: organization.configuracao, basePlan: planKey, addons })
+		: {
+				recursos: AppSubscriptionPlans[planKey].capabilities,
+				preferencias: {
+					...organization.configuracao.preferencias,
+					rastreamentoEstoque: AppSubscriptionPlans[planKey].capabilities.erp.acesso === true,
+				},
+				defaults: organization.configuracao.defaults,
+			};
 
 	await client
 		.update(organizations)
 		.set({
 			dealId: deal.id,
 			assinaturaPlano: planKey,
-			configuracao: {
-				recursos: plan.capabilities,
-				preferencias: {
-					...organization.configuracao.preferencias,
-					rastreamentoEstoque: plan.capabilities.erp.acesso === true,
-				},
-				defaults: organization.configuracao.defaults,
-			},
+			assinaturaAdicionais: isSubscriptionBasePlanKey(planKey) ? addons : [],
+			configuracao,
 			...(deal.stripeSubscriptionStatus
 				? {
 						stripeSubscriptionStatus: deal.stripeSubscriptionStatus,

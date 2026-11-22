@@ -524,6 +524,18 @@ export type TPaymentProviderEnum = z.infer<typeof PaymentProviderEnum>;
 export const StripeAccountEnum = z.enum(["SYNCRONIZA", "RECOMPRACRM"]);
 export type TStripeAccountEnum = z.infer<typeof StripeAccountEnum>;
 
+// Assinatura da plataforma: um plano-base e adicionais sobre ele. Os tiers antigos (ESSENCIAL,
+// CRESCIMENTO, ESCALA) não entram aqui de propósito — seguem válidos em `assinaturaPlano` para
+// quem já os tinha, mas não são mais vendidos nem aceitos como entrada.
+export const SubscriptionBasePlanEnum = z.enum(["CRM", "CRM_ERP"]);
+export type TSubscriptionBasePlanEnum = z.infer<typeof SubscriptionBasePlanEnum>;
+
+export const SubscriptionAddonEnum = z.enum(["HUB_ATENDIMENTOS", "CONSULTORIA"]);
+export type TSubscriptionAddonEnum = z.infer<typeof SubscriptionAddonEnum>;
+
+export const SubscriptionCycleEnum = z.enum(["MENSAL", "ANUAL"]);
+export type TSubscriptionCycleEnum = z.infer<typeof SubscriptionCycleEnum>;
+
 // ============================================================================
 // TENTATIVAS DE PAGAMENTO (terminal SmartPOS) — recompracrm-pos-android/docs/03 e 05.
 // Enum próprio de adquirente: `PaymentProviderEnum` acima descreve o gateway da organização; a

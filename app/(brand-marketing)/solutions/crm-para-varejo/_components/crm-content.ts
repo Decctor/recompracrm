@@ -1,3 +1,4 @@
+import { PRICE_LABELS, PRICING } from "@/app/_content/pricing";
 import type { FAQItem } from "@/app/_content/blog-posts";
 
 // Conteúdo de /solutions/crm-para-varejo. Mira "sistema de crm" (8.100/mês, KD 30), "crm whatsapp"
@@ -11,7 +12,7 @@ import type { FAQItem } from "@/app/_content/blog-posts";
 //   localização, compradores de um produto e campos personalizados;
 // - campanhas por gatilho com receita atribuída e incremental (sem métrica de ROI e sem grupo de
 //   controle); e-mail só como acompanhante do WhatsApp; sem SMS;
-// - caixa de entrada compartilhada com agente de IA (adicional sob consulta, fora do plano-base);
+// - caixa de entrada compartilhada com agente de IA (adicional Hub de Atendimentos, fora do plano-base);
 // - API oficial do WhatsApp com o número da própria loja (a conexão não oficial existe, mas não é
 //   promovida aqui);
 // - carteiras de clientes por vendedor e metas; sem funil de oportunidades B2B e sem NPS.
@@ -98,6 +99,6 @@ export const CRM_FAQS: FAQItem[] = [
 	{
 		question: "Quanto custa o CRM?",
 		answer:
-			"O plano Plataforma custa R$ 399,90 por mês, e o Plataforma + Gestor de Crescimento, em que a equipe do RecompraCRM opera as campanhas, R$ 899,90 por mês. Os dois têm a mesma plataforma, com 15 dias grátis, sem cartão de crédito e sem taxa de setup. A caixa de entrada com o agente de IA é um adicional sob consulta.",
+			`O plano CRM custa ${PRICE_LABELS.crmMonthly} por mês, sem limite de campanhas ou de clientes cadastrados. Com o Gestor de Crescimento, em que a equipe do RecompraCRM opera as campanhas, são ${PRICE_LABELS.consultoriaMonthly} a mais por mês. A caixa de entrada com o agente de IA é o adicional Hub de Atendimentos, por ${PRICE_LABELS.hubMonthly} a mais por mês. São ${PRICING.trialDays} dias grátis, sem cartão de crédito e sem taxa de setup.`,
 	},
 ];

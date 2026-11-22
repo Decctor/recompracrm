@@ -10,7 +10,7 @@ type PlanRestrictionComponentProps = {
 
 function PlanRestrictionComponent({
 	title = "Recurso Exclusivo",
-	message = "Este recurso está disponível apenas no plano CRESCIMENTO. Faça um upgrade para desbloquear todo o potencial.",
+	message = "Este recurso não faz parte da sua assinatura. Inclua-o pelo menu da assinatura, no selo do plano.",
 }: PlanRestrictionComponentProps) {
 	return (
 		<div className="relative flex h-full w-full grow flex-col items-center justify-center overflow-hidden bg-background p-6">
@@ -42,7 +42,7 @@ function PlanRestrictionComponent({
 				{/*
         <div className="mt-8">
             <Button className="bg-[#24549C] hover:bg-[#24549C]/90 text-white shadow-lg shadow-[#24549C]/20 transition-all hover:scale-105 active:scale-95">
-                Conhecer o Plano CRESCIMENTO
+                Ver planos e adicionais
             </Button>
         </div>
         */}

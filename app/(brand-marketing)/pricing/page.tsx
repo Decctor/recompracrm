@@ -1,7 +1,8 @@
 import { Dock } from "@/app/_components/Dock";
 import { MarketingFooter } from "@/app/_components/MarketingFooter";
 import {
-	CONSULTORIA_INCLUDED,
+	ERP_INCLUDED,
+	ERP_YEARLY_MONTHLY_EQUIVALENT,
 	PLATFORM_INCLUDED,
 	PLATFORM_YEARLY_MONTHLY_EQUIVALENT,
 	PLATFORM_YEARLY_SAVINGS_PERCENT,
@@ -21,7 +22,8 @@ import { PRICING_ADDONS, PRICING_COMPARISON, PRICING_FAQS, PRICING_PATH, PRICING
 const BASE_URL = "https://www.recompracrm.com.br";
 const monthly = formatPlanPrice(PRICING.platformMonthly);
 const title = `Preços do RecompraCRM: planos a partir de R$ ${monthly} por mês`;
-const description = `Quanto custa o RecompraCRM: Plataforma por R$ ${monthly}/mês ou plano anual com ${PLATFORM_YEARLY_SAVINGS_PERCENT}% de desconto, e Plataforma + Gestor de Crescimento por R$ ${formatPlanPrice(PRICING.bundleMonthly)}/mês. ${PRICING.trialDays} dias grátis, sem cartão e sem taxa de setup.`;
+const erpMonthly = formatPlanPrice(PRICING.erpMonthly);
+const description = `Quanto custa o RecompraCRM: CRM por R$ ${monthly}/mês e CRM + ERP por R$ ${erpMonthly}/mês, com ${PLATFORM_YEARLY_SAVINGS_PERCENT}% de desconto no plano anual. Preço fixo por loja, sem limite de campanhas ou clientes. ${PRICING.trialDays} dias grátis, sem cartão e sem taxa de setup.`;
 
 export const metadata: Metadata = {
 	title,
@@ -44,31 +46,18 @@ const productJsonLd = {
 	operatingSystem: "Web",
 	url: BASE_URL,
 	offers: [
-		{
-			"@type": "Offer",
-			name: "Plataforma (mensal)",
-			price: PRICING.platformMonthly.toFixed(2),
-			priceCurrency: "BRL",
-			priceSpecification: { "@type": "UnitPriceSpecification", price: PRICING.platformMonthly.toFixed(2), priceCurrency: "BRL", billingDuration: "P1M" },
-			url: `${BASE_URL}${PRICING_PATH}`,
-		},
-		{
-			"@type": "Offer",
-			name: "Plataforma (anual)",
-			price: PRICING.platformYearly.toFixed(2),
-			priceCurrency: "BRL",
-			priceSpecification: { "@type": "UnitPriceSpecification", price: PRICING.platformYearly.toFixed(2), priceCurrency: "BRL", billingDuration: "P1Y" },
-			url: `${BASE_URL}${PRICING_PATH}`,
-		},
-		{
-			"@type": "Offer",
-			name: "Plataforma + Gestor de Crescimento (mensal)",
-			price: PRICING.bundleMonthly.toFixed(2),
-			priceCurrency: "BRL",
-			priceSpecification: { "@type": "UnitPriceSpecification", price: PRICING.bundleMonthly.toFixed(2), priceCurrency: "BRL", billingDuration: "P1M" },
-			url: `${BASE_URL}${PRICING_PATH}`,
-		},
-	],
+		{ name: "CRM (mensal)", price: PRICING.platformMonthly, billingDuration: "P1M" },
+		{ name: "CRM (anual)", price: PRICING.platformYearly, billingDuration: "P1Y" },
+		{ name: "CRM + ERP (mensal)", price: PRICING.erpMonthly, billingDuration: "P1M" },
+		{ name: "CRM + ERP (anual)", price: PRICING.erpYearly, billingDuration: "P1Y" },
+	].map((offer) => ({
+		"@type": "Offer",
+		name: offer.name,
+		price: offer.price.toFixed(2),
+		priceCurrency: "BRL",
+		priceSpecification: { "@type": "UnitPriceSpecification", price: offer.price.toFixed(2), priceCurrency: "BRL", billingDuration: offer.billingDuration },
+		url: `${BASE_URL}${PRICING_PATH}`,
+	})),
 };
 
 const breadcrumbJsonLd = {
@@ -99,10 +88,10 @@ export default function PricingPage() {
 					<div className="mx-auto flex max-w-[860px] flex-col items-center px-6 text-center">
 						<p className={EYEBROW}>Preços</p>
 						<h1 className="text-balance text-[64px] font-semibold leading-[1.02] tracking-[-0.04em] max-md:text-[42px]">
-							Um preço por mês. A mesma plataforma nos dois planos.
+							Um preço fixo por loja. Sem limite de uso.
 						</h1>
 						<p className="mt-6 max-w-[600px] text-pretty text-[19px] leading-[1.55] text-[#5b6a70] max-md:text-[17px]">
-							Sem cobrança por cliente cadastrado ou por campanha. A diferença entre os planos é quem opera: você ou a equipe do RecompraCRM.
+							Sem cobrança por cliente cadastrado, por campanha ou por usuário. Escolha o plano e some os adicionais que fizerem sentido para a sua loja.
 						</p>
 					</div>
 				</section>
@@ -110,14 +99,20 @@ export default function PricingPage() {
 				<section id="planos" className="scroll-mt-[80px] bg-white pt-14">
 					<div className="mx-auto max-w-[1040px] px-6 max-md:px-4">
 						<PricingPlans
-							platformMonthly={monthly}
-							platformYearly={formatPlanPrice(PRICING.platformYearly)}
-							platformYearlyEquivalent={formatPlanPrice(PLATFORM_YEARLY_MONTHLY_EQUIVALENT)}
+							crm={{
+								monthly,
+								yearly: formatPlanPrice(PRICING.platformYearly),
+								yearlyEquivalent: formatPlanPrice(PLATFORM_YEARLY_MONTHLY_EQUIVALENT),
+								included: PLATFORM_INCLUDED,
+							}}
+							erp={{
+								monthly: erpMonthly,
+								yearly: formatPlanPrice(PRICING.erpYearly),
+								yearlyEquivalent: formatPlanPrice(ERP_YEARLY_MONTHLY_EQUIVALENT),
+								included: ERP_INCLUDED,
+							}}
 							yearlySavings={PLATFORM_YEARLY_SAVINGS_PERCENT}
-							bundleMonthly={formatPlanPrice(PRICING.bundleMonthly)}
 							trialDays={PRICING.trialDays}
-							platformIncluded={PLATFORM_INCLUDED}
-							consultoriaIncluded={CONSULTORIA_INCLUDED}
 						/>
 						<ul className="mt-8 flex list-none flex-wrap justify-center gap-x-6 gap-y-2 p-0 text-[13px] text-[#687a80]">
 							{PRICING_GUARANTEES.map((item) => (
@@ -134,9 +129,10 @@ export default function PricingPage() {
 					<div className={CONTAINER}>
 						<div className="max-w-[640px]">
 							<p className={EYEBROW}>Adicionais</p>
-							<h2 className={H2}>Para quem precisa de mais do que fidelização.</h2>
+							<h2 className={H2}>Some ao plano o que fizer sentido.</h2>
 							<p className="mt-5 text-pretty text-[17px] leading-[1.6] text-[#5b6a70]">
-								Estes módulos não entram no plano-base. Um especialista monta a proposta com a sua operação.
+								Os adicionais entram em qualquer um dos dois planos, pelo mesmo preço. O Hub de Atendimentos pode ser incluído ou retirado a qualquer momento, pela
+								própria plataforma.
 							</p>
 						</div>
 						<ul className="mt-12 grid list-none grid-cols-[repeat(auto-fit,minmax(min(100%,420px),1fr))] gap-4 p-0">
@@ -146,20 +142,28 @@ export default function PricingPage() {
 										<h3 className="text-[21px] font-semibold tracking-[-0.02em]">{addon.title}</h3>
 										<span className="text-[14px] font-semibold text-[#24549c]">{addon.price}</span>
 									</div>
-									<p className="mt-3 flex-1 text-[15px] leading-[1.6] text-[#5b6a70]">{addon.text}</p>
+									<p className="mt-3 text-[15px] leading-[1.6] text-[#5b6a70]">{addon.text}</p>
+									<ul className="mt-5 flex flex-1 list-none flex-col gap-2 p-0">
+										{addon.included.map((item) => (
+											<li key={item} className="flex gap-2.5 text-[15px] leading-[1.45] text-[#262626]">
+												<Check className="mt-0.5 size-4 flex-none text-[#24549c]" strokeWidth={2.25} aria-hidden />
+												{item}
+											</li>
+										))}
+									</ul>
 									<div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-[15px] font-medium">
 										<Link href={addon.href} className="inline-flex items-center gap-1.5 text-[#0e1214] hover:text-[#24549c]">
 											{addon.linkLabel}
 											<ArrowRight className="size-4" aria-hidden />
 										</Link>
 										<TrackedCta
-											href={whatsappHref(`Olá! Quero uma proposta do ${addon.title} do RecompraCRM.`)}
+											href={whatsappHref(addon.ctaText)}
 											ctaId={`pricing_addon_${addon.key}`}
 											location="pricing_addons"
 											slug={PRICING_SLUG}
 											className="inline-flex items-center gap-1.5 text-[#24549c] hover:underline"
 										>
-											Pedir proposta
+											{addon.ctaLabel}
 										</TrackedCta>
 									</div>
 								</li>
@@ -177,17 +181,17 @@ export default function PricingPage() {
 						<div className="mt-10 overflow-hidden rounded-[20px] border border-[#e3e8ea]">
 							<div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)] bg-[#f7f9f9] text-[13px] font-semibold text-[#4b585d]">
 								<span className="px-6 py-4 max-md:px-4" />
-								<span className="px-4 py-4 text-center">Plataforma</span>
-								<span className="px-4 py-4 text-center text-[#24549c]">+ Gestor</span>
+								<span className="px-4 py-4 text-center">CRM</span>
+								<span className="px-4 py-4 text-center text-[#24549c]">CRM + ERP</span>
 							</div>
 							{PRICING_COMPARISON.map((row) => (
 								<div key={row.feature} className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)] items-center border-t border-[#e3e8ea]">
 									<span className="px-6 py-4 text-[15px] max-md:px-4 max-md:text-[14px]">{row.feature}</span>
 									<span className="px-4 py-4 text-center">
-										<ComparisonCell value={row.platform} />
+										<ComparisonCell value={row.crm} />
 									</span>
 									<span className="px-4 py-4 text-center">
-										<ComparisonCell value={row.bundle} />
+										<ComparisonCell value={row.erp} />
 									</span>
 								</div>
 							))}

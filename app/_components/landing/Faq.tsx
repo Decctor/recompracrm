@@ -1,3 +1,4 @@
+import { PRICE_LABELS, PRICING } from "@/app/_content/pricing";
 import type { FAQItem } from "@/app/_content/blog-posts";
 import { Plus } from "lucide-react";
 import { Container, Eyebrow, SectionTitle } from "./primitives";
@@ -28,7 +29,7 @@ export const LANDING_FAQS: FAQItem[] = [
 	{
 		question: "Quanto custa o RecompraCRM?",
 		answer:
-			"O plano Plataforma custa R$399,90 por mês, no modelo em que você opera. O plano Plataforma + Gestor de Crescimento custa R$899,90 por mês e inclui uma equipe que opera as campanhas por você. Ambos têm 15 dias grátis, sem cartão e sem taxa de setup. O ERP tem proposta sob consulta.",
+			`O plano CRM custa ${PRICE_LABELS.crmMonthly} por mês, no modelo em que você opera. Com o Gestor de Crescimento, em que uma equipe opera as campanhas por você, são ${PRICE_LABELS.bundleMonthly} por mês. O plano CRM + ERP custa ${PRICE_LABELS.erpMonthly} por mês, e o Hub de Atendimentos é um adicional de ${PRICE_LABELS.hubMonthly} por mês. São ${PRICING.trialDays} dias grátis, sem cartão e sem taxa de setup.`,
 	},
 	{
 		question: "Preciso instalar algum aplicativo ou equipamento?",

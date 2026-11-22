@@ -41,7 +41,11 @@ export default function AdminOrganizationSummaryBlock({ organization }: AdminOrg
 							<Chip.Icon>
 								<Receipt className={CHIP_XS_ICON_CLASS} />
 							</Chip.Icon>
-							<Chip.Label weight="bold">PLANO {organization.assinaturaPlano}</Chip.Label>
+							<Chip.Label weight="bold">
+								PLANO {organization.assinaturaPlano}
+								{/* Adicionais contratados sobre o plano-base (espelho da assinatura no Stripe). */}
+								{(organization.assinaturaAdicionais ?? []).map((addon) => ` + ${addon}`).join("")}
+							</Chip.Label>
 						</Chip.Root>
 					) : null}
 				</div>

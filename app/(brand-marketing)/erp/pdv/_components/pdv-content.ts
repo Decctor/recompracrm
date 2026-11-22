@@ -1,3 +1,4 @@
+import { PRICE_LABELS, PRICING } from "@/app/_content/pricing";
 import type { FAQItem } from "@/app/_content/blog-posts";
 
 // Conteúdo da página /erp/pdv. Mira as buscas "sistema pdv", "pdv", "frente de caixa", "pdv para
@@ -112,6 +113,6 @@ export const PDV_FAQS: FAQItem[] = [
 	{
 		question: "Quanto custa o PDV?",
 		answer:
-			"O PDV faz parte do ERP do RecompraCRM, com proposta sob medida para a sua operação e implantação acompanhada. Fale com um especialista pelo WhatsApp para receber o valor.",
+			`O PDV faz parte do ERP do RecompraCRM. O plano CRM + ERP custa ${PRICE_LABELS.erpMonthly} por mês, com preço fixo por loja e implantação acompanhada. São ${PRICING.trialDays} dias grátis, sem cartão de crédito.`,
 	},
 ];

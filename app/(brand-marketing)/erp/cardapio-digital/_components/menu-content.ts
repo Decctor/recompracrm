@@ -1,3 +1,4 @@
+import { PRICE_LABELS } from "@/app/_content/pricing";
 import type { FAQItem } from "@/app/_content/blog-posts";
 
 // Conteúdo da página /erp/cardapio-digital. Mira "cardápio digital" (6.600/mês), "cardápio online"
@@ -113,7 +114,7 @@ export const MENU_FAQS: FAQItem[] = [
 	{
 		question: "Tem cobrança por pedido?",
 		answer:
-			"Não. Não há comissão nem taxa por pedido feito na loja digital. Ela faz parte do ERP do RecompraCRM, com proposta sob medida para a sua operação.",
+			`Não. Não há comissão nem taxa por pedido feito na loja digital. Ela faz parte do plano CRM + ERP do RecompraCRM, que custa ${PRICE_LABELS.erpMonthly} por mês.`,
 	},
 	{
 		question: "O cliente paga online?",

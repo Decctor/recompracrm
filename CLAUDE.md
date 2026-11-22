@@ -370,6 +370,21 @@ export function NewFoo({ closeModal, callbacks }: NewFooProps) {
 - **Invoice lines no longer carry `price`** (API 2025-03-31+). The price ID is in `line.pricing.price_details.price`, and each webhook endpoint renders events in its own API version, so read both shapes. Yearly is detected by the billed period, not `price.recurring`. Price-ID comparisons must include the legacy account's IDs (`SYNCRONIZA_CONSULTORIA_PRICE_ID` in the webhook), or old invoices are misread.
 - The `RECOMPRACRM` account is shared with the `recompracrm-chats` app (`chats_*` products, its own portal configuration). This app's portal sessions use the account's **default** configuration; don't make another one default.
 
+### What is sold: base plans + add-ons
+
+**Location**: `config/index.ts` (`AppSubscriptionPlans`, `SUBSCRIPTION_ADDONS`), `lib/subscriptions/entitlements.ts` (pure, tested), `lib/subscriptions/entitlements-sync.ts`, `app/api/organizations/subscription/addons/`. Full reasoning in `docs/dev-planning/pricing-model-redesign-plan.md`.
+
+- **Two base plans and two add-ons, flat, per store, with no usage limits.** `CRM` and `CRM_ERP` are the base plans; `HUB_ATENDIMENTOS` (inbox + AI agent) and `CONSULTORIA` (a service, monthly only) are add-ons. Never reintroduce a tier or a cap on campaigns, customers, users or attendants. The one ceiling is `HUB_AI_MONTHLY_SPEND_LIMIT_USD`, an internal fair-use guard on AI spend that is never shown as a tier.
+- **`ESSENCIAL`, `CRESCIMENTO` and `ESCALA` are legacy.** They stay in `AppSubscriptionPlans` because existing organizations and deals carry them, and they keep their price. They are not sold and no route accepts them as input.
+- **Capabilities are a function of base plan + add-ons** (`resolveSubscriptionEntitlements`). The trial, the deals and the webhook all go through it; don't copy a capability block by hand.
+- **The Stripe subscription is the source of truth.** The checkout and the add-on route only change the subscription; `customer.subscription.created/updated` reads the items and writes `assinaturaPlano`, `assinaturaAdicionais` and `configuracao.recursos`. Nothing about the plan is written before payment.
+- **Only marked subscriptions are synced.** The checkout stamps `metadata.pricingModel = "MODULAR"`. Without the mark the webhook leaves capabilities alone — that is how a legacy subscriber keeps what they have, and why the `CRM` plan can reuse the old `CRESCIMENTO` price ID.
+- **Capabilities are rewritten only when plan or add-ons change**, so a manual grant in the admin modal survives renewals and status events.
+- **Add-ons are bought in the app, not in the billing portal** (`SubscriptionManagementMenu`). Adding charges the prorated amount now and fails cleanly if the charge fails; removing takes effect now and leaves a credit. The portal's default configuration is shared with `recompracrm-chats` and stays for payment method and cancellation.
+- **`HUB_ATENDIMENTOS` is this app's own module**, not the `recompracrm-chats` app. Its Stripe product must not use the `chats_` prefix.
+- **Partner commission:** the bonus rule applies to the base plan only; the Hub pays a flat rate (`PLATFORM_PARTNER_ADDON_INVOICE_BPS`); consulting pays nothing. The invoice number that decides the bonus counts only invoices with a base-plan line (`lib/platform-partnerships/commission.ts`).
+- **Public prices come from the config** through `app/_content/pricing.ts` (`PRICING`, `PRICE_LABELS`). Don't hardcode a price in page copy.
+
 ---
 
 ## Syncroniza Control Lifecycle Sync Conventions

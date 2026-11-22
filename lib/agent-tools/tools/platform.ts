@@ -132,6 +132,7 @@ export const platformOrganizationHealthTool = defineAgentTool({
 				nome: true,
 				slug: true,
 				assinaturaPlano: true,
+				assinaturaAdicionais: true,
 				stripeSubscriptionStatus: true,
 				assinaturaPeriodoPagoFim: true,
 				assinaturaAcessoProvisorioFim: true,
@@ -191,6 +192,7 @@ export const platformOrganizationHealthTool = defineAgentTool({
 			},
 			assinatura: {
 				plano: organization.assinaturaPlano,
+				adicionais: organization.assinaturaAdicionais,
 				status: organization.stripeSubscriptionStatus,
 				periodoPagoFim: organization.assinaturaPeriodoPagoFim,
 				acessoProvisorioFim: organization.assinaturaAcessoProvisorioFim,
