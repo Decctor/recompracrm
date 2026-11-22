@@ -5,6 +5,7 @@ import type { TUpsertOnboardingCashbackInput, TUpsertOnboardingCashbackOutput } 
 import type { TCreateJourneyInput, TCreateJourneyOutput } from "@/app/api/organizations/onboarding/journeys/route";
 import type { TUpdateJourneyProgressInput, TUpdateJourneyProgressOutput } from "@/app/api/organizations/onboarding/progress/route";
 import type { TConfirmWhatsappPaymentInput, TConfirmWhatsappPaymentOutput } from "@/app/api/organizations/onboarding/whatsapp-payment/route";
+import type { TRequestWhatsappAssistOutput } from "@/app/api/organizations/onboarding/whatsapp-assist/route";
 import axios from "axios";
 
 export async function createOnboardingJourney(input: TCreateJourneyInput) {
@@ -39,5 +40,10 @@ export async function enableOnboardingCampaigns(input: TEnableOnboardingCampaign
 
 export async function confirmWhatsappPayment(input: TConfirmWhatsappPaymentInput) {
 	const { data } = await axios.put<TConfirmWhatsappPaymentOutput>("/api/organizations/onboarding/whatsapp-payment", input);
+	return data;
+}
+
+export async function requestWhatsappAssist() {
+	const { data } = await axios.post<TRequestWhatsappAssistOutput>("/api/organizations/onboarding/whatsapp-assist", {});
 	return data;
 }

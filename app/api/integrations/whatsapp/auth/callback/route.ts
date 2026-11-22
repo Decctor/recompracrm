@@ -1,5 +1,6 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { notifyControlWhatsappConnectFailure } from "@/lib/control/notices";
 import {
 	applyWhatsappSubmissionResultToMetadata,
 	buildWhatsappSubmissionPhoneMetadata,
@@ -8,257 +9,229 @@ import {
 import { getOrganizationWhatsappPhones } from "@/lib/whatsapp/organization-phones";
 import { lockConnectedWhatsappPhone, mergeMessageTemplatePhoneMetadataSql } from "@/lib/db-utils";
 import { consumeOAuthRedirect } from "@/lib/integrations/oauth-redirect";
+import { reconcileOnboardingCampaigns } from "@/lib/onboarding/reconcile";
 import { buildWhatsappPhoneSyncMetadataPatch } from "@/lib/whatsapp/connection-phone-metadata";
+import { runWhatsappConnectionsHealthCheck } from "@/lib/whatsapp/connection-health";
+import { submitWhatsappConnectionTestTemplate } from "@/lib/whatsapp/connection-test";
+import {
+	buildWhatsappConnectReturnPath,
+	classifyMetaCallbackError,
+	planWhatsappConnectionUpsert,
+	type TWhatsappConnectErrorCode,
+	type TWhatsappConnectSuccess,
+} from "@/lib/whatsapp/meta-connect";
 import { triggerSmbAppContactsSync } from "@/lib/whatsapp/smb-contacts-sync";
 import { db } from "@/services/drizzle";
-import { messageTemplates, type TNewWhatsappConnection, whatsappConnectionPhones, whatsappConnections } from "@/services/drizzle/schema";
+import { messageTemplates, whatsappConnectionPhones, whatsappConnections } from "@/services/drizzle/schema";
 import { campaigns } from "@/services/drizzle/schema/campaigns";
-import { and, eq, isNull } from "drizzle-orm";
-
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import dayjs from "dayjs";
+import { after } from "next/server";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
-import { WHATSAPP_OAUTH_REDIRECT_COOKIE_NAME } from "../route";
+import { WHATSAPP_OAUTH_REDIRECT_COOKIE_NAME, WHATSAPP_OAUTH_STATE_COOKIE_NAME } from "../route";
 
-type TWhatsappIntegrationData = {
-	tipo: "WHATSAPP";
-	organizacaoId: string;
-	token: string;
-	dataExpiracao: string;
-	metaAutorAppId: string;
-	metaEscopo: string[];
-	telefones: { nome: string; whatsappBusinessAccountId: string; whatsappTelefoneId: string; numero: string }[];
-};
+const GRAPH = "https://graph.facebook.com/v21.0";
+const LOG = "[WHATSAPP_CONNECT_CALLBACK]";
+const DEFAULT_RETURN = "/dashboard/settings?view=meta-oauth";
 
+type TMetaPhone = { nome: string; whatsappBusinessAccountId: string; whatsappTelefoneId: string; numero: string };
+
+/**
+ * Volta do fluxo da Meta. Toda saída é um redirect para a tela de onde a pessoa veio (onboarding ou
+ * configurações) com o resultado na URL (`lib/whatsapp/meta-connect.ts`) — nunca um JSON cru.
+ */
 async function getWhatsappAuthCallbackRoute(req: NextRequest) {
-	// Get user session to determine organization
+	const cookieStore = await cookies();
+	const returnPath = consumeOAuthRedirect(cookieStore, WHATSAPP_OAUTH_REDIRECT_COOKIE_NAME, DEFAULT_RETURN);
+	const expectedState = cookieStore.get(WHATSAPP_OAUTH_STATE_COOKIE_NAME)?.value ?? null;
+	cookieStore.delete(WHATSAPP_OAUTH_STATE_COOKIE_NAME);
+	const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+	const back = (outcome: { erro: TWhatsappConnectErrorCode } | { sucesso: TWhatsappConnectSuccess; numeros: number }) =>
+		NextResponse.redirect(new URL(buildWhatsappConnectReturnPath(returnPath, outcome), appUrl));
+
 	const sessionUser = await getCurrentSessionUncached();
-	if (!sessionUser) {
-		return NextResponse.json({ error: "Você precisa estar autenticado para conectar o WhatsApp." }, { status: 401 });
-	}
-	const userOrgId = sessionUser.membership?.organizacao.id;
-	if (!userOrgId) {
-		return NextResponse.json({ error: "Você precisa estar vinculado a uma organização para conectar o WhatsApp." }, { status: 400 });
-	}
+	const organizationId = sessionUser?.membership?.organizacao.id ?? null;
+	if (!sessionUser || !organizationId) return back({ erro: "sessao" });
+
+	// Falha que vale um empurrão do time (Control): a pessoa tentou e não conseguiu. Nunca lança.
+	const fail = (erro: TWhatsappConnectErrorCode, detail?: unknown) => {
+		if (detail) console.error(`${LOG} ${erro}:`, detail);
+		after(() => notifyControlWhatsappConnectFailure({ organizationId, codigo: erro }));
+		return back({ erro });
+	};
+
 	const searchParams = req.nextUrl.searchParams;
-	console.log("[INFO] [WHATSAPP_CONNECT_CALLBACK] Query Params:", Object.fromEntries(searchParams));
+	const metaError = classifyMetaCallbackError(searchParams);
+	if (metaError) return fail(metaError, searchParams.get("error_description"));
+
 	const code = searchParams.get("code");
+	if (!code) return fail("meta", "Volta da Meta sem code.");
 	const state = searchParams.get("state");
-	void state;
-	if (!code) {
-		return NextResponse.json({ error: "Authorization code is missing." }, { status: 400 });
-	}
+	if (!expectedState || state !== expectedState) return back({ erro: "expirado" });
 
-	const appId = process.env.NEXT_PUBLIC_META_APP_ID;
-	const appSecret = process.env.META_APP_SECRET;
-	const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/whatsapp/auth/callback`;
+	const appId = process.env.NEXT_PUBLIC_META_APP_ID as string;
+	const appSecret = process.env.META_APP_SECRET as string;
+	const redirectUri = `${appUrl}/api/integrations/whatsapp/auth/callback`;
 
-	console.log("[INFO] [WHATSAPP_CONNECT_CALLBACK] Config:", {
-		appId,
-		appSecretPresent: !!appSecret,
-		redirectUri,
-		codeLength: code.length,
-	});
-
-	// O redirect_uri deve ser um dos URIs configurados no seu painel da Meta
-	let tokens: any; // Usando any temporariamente para lidar com a resposta manual
-	let accessToken: string | undefined;
-	let accessTokenExpiresAt: Date | undefined;
-
+	// 1. Código → token.
+	let accessToken: string;
+	let accessTokenExpiresAt: Date;
 	try {
-		// Tentativa manual de troca de token para debug detalhado e contorno de erro da lib
-		const tokenUrl = new URL("https://graph.facebook.com/v21.0/oauth/access_token");
-		tokenUrl.searchParams.set("client_id", appId as string);
+		const tokenUrl = new URL(`${GRAPH}/oauth/access_token`);
+		tokenUrl.searchParams.set("client_id", appId);
 		tokenUrl.searchParams.set("redirect_uri", redirectUri);
-		tokenUrl.searchParams.set("client_secret", appSecret as string);
+		tokenUrl.searchParams.set("client_secret", appSecret);
 		tokenUrl.searchParams.set("code", code);
-
-		console.log("[INFO] [WHATSAPP_CONNECT_CALLBACK] Trocando código por token manualmente:", tokenUrl.toString().replace(appSecret as string, "***"));
-
-		const response = await fetch(tokenUrl.toString());
-		const data = await response.json();
-
-		console.log("[INFO] [WHATSAPP_CONNECT_CALLBACK] Resposta da troca de token:", data);
-
-		if (data.error) {
-			throw {
-				message: data.error.message,
-				data: data.error,
-				status: 400,
-			};
-		}
-
-		// Mapeia a resposta manual para o formato esperado
+		const data = (await (await fetch(tokenUrl.toString())).json()) as { access_token?: string; expires_in?: number; error?: unknown };
+		if (data.error || !data.access_token) return fail("meta", data.error ?? "Resposta sem access_token.");
 		accessToken = data.access_token;
-		if (data.expires_in) {
-			accessTokenExpiresAt = dayjs().add(data.expires_in, "seconds").toDate();
-		} else {
-			// Se não vier expires_in, definimos um padrão de 60 dias (token de longa duração comum no FB)
-			console.warn("[WARN] 'expires_in' não retornado pela Meta. Usando padrão de 60 dias.");
-			accessTokenExpiresAt = dayjs().add(60, "days").toDate();
-		}
-
-		// Simula o objeto tokens para compatibilidade se necessário, mas já extraímos o que precisamos
-		tokens = {
-			accessToken: () => accessToken,
-			accessTokenExpiresAt: () => accessTokenExpiresAt,
-		};
-	} catch (error: any) {
-		console.error("[ERROR] [WHATSAPP_CONNECT_CALLBACK] Error validating authorization code:", {
-			message: error.message,
-			status: error.status,
-			data: error.data,
-			stack: error.stack,
-		});
-		return NextResponse.json(
-			{
-				error: "Falha ao validar código de autorização",
-				details: error.data || error.message,
-				hint: "Verifique se o redirect_uri no Meta App Dashboard corresponde exatamente a: " + redirectUri,
-			},
-			{ status: 400 },
-		);
+		// Sem `expires_in`, o padrão da Meta para token de longa duração: 60 dias.
+		accessTokenExpiresAt = dayjs()
+			.add(data.expires_in ?? 60 * 24 * 3600, "seconds")
+			.toDate();
+	} catch (error) {
+		return fail("meta", error);
 	}
 
-	console.log("[INFO] [WHATSAPP_CONNECT_CALLBACK] Tokens obtidos com sucesso:", {
-		hasAccessToken: !!accessToken,
-		accessTokenExpiresAt,
-		tokenLength: accessToken?.length,
-	});
+	// 2. Contas (WABA) que a autorização liberou para mensagens.
+	const debugData = (await (
+		await fetch(`https://graph.facebook.com/debug_token?input_token=${accessToken}&access_token=${appId}|${appSecret}`)
+	).json()) as {
+		data?: { scopes?: string[]; granular_scopes?: Array<{ scope: string; target_ids?: string[] }> };
+	};
+	const accountIds = debugData.data?.granular_scopes?.find((scope) => scope.scope === "whatsapp_business_messaging")?.target_ids ?? [];
+	if (accountIds.length === 0) return fail("sem-permissao", debugData);
 
-	const debugUrl = `https://graph.facebook.com/debug_token?input_token=${accessToken}&access_token=${appId}|${appSecret}`;
-	const debugResponse = await fetch(debugUrl);
-	const debugData = await debugResponse.json();
-
-	console.log("[INFO] [WHATSAPP_CONNECT_CALLBACK] Debug Data:", debugData);
-	console.log("[INFO] [WHATSAPP_CONNECT_CALLBACK] Debug Data Granular Scopes:", debugData.data?.granular_scopes);
-
-	const whatsappMessagingTargeIds =
-		debugData.data?.granular_scopes.find((scope: any) => scope.scope === "whatsapp_business_messaging")?.target_ids ?? [];
-	const phones = (
+	// 3. Inscreve o app em cada conta e lista os números Cloud API.
+	const phones: TMetaPhone[] = (
 		await Promise.all(
-			whatsappMessagingTargeIds.map(async (targetId: string) => {
-				const whatsappBusinessAccountId = targetId;
-
+			accountIds.map(async (whatsappBusinessAccountId) => {
 				try {
-					const subscribeUrl = `https://graph.facebook.com/v21.0/${whatsappBusinessAccountId}/subscribed_apps`;
-					const subscribeResponse = await fetch(subscribeUrl, {
-						method: "POST",
-						headers: {
-							Authorization: `Bearer ${accessToken}`,
-						},
-					});
-					const subscribeResult = await subscribeResponse.json();
-
-					if (subscribeResult.success) {
-						console.log(`[SUCCESS] App inscrito com sucesso no WABA: ${whatsappBusinessAccountId}`);
-					} else {
-						console.error("[ERROR] Falha ao inscrever app no WABA:", subscribeResult);
-					}
+					const subscribe = (await (
+						await fetch(`${GRAPH}/${whatsappBusinessAccountId}/subscribed_apps`, { method: "POST", headers: { Authorization: `Bearer ${accessToken}` } })
+					).json()) as { success?: boolean };
+					if (!subscribe.success) console.error(`${LOG} Falha ao inscrever o app no WABA ${whatsappBusinessAccountId}:`, subscribe);
 				} catch (error) {
-					console.error(`[ERROR] Erro na requisição de subscribed_apps para ${whatsappBusinessAccountId}:`, error);
+					console.error(`${LOG} Erro ao inscrever o app no WABA ${whatsappBusinessAccountId}:`, error);
 				}
-
-				const phoneNumbersUrl = `https://graph.facebook.com/v21.0/${whatsappBusinessAccountId}/phone_numbers?access_token=${accessToken}`;
-				const phoneNumbersResponse = await fetch(phoneNumbersUrl);
-				const phoneNumbersDataResult = await phoneNumbersResponse.json();
-				const phoneNumbersList = (phoneNumbersDataResult.data ?? []) as Array<{
-					id: string;
-					verified_name?: string | null;
-					display_phone_number: string;
-					platform_type: string;
-				}>;
-				console.log(`[INFO] [WHATSAPP_CONNECT] Phone Numbers Data for ${whatsappBusinessAccountId}:`, phoneNumbersList);
-				return phoneNumbersList
-					.filter((phoneNumbersData) => phoneNumbersData.platform_type === "CLOUD_API")
-					.map((phoneNumbersData) => ({
-						nome: phoneNumbersData.verified_name?.trim() || phoneNumbersData.display_phone_number,
+				const list = (await (await fetch(`${GRAPH}/${whatsappBusinessAccountId}/phone_numbers?access_token=${accessToken}`)).json()) as {
+					data?: Array<{ id: string; verified_name?: string | null; display_phone_number: string; platform_type: string }>;
+				};
+				return (list.data ?? [])
+					.filter((phone) => phone.platform_type === "CLOUD_API")
+					.map((phone) => ({
+						nome: phone.verified_name?.trim() || phone.display_phone_number,
 						whatsappBusinessAccountId,
-						whatsappTelefoneId: phoneNumbersData.id,
-						numero: phoneNumbersData.display_phone_number,
+						whatsappTelefoneId: phone.id,
+						numero: phone.display_phone_number,
 					}));
 			}),
 		)
 	).flat();
+	if (phones.length === 0) return fail("sem-numero");
 
-	if (phones.length === 0) {
-		console.error("[ERROR] [WHATSAPP_CONNECT_CALLBACK] Nenhum número Cloud API encontrado nos WABAs autorizados.");
-		return NextResponse.json(
-			{
-				error: "Nenhum número de WhatsApp Cloud API foi encontrado na conta conectada.",
-				hint: "Verifique se o número está registrado na API Cloud da Meta e se as permissões de mensagens foram concedidas.",
-			},
-			{ status: 400 },
-		);
-	}
-
+	// 4. Grava: reconectar renova a conexão que já tem esses números (sem duplicar telefones).
 	const onboardingAt = new Date();
+	const existing = await db
+		.select({
+			conexaoId: whatsappConnectionPhones.conexaoId,
+			telefoneId: whatsappConnectionPhones.id,
+			whatsappTelefoneId: whatsappConnectionPhones.whatsappTelefoneId,
+		})
+		.from(whatsappConnectionPhones)
+		.innerJoin(whatsappConnections, eq(whatsappConnections.id, whatsappConnectionPhones.conexaoId))
+		.where(
+			and(
+				eq(whatsappConnections.organizacaoId, organizationId),
+				eq(whatsappConnections.tipoConexao, "META_CLOUD_API"),
+				inArray(
+					whatsappConnectionPhones.whatsappTelefoneId,
+					phones.map((phone) => phone.whatsappTelefoneId),
+				),
+			),
+		);
+	const plan = planWhatsappConnectionUpsert({
+		existing: existing.flatMap((row) => (row.whatsappTelefoneId ? [{ ...row, whatsappTelefoneId: row.whatsappTelefoneId }] : [])),
+		incoming: phones,
+	});
+
 	const insertedPhones = await db.transaction(async (tx) => {
-		const whatsappConnection: TNewWhatsappConnection = {
-			organizacaoId: userOrgId,
-			token: accessToken ?? "",
-			dataExpiracao: accessTokenExpiresAt ?? dayjs().add(1, "month").toDate(),
-			autorId: sessionUser.user.id,
-			metaEscopo: debugData.data?.scopes.join(","),
-			dataInsercao: onboardingAt,
-		};
-
-		const insertedWhatsappConnection = await tx.insert(whatsappConnections).values(whatsappConnection).returning({ id: whatsappConnections.id });
-		const insertedWhatsappConnectionId = insertedWhatsappConnection[0]?.id;
-		if (!insertedWhatsappConnectionId) throw new Error("Failed to insert whatsapp connection");
-
-		const insertedWhatsappConnectionPhones = await tx
-			.insert(whatsappConnectionPhones)
-			.values(
-				phones.map((phone) => ({
-					conexaoId: insertedWhatsappConnectionId,
-					nome: phone.nome,
-					whatsappBusinessAccountId: phone.whatsappBusinessAccountId,
-					whatsappTelefoneId: phone.whatsappTelefoneId,
-					numero: phone.numero,
-					metadados: buildWhatsappPhoneSyncMetadataPatch({
-						currentMetadata: null,
-						syncType: "contacts",
-						onboardingAt,
-					}),
-				})),
-			)
-			.returning({
-				id: whatsappConnectionPhones.id,
-				whatsappBusinessAccountId: whatsappConnectionPhones.whatsappBusinessAccountId,
-				whatsappTelefoneId: whatsappConnectionPhones.whatsappTelefoneId,
-				metadados: whatsappConnectionPhones.metadados,
-			});
-
-		if (insertedWhatsappConnectionPhones.length === 0) {
-			throw new Error("Failed to insert whatsapp connection phones");
+		const connectionValues = { token: accessToken, dataExpiracao: accessTokenExpiresAt, metaEscopo: debugData.data?.scopes?.join(",") ?? null };
+		let connectionId = plan.conexaoId;
+		if (connectionId) {
+			await tx.update(whatsappConnections).set(connectionValues).where(eq(whatsappConnections.id, connectionId));
+		} else {
+			const [created] = await tx
+				.insert(whatsappConnections)
+				.values({ organizacaoId: organizationId, autorId: sessionUser.user.id, dataInsercao: onboardingAt, ...connectionValues })
+				.returning({ id: whatsappConnections.id });
+			if (!created) throw new Error("Falha ao criar a conexão do WhatsApp.");
+			connectionId = created.id;
 		}
 
-		const firstPhoneId = insertedWhatsappConnectionPhones[0]?.id;
+		for (const { telefoneId, incoming } of plan.atualizar) {
+			await tx
+				.update(whatsappConnectionPhones)
+				.set({
+					conexaoId: connectionId,
+					nome: incoming.nome,
+					numero: incoming.numero,
+					whatsappBusinessAccountId: incoming.whatsappBusinessAccountId,
+					// A credencial nova resolve o bloqueio de envio por credencial inválida; os outros
+					// motivos (pagamento, conta restrita) continuam até a Meta confirmar uma entrega.
+					metadados: sql`case when ${whatsappConnectionPhones.metadados}->'bloqueioEnvio'->>'motivo' = 'CREDENCIAL_INVALIDA'
+						then ${whatsappConnectionPhones.metadados} - 'bloqueioEnvio' else ${whatsappConnectionPhones.metadados} end`,
+				})
+				.where(eq(whatsappConnectionPhones.id, telefoneId));
+		}
+
+		const inserted =
+			plan.inserir.length > 0
+				? await tx
+						.insert(whatsappConnectionPhones)
+						.values(
+							plan.inserir.map((phone) => ({
+								conexaoId: connectionId as string,
+								nome: phone.nome,
+								whatsappBusinessAccountId: phone.whatsappBusinessAccountId,
+								whatsappTelefoneId: phone.whatsappTelefoneId,
+								numero: phone.numero,
+								metadados: buildWhatsappPhoneSyncMetadataPatch({ currentMetadata: null, syncType: "contacts", onboardingAt }),
+							})),
+						)
+						.returning({
+							id: whatsappConnectionPhones.id,
+							whatsappTelefoneId: whatsappConnectionPhones.whatsappTelefoneId,
+							metadados: whatsappConnectionPhones.metadados,
+						})
+				: [];
+
+		// Números que mudaram de conexão podem deixar uma conexão Meta antiga vazia (com token):
+		// sem telefone ela não serve para nada e só confunde a tela de configurações.
+		if (plan.atualizar.length > 0) {
+			await tx.execute(sql`
+				delete from ${whatsappConnections} c
+				where c.organizacao_id = ${organizationId} and c.tipo_conexao = 'META_CLOUD_API' and c.id <> ${connectionId}
+				  and not exists (select 1 from ${whatsappConnectionPhones} p where p.conexao_id = c.id)`);
+		}
+
+		const firstPhoneId = inserted[0]?.id ?? plan.atualizar[0]?.telefoneId;
 		if (firstPhoneId) {
 			await tx
 				.update(campaigns)
-				.set({
-					whatsappConexaoTelefoneId: firstPhoneId,
-				})
-				.where(and(eq(campaigns.organizacaoId, userOrgId), isNull(campaigns.whatsappConexaoTelefoneId)));
+				.set({ whatsappConexaoTelefoneId: firstPhoneId })
+				.where(and(eq(campaigns.organizacaoId, organizationId), isNull(campaigns.whatsappConexaoTelefoneId)));
 		}
-
-		return insertedWhatsappConnectionPhones;
+		return inserted;
 	});
 
+	// 5. Números novos: sincronização de contatos do app (janela de onboarding da coexistência).
 	for (const phone of insertedPhones) {
-		if (!phone.whatsappTelefoneId || !accessToken) continue;
+		if (!phone.whatsappTelefoneId) continue;
 		try {
-			const contactsSync = await triggerSmbAppContactsSync({
-				phoneNumberId: phone.whatsappTelefoneId,
-				accessToken,
-			});
-			console.log("[INFO] [WHATSAPP_CONNECT_CALLBACK] Contacts sync result:", {
-				phoneId: phone.id,
-				...contactsSync,
-			});
+			const contactsSync = await triggerSmbAppContactsSync({ phoneNumberId: phone.whatsappTelefoneId, accessToken });
 			if (contactsSync.requested) {
 				await db
 					.update(whatsappConnectionPhones)
@@ -274,47 +247,32 @@ async function getWhatsappAuthCallbackRoute(req: NextRequest) {
 					.where(eq(whatsappConnectionPhones.id, phone.id));
 			}
 		} catch (error) {
-			// The WhatsApp connection must remain usable even if the asynchronous contacts sync cannot be requested.
-			console.error("[ERROR] [WHATSAPP_CONNECT_CALLBACK] Failed to request contacts sync:", {
-				phoneId: phone.id,
-				error,
-			});
+			// A conexão continua utilizável mesmo sem a sincronização de contatos.
+			console.error(`${LOG} Falha ao pedir a sincronização de contatos do telefone ${phone.id}:`, error);
 		}
 	}
-	console.log("[INFO] [WHATSAPP_CONNECT_CALLBACK] Starting automatic message template submission for connected phones");
-	const insertedPhoneIds = new Set(insertedPhones.map((phone) => phone.id));
-	const phonesToSync = (await getOrganizationWhatsappPhones(userOrgId)).filter((phone) => insertedPhoneIds.has(phone.id));
-	const organizationTemplates = await db.query.messageTemplates.findMany({
-		where: eq(messageTemplates.organizacaoId, userOrgId),
-	});
 
+	// 6. Templates da organização enviados à Meta para cada número (os que já têm id externo são pulados).
+	const connectedPhoneIds = new Set([...insertedPhones.map((phone) => phone.id), ...plan.atualizar.map((item) => item.telefoneId)]);
+	const phonesToSync = (await getOrganizationWhatsappPhones(organizationId)).filter((phone) => connectedPhoneIds.has(phone.id));
+	const organizationTemplates = await db.query.messageTemplates.findMany({ where: eq(messageTemplates.organizacaoId, organizationId) });
 	for (const template of organizationTemplates) {
 		let nextMetadata = template.metadados;
-
 		for (const phone of phonesToSync) {
 			try {
 				if (nextMetadata.porNumeroTelefone[phone.id]?.idExterno) continue;
 				const result = await submitMessageTemplateToWhatsappPhone({
 					template: { ...template, metadados: nextMetadata },
 					phone,
-					organizationId: userOrgId,
+					organizationId,
 					origin: "whatsapp_auth_callback",
 					mode: "create",
 				});
-				nextMetadata = applyWhatsappSubmissionResultToMetadata({
-					metadata: nextMetadata,
-					phoneId: phone.id,
-					idExterno: result.idExterno,
-				});
-				const persisted = await db.transaction(async (tx) => {
-					const connected = await lockConnectedWhatsappPhone({
-						trx: tx,
-						organizationId: userOrgId,
-						phoneId: phone.id,
-					});
-					if (!connected) return false;
-
-					const updatedRows = await tx
+				nextMetadata = applyWhatsappSubmissionResultToMetadata({ metadata: nextMetadata, phoneId: phone.id, idExterno: result.idExterno });
+				await db.transaction(async (tx) => {
+					const connected = await lockConnectedWhatsappPhone({ trx: tx, organizationId, phoneId: phone.id });
+					if (!connected) return;
+					await tx
 						.update(messageTemplates)
 						.set({
 							metadados: mergeMessageTemplatePhoneMetadataSql({
@@ -323,25 +281,31 @@ async function getWhatsappAuthCallbackRoute(req: NextRequest) {
 							}),
 							dataAtualizacao: new Date(),
 						})
-						.where(and(eq(messageTemplates.id, template.id), eq(messageTemplates.organizacaoId, userOrgId)))
-						.returning({ id: messageTemplates.id });
-					return updatedRows.length > 0;
+						.where(and(eq(messageTemplates.id, template.id), eq(messageTemplates.organizacaoId, organizationId)));
 				});
-				if (!persisted) {
-					console.warn(`[WARN] [WHATSAPP_CONNECT_CALLBACK] Phone ${phone.id} was disconnected while submitting message template ${template.id}`);
-					continue;
-				}
-				console.log(`[INFO] [WHATSAPP_CONNECT_CALLBACK] Message template ${template.id} submitted for phone ${phone.id}`);
 			} catch (error) {
-				console.error(`[ERROR] [WHATSAPP_CONNECT_CALLBACK] Failed to submit message template ${template.id} for phone ${phone.id}:`, error);
+				console.error(`${LOG} Falha ao enviar o template ${template.id} para o telefone ${phone.id}:`, error);
 			}
 		}
 	}
 
-	const cookieStore = await cookies();
-	await reconcileOnboardingCampaigns({ executor: db, organizationId: userOrgId });
-	const redirectPath = consumeOAuthRedirect(cookieStore, WHATSAPP_OAUTH_REDIRECT_COOKIE_NAME, "/dashboard/settings?view=meta-oauth");
-	return NextResponse.redirect(new URL(redirectPath, process.env.NEXT_PUBLIC_APP_URL));
+	await reconcileOnboardingCampaigns({ executor: db, organizationId });
+
+	// Depois de responder: saúde dos números (nome de exibição, qualidade, limite) e o template de
+	// teste de conexão, que verifica o pagamento na Meta antes da primeira campanha.
+	const accounts = [...new Set(phones.map((phone) => phone.whatsappBusinessAccountId))];
+	after(async () => {
+		for (const whatsappBusinessAccountId of accounts) {
+			await runWhatsappConnectionsHealthCheck({ whatsappBusinessAccountId }).catch((error) => console.error(`${LOG} Checagem de saúde falhou:`, error));
+		}
+		for (const phone of phonesToSync) {
+			await submitWhatsappConnectionTestTemplate({ organizationId, phoneId: phone.id }).catch((error) =>
+				console.error(`${LOG} Template de teste de conexão falhou para o telefone ${phone.id}:`, error),
+			);
+		}
+	});
+
+	return back({ sucesso: plan.atualizar.length > 0 && insertedPhones.length === 0 ? "reconectado" : "conectado", numeros: connectedPhoneIds.size });
 }
 
 export const runtime = "nodejs";
@@ -350,4 +314,3 @@ export const dynamic = "force-dynamic";
 export const GET = appApiHandler({
 	GET: getWhatsappAuthCallbackRoute,
 });
-import { reconcileOnboardingCampaigns } from "@/lib/onboarding/reconcile";

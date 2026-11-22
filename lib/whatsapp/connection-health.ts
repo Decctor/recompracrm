@@ -5,6 +5,7 @@ import { whatsappConnectionPhones, whatsappConnections } from "@/services/drizzl
 import { resend } from "@/services/resend";
 import dayjs from "dayjs";
 import { and, eq, sql } from "drizzle-orm";
+import { mapMetaPhoneFields, META_PHONE_STATE_FIELDS } from "./channel-activation";
 import {
 	classifyWhatsappPhoneHealth,
 	resolveNextWhatsappPhoneHealth,
@@ -68,10 +69,40 @@ async function fetchWhatsappPhoneHealth(phone: THealthCheckPhone): Promise<TWhat
 			signal: AbortSignal.timeout(15_000),
 		});
 		if (response.status >= 500) return { status: "INDETERMINADO", mensagem: `Meta respondeu HTTP ${response.status}.` };
-		const body = (await response.json()) as { status?: string; error?: { code?: number; error_subcode?: number; message?: string; is_transient?: boolean } };
+		const body = (await response.json()) as {
+			status?: string;
+			error?: { code?: number; error_subcode?: number; message?: string; is_transient?: boolean };
+		};
 		return classifyWhatsappPhoneHealth({ phone: body, error: body.error ?? null });
 	} catch (error) {
 		return { status: "INDETERMINADO", mensagem: error instanceof Error ? error.message : String(error) };
+	}
+}
+
+/**
+ * Nome de exibição, qualidade e limite de envio, para os passos do canal. Pedido à parte e sem
+ * lançar: `name_status` é beta, e um campo que a Meta recuse derrubaria o GET de `status` inteiro —
+ * a checagem de saúde viraria falha e mandaria a loja reconectar um número que funciona.
+ */
+async function refreshWhatsappPhoneMetaState(phone: THealthCheckPhone) {
+	if (!phone.token || !phone.whatsappTelefoneId) return;
+	try {
+		const response = await fetch(`${GRAPH_API_BASE_URL}/${phone.whatsappTelefoneId}?fields=${META_PHONE_STATE_FIELDS}`, {
+			headers: { Authorization: `Bearer ${phone.token}` },
+			signal: AbortSignal.timeout(15_000),
+		});
+		const body = (await response.json()) as Parameters<typeof mapMetaPhoneFields>[0] & { error?: { message?: string } };
+		if (!response.ok || body.error) {
+			console.warn(`${LOG} Campos da Meta indisponíveis para o telefone ${phone.id}:`, body.error?.message ?? response.status);
+			return;
+		}
+		const meta = mapMetaPhoneFields(body, new Date());
+		await db
+			.update(whatsappConnectionPhones)
+			.set({ metadados: sql`jsonb_set(coalesce(${whatsappConnectionPhones.metadados}, '{}'::jsonb), '{meta}', ${JSON.stringify(meta)}::jsonb, true)` })
+			.where(eq(whatsappConnectionPhones.id, phone.id));
+	} catch (error) {
+		console.warn(`${LOG} Falha ao ler os campos da Meta do telefone ${phone.id}:`, error instanceof Error ? error.message : error);
 	}
 }
 
@@ -169,7 +200,14 @@ async function notifyWhatsappConnectionHealthFailure({ organizationId, phones }:
 export async function runWhatsappConnectionsHealthCheck({ whatsappBusinessAccountId }: { whatsappBusinessAccountId?: string } = {}) {
 	const phones = await listMetaWhatsappPhones({ whatsappBusinessAccountId });
 	const toNotify = new Map<string, TFailedPhone[]>();
-	const summary = { verificados: 0, saudaveis: 0, falhas: 0, indeterminados: 0, organizacoesNotificadas: 0, erros: [] as Array<{ telefoneId: string; erro: string }> };
+	const summary = {
+		verificados: 0,
+		saudaveis: 0,
+		falhas: 0,
+		indeterminados: 0,
+		organizacoesNotificadas: 0,
+		erros: [] as Array<{ telefoneId: string; erro: string }>,
+	};
 
 	for (const phone of phones) {
 		try {
@@ -183,6 +221,7 @@ export async function runWhatsappConnectionsHealthCheck({ whatsappBusinessAccoun
 			}
 
 			const next = await recordWhatsappPhoneHealth({ phoneId: phone.id, check });
+			if (check.status === "SAUDAVEL") await refreshWhatsappPhoneMetaState(phone);
 			if (next?.notify && next.saude.mensagem && next.saude.falhandoDesde) {
 				const failed = toNotify.get(phone.organizacaoId) ?? [];
 				failed.push({ nome: phone.nome, numero: phone.numero, mensagem: next.saude.mensagem, falhandoDesde: next.saude.falhandoDesde });

@@ -1,13 +1,26 @@
 "use client";
 
 import { MetaIcon, WhatsappIcon } from "@/components/icons";
-import { InternalGatewayQRConnect } from "@/components/Settings/InternalGatewayQRConnect";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Callout } from "@/components/ui/callout";
+import { WhatsappChannelSteps } from "@/components/WhatsappConnections/WhatsappChannelSteps";
+import { WhatsappConnectPreparation } from "@/components/WhatsappConnections/WhatsappConnectPreparation";
+import { WhatsappConnectResultNotice } from "@/components/WhatsappConnections/WhatsappConnectResultNotice";
 import type { TOnboardingReadiness } from "@/lib/onboarding/readiness";
-import { ChevronDown, QrCode } from "lucide-react";
-import { useState } from "react";
+import { useWhatsappChannelStatus } from "@/lib/queries/whatsapp-connections";
+import { useQueryClient } from "@tanstack/react-query";
+import { Loader2, Plus } from "lucide-react";
+import { type ReactNode, useEffect } from "react";
 import { ReadinessPill } from "../shared/ReadinessPill";
+
+/*
+ * Etapa WhatsApp do onboarding. Antes de conectar: o que ter em mãos e quais telas da Meta vêm
+ * (WhatsappConnectPreparation). Depois: os cinco passos do canal, com o teste de envio que
+ * verifica o pagamento na Meta (WhatsappChannelSteps). A conexão por QR Code não é oferecida
+ * aqui: a jornada leva ao WhatsApp oficial; o QR continua em Configurações.
+ * Desenho: docs/onboarding/whatsapp-connection-activation.md.
+ */
+
+const CONNECT_HREF = "/api/integrations/whatsapp/auth?redirectTo=/onboarding";
 
 type WhatsappStageProps = {
 	whatsapp: TOnboardingReadiness["whatsapp"] | null;
@@ -25,141 +38,124 @@ const TEMPLATE_STATUS_LABEL = {
 } as const;
 const TEMPLATE_STATUS_TONE = { RASCUNHO: "pendente", EM_ANALISE: "andamento", APROVADO: "ok", REJEITADO: "falhou", PAUSADO: "falhou" } as const;
 
-export function WhatsappStage({ whatsapp, onConnectionChanged, onConfirmPayment, isConfirmingPayment }: WhatsappStageProps) {
-	const [showOtherOptions, setShowOtherOptions] = useState(false);
-	const [showQrConnect, setShowQrConnect] = useState(false);
+function SectionLabel({ children }: { children: string }) {
+	return <p className="text-[11px] font-extrabold tracking-[0.08em] text-muted-foreground uppercase">{children}</p>;
+}
 
-	const connected = whatsapp?.numero === "CONECTADO";
-	const metaPhone = whatsapp?.tipoConexao === "META_CLOUD_API" ? (whatsapp.telefones[0] ?? null) : null;
-	const paymentConfirmed = metaPhone ? metaPhone.pagamento === "CONFIRMADO_PELO_USUARIO" || metaPhone.pagamento === "VERIFICADO" : false;
-	const paymentLocked = metaPhone ? metaPhone.pagamento === "VERIFICADO" || metaPhone.pagamento === "PENDENTE" : false;
+function OfficialHeader({ pill }: { pill?: ReactNode }) {
+	return (
+		<div className="flex items-start justify-between gap-4">
+			<div className="flex items-start gap-3">
+				<span className="flex shrink-0 items-center">
+					<span className="z-10 flex size-9 items-center justify-center rounded-full border border-border bg-background">
+						<MetaIcon className="size-4 text-[#0869E1]" />
+					</span>
+					<span className="-ml-2 flex size-9 items-center justify-center rounded-full border border-border bg-background">
+						<WhatsappIcon className="size-4 text-whatsapp" />
+					</span>
+				</span>
+				<div className="flex flex-col gap-0.5">
+					<p className="text-sm font-bold">WhatsApp oficial da Meta</p>
+					<p className="text-sm text-muted-foreground">
+						O número do app WhatsApp Business continua no celular e passa a mandar campanhas pela Meta. Leva uns 5 minutos.
+					</p>
+				</div>
+			</div>
+			{pill}
+		</div>
+	);
+}
+
+export function WhatsappStage({ whatsapp, onConnectionChanged, onConfirmPayment, isConfirmingPayment }: WhatsappStageProps) {
+	const queryClient = useQueryClient();
+	const hasOfficial = whatsapp?.tipoConexao === "META_CLOUD_API" && whatsapp.telefones.length > 0;
+	const channel = useWhatsappChannelStatus({ enabled: hasOfficial });
+
+	// O readiness é a fonte do pagamento confirmado e do estado do número; quando muda, os passos também.
+	const paymentKey = whatsapp?.telefones.map((phone) => `${phone.id}:${phone.pagamento}`).join("|") ?? "";
+	useEffect(() => {
+		if (hasOfficial) void queryClient.invalidateQueries({ queryKey: ["whatsapp-channel-status"] });
+	}, [paymentKey, whatsapp?.numero, hasOfficial, queryClient]);
+
+	const gatewayConnected = whatsapp?.tipoConexao === "INTERNAL_GATEWAY" && whatsapp.numero === "CONECTADO";
 
 	return (
-		<>
-			<div className="flex w-full max-w-[640px] flex-col gap-6">
+		<div className="flex w-full max-w-[640px] flex-col gap-6">
+			<WhatsappConnectResultNotice onConnected={onConnectionChanged} />
+
+			{hasOfficial ? (
 				<section className="flex flex-col gap-3">
-					<p className="text-[11px] font-extrabold tracking-[0.08em] text-muted-foreground uppercase">Número</p>
-					<div className="flex flex-col gap-4 rounded-xl border border-border p-4">
-						<div className="flex items-start justify-between gap-4">
-							<div className="flex items-start gap-3">
-								<span className="flex shrink-0 items-center">
-									<span className="z-10 flex size-9 items-center justify-center rounded-full border border-border bg-background">
-										<MetaIcon className="size-4 text-[#0869E1]" />
-									</span>
-									<span className="-ml-2 flex size-9 items-center justify-center rounded-full border border-border bg-background">
-										<WhatsappIcon className="size-4 text-whatsapp" />
-									</span>
-								</span>
-								<div className="flex flex-col gap-0.5">
-									<p className="text-sm font-bold">WhatsApp oficial da Meta</p>
-									<p className="text-sm text-muted-foreground">Caminho recomendado: templates aprovados pela Meta, envios em volume e número verificado.</p>
-								</div>
-							</div>
-							{whatsapp ? (
-								<ReadinessPill tone={connected ? "ok" : whatsapp.numero === "NENHUM" ? "pendente" : "falhou"}>
-									{connected ? "Conectado" : whatsapp.numero === "NENHUM" ? "Não conectado" : whatsapp.numero === "EXPIRADO" ? "Expirado" : "Desconectado"}
-								</ReadinessPill>
-							) : null}
-						</div>
-
-						{whatsapp && whatsapp.telefones.length > 0 ? (
-							<ul className="flex flex-wrap gap-2">
-								{whatsapp.telefones.map((phone) => (
-									<li key={phone.id} className="rounded-full border border-border px-3 py-1 text-xs font-semibold">
-										{phone.nome} · {phone.numero}
-									</li>
-								))}
-							</ul>
-						) : null}
-
-						<div>
-							<Button asChild size="sm" variant={connected ? "outline" : "default"} className="font-bold">
-								<a href="/api/integrations/whatsapp/auth?redirectTo=/onboarding">{connected ? "Adicionar outro número" : "Conectar com a Meta"}</a>
-							</Button>
-						</div>
+					<SectionLabel>Canal de envio</SectionLabel>
+					<div className="flex flex-col gap-5 rounded-xl border border-border p-4">
+						<OfficialHeader
+							pill={
+								channel.data ? (
+									<ReadinessPill tone={channel.data.pronto ? "ok" : "andamento"}>{channel.data.pronto ? "Pronto" : "Configurando"}</ReadinessPill>
+								) : null
+							}
+						/>
+						{channel.isLoading ? (
+							<p className="flex items-center gap-2 text-sm text-muted-foreground">
+								<Loader2 className="size-4 animate-spin" />
+								Conferindo o número com a Meta…
+							</p>
+						) : channel.isError ? (
+							<Callout.Root tone="warning">
+								<Callout.Description>Não deu para conferir o canal agora. Recarregue a página em instantes.</Callout.Description>
+							</Callout.Root>
+						) : (
+							channel.data?.telefones.map((phone) => (
+								<WhatsappChannelSteps
+									key={phone.id}
+									phone={phone}
+									destinoSugerido={channel.data.destinoSugerido}
+									connectHref={CONNECT_HREF}
+									onConfirmPayment={(telefoneId) => onConfirmPayment({ telefoneId, confirmado: true })}
+									isConfirmingPayment={isConfirmingPayment}
+								/>
+							))
+						)}
+						<a href={CONNECT_HREF} className="flex w-fit items-center gap-1 text-sm font-semibold text-primary">
+							<Plus className="size-4" />
+							Conectar outro número
+						</a>
 					</div>
 				</section>
-
-				{metaPhone ? (
-					<section className="flex flex-col gap-3">
-						<p className="text-[11px] font-extrabold tracking-[0.08em] text-muted-foreground uppercase">Pagamento</p>
-						<div className="flex items-start gap-3 rounded-xl border border-border p-4">
-							<Checkbox
-								id="payment-confirmed"
-								checked={paymentConfirmed}
-								disabled={paymentLocked || isConfirmingPayment}
-								onCheckedChange={(checked) => onConfirmPayment({ telefoneId: metaPhone.id, confirmado: checked === true })}
-								className="mt-0.5"
-							/>
-							<div className="flex flex-col gap-0.5">
-								<label htmlFor="payment-confirmed" className="cursor-pointer text-sm font-bold">
-									Já cadastrei uma forma de pagamento na conta da Meta
-								</label>
-								<p className="text-sm text-muted-foreground">
-									Sem ela a Meta recusa os envios. Confirmamos na primeira entrega; se a Meta recusar, avisamos aqui.
-									{metaPhone.pagamento === "PENDENTE" ? " A Meta recusou um envio recente por falta de pagamento." : ""}
-									{metaPhone.pagamento === "VERIFICADO" ? " Já verificado por uma entrega." : ""}
-								</p>
-							</div>
-						</div>
-					</section>
-				) : null}
-
-				{whatsapp && whatsapp.templates.length > 0 && whatsapp.tipoConexao === "META_CLOUD_API" ? (
-					<section className="flex flex-col gap-3">
-						<p className="text-[11px] font-extrabold tracking-[0.08em] text-muted-foreground uppercase">Templates das campanhas</p>
-						<ul className="flex flex-col divide-y divide-border rounded-xl border border-border">
-							{whatsapp.templates.map((template) => (
-								<li key={template.id} className="flex items-center justify-between gap-3 px-4 py-3">
-									<span className="truncate text-sm font-semibold">{template.nome}</span>
-									<ReadinessPill tone={TEMPLATE_STATUS_TONE[template.status]}>{TEMPLATE_STATUS_LABEL[template.status]}</ReadinessPill>
-								</li>
-							))}
-						</ul>
-						<p className="text-xs text-muted-foreground">A aprovação depende da Meta e não tem prazo fixo. As campanhas ficam preparadas enquanto isso.</p>
-					</section>
-				) : null}
-
-				{!connected ? (
-					<div className="rounded-xl border border-border p-4 text-sm text-muted-foreground">
-						Você pode preparar suas campanhas agora. Os envios ficam pendentes até concluir a configuração.
+			) : (
+				<section className="flex flex-col gap-3">
+					<SectionLabel>Número</SectionLabel>
+					<div className="flex flex-col gap-5 rounded-xl border border-border p-4">
+						<OfficialHeader />
+						{gatewayConnected ? (
+							<Callout.Root tone="info">
+								<Callout.Description>
+									Sua empresa já envia por QR Code ({whatsapp.telefones.map((phone) => phone.numero).join(", ")}). Pode seguir assim; conectar o WhatsApp
+									oficial libera modelos aprovados e envios em volume.
+								</Callout.Description>
+							</Callout.Root>
+						) : null}
+						<WhatsappConnectPreparation connectHref={CONNECT_HREF} />
 					</div>
-				) : null}
-
-				<section className="flex flex-col gap-2">
-					<button
-						type="button"
-						onClick={() => setShowOtherOptions((current) => !current)}
-						aria-expanded={showOtherOptions}
-						className="flex w-fit items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground"
-					>
-						Outras opções
-						<ChevronDown className={showOtherOptions ? "size-3.5 rotate-180 transition-transform" : "size-3.5 transition-transform"} />
-					</button>
-					{showOtherOptions ? (
-						<div className="flex flex-col items-start justify-between gap-4 rounded-xl border border-border p-4 sm:flex-row sm:items-center">
-							<div className="flex flex-col gap-0.5">
-								<p className="text-sm font-bold">Conexão por QR Code</p>
-								<p className="text-sm text-muted-foreground">Escaneie como no WhatsApp Web. Não usa templates aprovados e tem limites de volume.</p>
-							</div>
-							<Button size="sm" variant="outline" onClick={() => setShowQrConnect(true)} className="shrink-0 gap-1.5">
-								<QrCode className="size-4" />
-								Conectar
-							</Button>
-						</div>
+					{!gatewayConnected ? (
+						<p className="text-xs text-muted-foreground">Pode seguir e preparar as campanhas agora. Os envios esperam a conexão.</p>
 					) : null}
 				</section>
-			</div>
+			)}
 
-			{showQrConnect ? (
-				<InternalGatewayQRConnect
-					onBack={() => setShowQrConnect(false)}
-					onSuccess={() => {
-						setShowQrConnect(false);
-						onConnectionChanged();
-					}}
-				/>
+			{hasOfficial && whatsapp.templates.length > 0 ? (
+				<section className="flex flex-col gap-3">
+					<SectionLabel>Modelos das campanhas</SectionLabel>
+					<ul className="flex flex-col divide-y divide-border rounded-xl border border-border">
+						{whatsapp.templates.map((template) => (
+							<li key={template.id} className="flex items-center justify-between gap-3 px-4 py-3">
+								<span className="min-w-0 truncate text-sm font-semibold">{template.nome}</span>
+								<ReadinessPill tone={TEMPLATE_STATUS_TONE[template.status]}>{TEMPLATE_STATUS_LABEL[template.status]}</ReadinessPill>
+							</li>
+						))}
+					</ul>
+					<p className="text-xs text-muted-foreground">A aprovação depende da Meta e não tem prazo fixo. As campanhas ficam preparadas enquanto isso.</p>
+				</section>
 			) : null}
-		</>
+		</div>
 	);
 }

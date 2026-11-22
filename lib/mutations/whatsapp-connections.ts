@@ -1,3 +1,4 @@
+import type { TSendWhatsappConnectionTestInput, TSendWhatsappConnectionTestOutput } from "@/app/api/whatsapp-connections/connection-test/route";
 import type { TSyncWhatsappContactsOutput } from "@/app/api/whatsapp-connections/contacts-sync/route";
 import type { TClearPhoneSendBlockInput, TClearPhoneSendBlockOutput } from "@/app/api/whatsapp-connections/send-block/route";
 import type { TSyncWhatsappMessageHistoryOutput } from "@/app/api/whatsapp-connections/message-history-sync/route";
@@ -29,5 +30,10 @@ export async function deleteWhatsappConnection(input: string) {
 }
 export async function updateConnectionPhoneAiService(input: TUpdateConnectionPhoneAiServiceInput) {
 	const { data } = await axios.patch<TUpdateConnectionPhoneAiServiceOutput>("/api/whatsapp-connections", input);
+	return data;
+}
+
+export async function sendWhatsappConnectionTest(input: TSendWhatsappConnectionTestInput) {
+	const { data } = await axios.post<TSendWhatsappConnectionTestOutput>("/api/whatsapp-connections/connection-test", input);
 	return data;
 }

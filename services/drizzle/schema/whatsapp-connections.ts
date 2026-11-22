@@ -1,3 +1,4 @@
+import type { TConnectionTest, TWhatsappPhoneMetaState } from "@/lib/whatsapp/channel-activation";
 import type { TCampaignDispatchInterruptionReasonEnum } from "@/schemas/enums";
 import { relations } from "drizzle-orm";
 import { boolean, jsonb, text, timestamp, varchar } from "drizzle-orm/pg-core";
@@ -56,6 +57,12 @@ export type TWhatsappConnectionPhoneMetadados = {
 		// Último aviso por e-mail da sequência atual de falha — base do silêncio de lembretes.
 		notificadoEm?: string | null;
 	};
+	// Estado do número visto pela Meta (nome de exibição, qualidade, limite diário), gravado pela
+	// checagem de saúde (lib/whatsapp/connection-health.ts). Ausência = ainda não consultado.
+	meta?: TWhatsappPhoneMetaState;
+	// Mensagem de teste para o WhatsApp de quem conectou: verifica o pagamento na Meta antes da
+	// primeira campanha (lib/whatsapp/connection-test.ts).
+	testeConexao?: TConnectionTest;
 	// Estado de pagamento da conta Cloud API (ver WhatsappPaymentStatusEnum em schemas/enums.ts).
 	// A Meta não expõe isso de forma confiável: o usuário confirma no onboarding, a primeira
 	// entrega verifica, e o erro 131042 em webhooks de status rebaixa para PENDENTE.
