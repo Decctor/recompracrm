@@ -1,5 +1,5 @@
 import z from "zod";
-import { OnboardingIntentOriginEnum, OnboardingProductEnum } from "./enums";
+import { OnboardingIntentOriginEnum, OnboardingMainPainEnum, OnboardingProductEnum } from "./enums";
 
 /**
  * Respostas que o usuário dá ao longo da jornada e que não têm entidade própria. Tudo o que
@@ -21,6 +21,10 @@ export const OnboardingAnswersSchema = z.object({
 	erpCanalInicial: z.enum(["BALCAO", "CATALOGO", "MESAS"], { invalid_type_error: "Tipo não válido para o canal inicial." }).nullable().default(null),
 	erpCanaisPretendidos: z.array(z.string({ invalid_type_error: "Tipo não válido para o canal." })).default([]),
 	erpSimulacaoConcluidaEm: z.string({ required_error: "Data da prévia não informada.", invalid_type_error: "Tipo não válido para a data." }).datetime({ message: "Data da prévia inválida." }).nullable().default(null),
+	// Declaração de intenção (opcional): o que mais incomoda hoje. Escolhe a campanha recomendada.
+	dorPrincipal: OnboardingMainPainEnum.nullable().default(null),
+	// Meta do teste aceita pela loja ("5 clientes de volta depois de uma campanha"), acompanhada no hub.
+	metaTesteAceita: z.boolean({ invalid_type_error: "Tipo não válido para a meta do teste." }).default(false),
 });
 export type TOnboardingAnswers = z.infer<typeof OnboardingAnswersSchema>;
 

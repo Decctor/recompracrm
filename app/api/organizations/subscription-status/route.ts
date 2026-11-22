@@ -1,6 +1,8 @@
 import { resolveSubscriptionAccess } from "@/config";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { getSubscriptionActivationContext } from "@/lib/onboarding/activation-status";
+import { resolveBuiltSummary, resolveTrialNarrative, type TBuiltSummaryItem, type TTrialNarrative } from "@/lib/subscriptions/activation-narrative";
 import { db } from "@/services/drizzle";
 import dayjs from "dayjs";
 import createHttpError from "http-errors";
@@ -22,6 +24,10 @@ type TSubscriptionStatusData = {
 	modo: TSubscriptionStatusMode;
 	mensagem: string;
 	acao: TSubscriptionStatusAction;
+	/** Antes da ativação, o selo leva ao próximo passo da loja em vez de abrir os planos. */
+	proximoPasso: TTrialNarrative["proximoPasso"];
+	/** O que a loja já construiu, com números exatos; vazio fora do fim do teste e do bloqueio. */
+	construido: TBuiltSummaryItem[];
 };
 
 async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData; message: string }> {
@@ -70,7 +76,37 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 	const canUseBillingPortal = !!org.stripeCustomerId;
 	const acaoDeCobrancaPendente: TSubscriptionStatusAction = canUseBillingPortal ? "ATUALIZAR_PAGAMENTO" : "ASSINAR";
 
-	const respond = (data: TSubscriptionStatusData) => ({ data, message: "Status da assinatura obtido com sucesso." });
+	const respond = (
+		data: Omit<TSubscriptionStatusData, "proximoPasso" | "construido"> & Partial<Pick<TSubscriptionStatusData, "proximoPasso" | "construido">>,
+	) => ({
+		data: { proximoPasso: null, construido: [], ...data },
+		message: "Status da assinatura obtido com sucesso.",
+	});
+
+	// Perto do fim do teste, na carência e no bloqueio depois do teste, o texto depende da ativação
+	// (lib/subscriptions/activation-narrative.ts). É a única parte cara do endpoint, por isso só roda
+	// nesses estados, e uma falha nela nunca derruba o selo nem o paywall: cai no texto de sempre.
+	const trialNarrativeNeeded = (access.reason === "TRIAL" && access.mode !== "success") || access.reason === "TRIAL_GRACE";
+	const trialExpired = access.reason === "BLOQUEADO" && !!org.periodoTesteInicio && !!org.periodoTesteFim && !org.stripeSubscriptionStatus;
+	let narrative: TTrialNarrative | null = null;
+	let construido: TBuiltSummaryItem[] = [];
+	if ((trialNarrativeNeeded || trialExpired) && org.periodoTesteFim) {
+		try {
+			const context = await getSubscriptionActivationContext({ executor: db, organizationId: orgId });
+			if (trialNarrativeNeeded && (access.reason === "TRIAL" || access.reason === "TRIAL_GRACE")) {
+				narrative = resolveTrialNarrative({
+					reason: access.reason,
+					daysRemaining: access.daysRemaining ?? 0,
+					trialEnd: org.periodoTesteFim,
+					activation: context.activation,
+				});
+			}
+			if (access.reason === "TRIAL_GRACE" || trialExpired)
+				construido = resolveBuiltSummary({ segmento: context.activation.segmento, counts: context.counts });
+		} catch (error) {
+			console.error("[WARN] [SUBSCRIPTION_STATUS] Falha ao calcular a ativação:", error);
+		}
+	}
 	const plural = (days: number) => (days !== 1 ? "s" : "");
 
 	if (access.reason === "PAGO") {
@@ -121,10 +157,12 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 		}
 		return respond({
 			ativa: true,
-			status: `Período de teste encerra em ${daysRemaining} dia${plural(daysRemaining)}`,
+			status: narrative?.status ?? `Período de teste encerra em ${daysRemaining} dia${plural(daysRemaining)}`,
 			modo: "warn",
-			mensagem: `Seu período de teste encerra em ${daysRemaining} dia${plural(daysRemaining)}. Adquira um plano para não perder o acesso.`,
+			mensagem:
+				narrative?.mensagem ?? `Seu período de teste encerra em ${daysRemaining} dia${plural(daysRemaining)}. Adquira um plano para não perder o acesso.`,
 			acao: "ASSINAR",
+			proximoPasso: narrative?.proximoPasso ?? null,
 		});
 	}
 
@@ -132,10 +170,13 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 		const daysRemaining = access.daysRemaining ?? 0;
 		return respond({
 			ativa: true,
-			status: "Teste encerrado",
+			status: narrative?.status ?? "Teste encerrado",
 			modo: "warn",
-			mensagem: `Seu período de teste encerrou. Regularize em até ${daysRemaining} dia${plural(daysRemaining)} para manter o acesso.`,
+			mensagem:
+				narrative?.mensagem ?? `Seu período de teste encerrou. Regularize em até ${daysRemaining} dia${plural(daysRemaining)} para manter o acesso.`,
 			acao: "ASSINAR",
+			proximoPasso: narrative?.proximoPasso ?? null,
+			construido,
 		});
 	}
 
@@ -150,7 +191,11 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 		});
 	}
 
-	if (org.stripeSubscriptionStatus === "incomplete" || org.stripeSubscriptionStatus === "incomplete_expired" || org.stripeSubscriptionStatus === "unpaid") {
+	if (
+		org.stripeSubscriptionStatus === "incomplete" ||
+		org.stripeSubscriptionStatus === "incomplete_expired" ||
+		org.stripeSubscriptionStatus === "unpaid"
+	) {
 		// `incomplete_expired` é terminal: a fatura inicial morreu e o portal não tem o que abrir,
 		// então esse caso volta para o checkout mesmo tendo customer no Stripe.
 		const expirou = org.stripeSubscriptionStatus === "incomplete_expired";
@@ -180,6 +225,7 @@ async function getSubscriptionStatus(): Promise<{ data: TSubscriptionStatusData;
 			modo: "fail",
 			mensagem: "Seu período de teste e o prazo de regularização expiraram. Adquira um plano para continuar.",
 			acao: "ASSINAR",
+			construido,
 		});
 	}
 

@@ -1,30 +1,46 @@
-import { AppSubscriptionPlans, CONSULTORIA_ADDON, DEAL_PLAN_KEY, FREE_TRIAL_DURATION_DAYS } from "@/config";
+import { AppSubscriptionPlans, FREE_TRIAL_DURATION_DAYS, SUBSCRIPTION_ADDONS } from "@/config";
 
 // Fonte única dos preços públicos (landing #planos e /pricing). Os valores vêm do config de
-// assinatura, o mesmo que o checkout cobra: o plano comercializado hoje (DEAL_PLAN_KEY, CRESCIMENTO)
-// e o add-on Gestor de Crescimento, que só existe no ciclo mensal.
-//
-// O que NÃO está no plano-base: a caixa de entrada compartilhada e o agente de IA
-// (`hubAtendimentos` desligado no CRESCIMENTO) são adicionais liberados sob consulta, e o ERP é
-// proposta sob medida. O limite de campanhas ativas do plano não é divulgado.
+// assinatura, o mesmo que o checkout cobra: dois planos-base (CRM e CRM + ERP) e dois adicionais
+// que entram em qualquer um deles — o Hub de Atendimentos e o Gestor de Crescimento, este só no
+// ciclo mensal. Preço fixo por loja, sem limite de campanhas, clientes, usuários ou atendentes.
 
-const BASE_PLAN = AppSubscriptionPlans[DEAL_PLAN_KEY];
+const CRM_PLAN = AppSubscriptionPlans.CRM;
+const ERP_PLAN = AppSubscriptionPlans.CRM_ERP;
+const HUB_ADDON = SUBSCRIPTION_ADDONS.HUB_ATENDIMENTOS;
+const CONSULTORIA = SUBSCRIPTION_ADDONS.CONSULTORIA;
+
+const MONTHS_IN_YEAR = 12;
 
 export const PRICING = {
-	platformMonthly: BASE_PLAN.pricing.monthly.price,
-	platformYearly: BASE_PLAN.pricing.yearly.price,
-	consultoriaMonthly: CONSULTORIA_ADDON.monthlyPrice,
-	bundleMonthly: BASE_PLAN.pricing.monthly.price + CONSULTORIA_ADDON.monthlyPrice,
+	platformMonthly: CRM_PLAN.pricing.monthly.price,
+	platformYearly: CRM_PLAN.pricing.yearly.price,
+	erpMonthly: ERP_PLAN.pricing.monthly.price,
+	erpYearly: ERP_PLAN.pricing.yearly.price,
+	hubMonthly: HUB_ADDON.pricing.monthly.price,
+	consultoriaMonthly: CONSULTORIA.pricing.monthly.price,
+	// CRM operado pela nossa equipe: o combo que a landing apresenta.
+	bundleMonthly: CRM_PLAN.pricing.monthly.price + CONSULTORIA.pricing.monthly.price,
 	trialDays: FREE_TRIAL_DURATION_DAYS,
 };
 
 /** Equivalente mensal do plano anual e a economia sobre 12 mensalidades, como no PlanPicker do app. */
-export const PLATFORM_YEARLY_MONTHLY_EQUIVALENT = PRICING.platformYearly / 12;
-export const PLATFORM_YEARLY_SAVINGS_PERCENT = Math.round((1 - PRICING.platformYearly / (PRICING.platformMonthly * 12)) * 100);
+export const PLATFORM_YEARLY_MONTHLY_EQUIVALENT = PRICING.platformYearly / MONTHS_IN_YEAR;
+export const ERP_YEARLY_MONTHLY_EQUIVALENT = PRICING.erpYearly / MONTHS_IN_YEAR;
+export const PLATFORM_YEARLY_SAVINGS_PERCENT = Math.round((1 - PRICING.platformYearly / (PRICING.platformMonthly * MONTHS_IN_YEAR)) * 100);
 
 export function formatPlanPrice(value: number) {
 	return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+
+/** Preços já formatados, para o texto corrido das páginas (FAQ, chamadas). */
+export const PRICE_LABELS = {
+	crmMonthly: `R$ ${formatPlanPrice(PRICING.platformMonthly)}`,
+	erpMonthly: `R$ ${formatPlanPrice(PRICING.erpMonthly)}`,
+	hubMonthly: `R$ ${formatPlanPrice(PRICING.hubMonthly)}`,
+	consultoriaMonthly: `R$ ${formatPlanPrice(PRICING.consultoriaMonthly)}`,
+	bundleMonthly: `R$ ${formatPlanPrice(PRICING.bundleMonthly)}`,
+};
 
 export const PLATFORM_INCLUDED = [
 	"Ponto de Interação (tablet + QR Code)",
@@ -35,6 +51,17 @@ export const PLATFORM_INCLUDED = [
 	"Business Intelligence de vendas",
 	"Suporte humano incluso",
 ];
+
+export const ERP_INCLUDED = [
+	"PDV (frente de caixa)",
+	"Emissão de nota fiscal",
+	"Controle de estoque",
+	"Financeiro",
+	"Cardápio digital, mesas e comandas",
+	"Implantação acompanhada",
+];
+
+export const HUB_INCLUDED = HUB_ADDON.pricingTableFeatures.map((feature) => feature.label);
 
 export const CONSULTORIA_INCLUDED = [
 	"Um gestor de crescimento dedicado ao seu negócio",

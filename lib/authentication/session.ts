@@ -1,5 +1,5 @@
 "use server";
-import { SESSION_COOKIE_NAME, resolveSubscriptionAccess } from "@/config";
+import { SESSION_COOKIE_NAME, isTrialSubscriptionAccess, resolveSubscriptionAccess } from "@/config";
 import { db } from "@/services/drizzle";
 import { type TAuthSessionEntity, type TOrganizationEntity, type TOrganizationMemberEntity, authSessions } from "@/services/drizzle/schema";
 import { sha256 } from "@oslojs/crypto/sha2";
@@ -66,8 +66,19 @@ export async function createSession({ token, userId }: CreateSessionParams) {
 type TSessionMembershipRow = Pick<TOrganizationMemberEntity, "id" | "usuarioVendedorId" | "permissoes"> & {
 	organizacao: TOrganizationEntity;
 };
-function buildSessionMembership(membership: TSessionMembershipRow, integracoes: TAuthSessionIntegrationSummary[]): NonNullable<TAuthUserSession["membership"]> {
+function buildSessionMembership(
+	membership: TSessionMembershipRow,
+	integracoes: TAuthSessionIntegrationSummary[],
+): NonNullable<TAuthUserSession["membership"]> {
 	const organizacao = membership.organizacao;
+	const access = resolveSubscriptionAccess({
+		stripeStatus: organizacao.stripeSubscriptionStatus,
+		stripeStatusChangedAt: organizacao.stripeSubscriptionStatusUltimaAlteracao,
+		trialStart: organizacao.periodoTesteInicio,
+		trialEnd: organizacao.periodoTesteFim,
+		paidPeriodEnd: organizacao.assinaturaPeriodoPagoFim,
+		provisionalAccessEnd: organizacao.assinaturaAcessoProvisorioFim,
+	});
 	return {
 		id: membership.id,
 		usuarioVendedorId: membership.usuarioVendedorId,
@@ -77,14 +88,10 @@ function buildSessionMembership(membership: TSessionMembershipRow, integracoes: 
 			slug: organizacao.slug,
 			cnpj: organizacao.cnpj,
 			logoUrl: organizacao.logoUrl,
-			assinaturaAtiva: resolveSubscriptionAccess({
-				stripeStatus: organizacao.stripeSubscriptionStatus,
-				stripeStatusChangedAt: organizacao.stripeSubscriptionStatusUltimaAlteracao,
-				trialStart: organizacao.periodoTesteInicio,
-				trialEnd: organizacao.periodoTesteFim,
-				paidPeriodEnd: organizacao.assinaturaPeriodoPagoFim,
-				provisionalAccessEnd: organizacao.assinaturaAcessoProvisorioFim,
-			}).active,
+			assinaturaAtiva: access.active,
+			// O acesso vem do teste (ou da carência dele), não de uma cobrança. Quem testa tem
+			// `assinaturaPlano` gravado (o plano do teste), então o plano sozinho não diz quem paga.
+			assinaturaEmTeste: isTrialSubscriptionAccess(access),
 			assinaturaPlano: organizacao.assinaturaPlano,
 			corPrimaria: organizacao.corPrimaria,
 			corPrimariaForeground: organizacao.corPrimariaForeground,

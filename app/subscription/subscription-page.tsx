@@ -41,7 +41,11 @@ export default function SubscriptionPage({ isPlatformAdmin }: SubscriptionPagePr
 				</div>
 
 				<main className="flex flex-col gap-4 rounded-3xl border border-border bg-card p-5 shadow-sm sm:p-6">
-					{isLoading ? <StatusSkeleton /> : <StatusBand status={data?.status} mensagem={data?.mensagem} isError={isError} />}
+					{isLoading ? (
+						<StatusSkeleton />
+					) : (
+						<StatusBand status={data?.status} mensagem={data?.mensagem} construido={data?.construido ?? []} isError={isError} />
+					)}
 
 					<div className="border-t border-border" />
 
@@ -62,7 +66,18 @@ export default function SubscriptionPage({ isPlatformAdmin }: SubscriptionPagePr
 	);
 }
 
-function StatusBand({ status, mensagem, isError }: { status?: string; mensagem?: string; isError: boolean }) {
+function StatusBand({
+	status,
+	mensagem,
+	construido,
+	isError,
+}: {
+	status?: string;
+	mensagem?: string;
+	/** O que a loja já construiu, com números exatos (lib/subscriptions/activation-narrative.ts). */
+	construido: Array<{ valor: string; rotulo: string }>;
+	isError: boolean;
+}) {
 	// Sem o status da API ainda existe uma página útil: a organização está bloqueada de qualquer
 	// forma (o server component já garantiu isso), só não sabemos dizer o motivo exato.
 	const titulo = status ?? "Acesso suspenso";
@@ -76,6 +91,19 @@ function StatusBand({ status, mensagem, isError }: { status?: string; mensagem?:
 			<p className="max-w-prose text-sm leading-relaxed text-muted-foreground">
 				{texto} <span className="font-medium text-foreground">Seus clientes e vendas continuam salvos.</span>
 			</p>
+			{construido.length > 0 ? (
+				<div className="flex flex-col gap-2 pt-2">
+					<p className="text-label text-muted-foreground">O que sua loja já construiu aqui</p>
+					<ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+						{construido.map((item) => (
+							<li key={item.rotulo} className="flex items-baseline gap-2 rounded-xl border border-border px-3 py-2.5">
+								<span className="font-black text-lg tabular-nums leading-none">{item.valor}</span>
+								<span className="text-sm text-muted-foreground">{item.rotulo}</span>
+							</li>
+						))}
+					</ul>
+				</div>
+			) : null}
 		</div>
 	);
 }

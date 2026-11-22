@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import { loadOrganizationActivity } from "@/lib/onboarding/activity";
 import { getOnboardingReadiness } from "@/lib/onboarding/readiness";
 import {
 	createControlOpportunity,
@@ -14,8 +15,8 @@ import {
 	updateControlOpportunity,
 } from "@/services/control";
 import { db } from "@/services/drizzle";
-import { campaigns, cashbackProgramTransactions, controlLifecycleSyncs, interactions, sales } from "@/services/drizzle/schema";
-import { and, count, eq, gte, inArray, isNotNull, min, sql } from "drizzle-orm";
+import { campaigns, controlLifecycleSyncs } from "@/services/drizzle/schema";
+import { count, eq, sql } from "drizzle-orm";
 
 import {
 	buildControlCustomFields,
@@ -23,6 +24,7 @@ import {
 	CONTROL_COMMERCIAL_TRIAL_STAGE_NAME,
 	CONTROL_SUCCESS_BOARD_NAME,
 	controlOrganizationReference,
+	isMilestoneEventDue,
 	normalizeStageName,
 	planControlLifecycleSync,
 	resolveStuckNotices,
@@ -66,9 +68,6 @@ function findBoard(boards: TControlBoard[], name: string) {
 	return boards.find((board) => normalizeStageName(board.nome) === normalizeStageName(name)) ?? null;
 }
 
-const DELIVERED_STATUSES = ["ENTREGUE", "LIDO"] as const;
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 async function loadOrganization(organizationId: string) {
 	return db.query.organizations.findFirst({
 		where: (fields, { eq }) => eq(fields.id, organizationId),
@@ -92,32 +91,10 @@ type TSyncOrganization = NonNullable<Awaited<ReturnType<typeof loadOrganization>
 
 async function loadSnapshot(organization: TSyncOrganization, now: Date) {
 	const organizationId = organization.id;
-	const fourteenDaysAgo = new Date(now.getTime() - 14 * DAY_MS);
-	const deliveredCampaignMessages = and(
-		eq(interactions.organizacaoId, organizationId),
-		isNotNull(interactions.campanhaId),
-		inArray(interactions.statusEnvio, [...DELIVERED_STATUSES]),
-	);
-
-	const [readiness, [firstSale], [firstDelivery], [recentDeliveries], [firstRedemption], [campaignCounts]] = await Promise.all([
+	// Vendas, entregas e resgates vêm do mesmo leitor que a ativação do hub usa: os dois contam igual.
+	const [readiness, activity, [campaignCounts]] = await Promise.all([
 		getOnboardingReadiness({ executor: db, organizationId }),
-		// Venda com data depois do cadastro: o histórico importado não é "a primeira venda" na plataforma.
-		db
-			.select({ at: min(sales.dataVenda) })
-			.from(sales)
-			.where(and(eq(sales.organizacaoId, organizationId), gte(sales.dataVenda, organization.dataInsercao))),
-		db
-			.select({ at: min(interactions.dataInsercao) })
-			.from(interactions)
-			.where(deliveredCampaignMessages),
-		db
-			.select({ total: count() })
-			.from(interactions)
-			.where(and(deliveredCampaignMessages, gte(interactions.dataInsercao, fourteenDaysAgo))),
-		db
-			.select({ at: min(cashbackProgramTransactions.dataInsercao) })
-			.from(cashbackProgramTransactions)
-			.where(and(eq(cashbackProgramTransactions.organizacaoId, organizationId), eq(cashbackProgramTransactions.tipo, "RESGATE"))),
+		loadOrganizationActivity({ executor: db, organizationId, criadaEm: organization.dataInsercao, now }),
 		db
 			.select({ total: count(), ativas: sql<number>`count(*) filter (where ${campaigns.ativo})::integer` })
 			.from(campaigns)
@@ -133,12 +110,13 @@ async function loadSnapshot(organization: TSyncOrganization, now: Date) {
 		onboardingConcluidoEm: organization.dataOnboardingConclusao,
 		cashbackConfigurado: readiness.cashback.estado !== "NAO_CONFIGURADO",
 		campanhasPreparadas,
-		fonteDadosDefinida: readiness.fonteDados.modo !== "NENHUMA",
-		whatsappOficialConectado: readiness.whatsapp.numero === "CONECTADO" && readiness.whatsapp.tipoConexao === "META_CLOUD_API",
-		primeiraVendaEm: firstSale?.at ?? null,
-		primeiroEnvioCampanhaEm: firstDelivery?.at ?? null,
-		primeiroResgateEm: firstRedemption?.at ?? null,
-		enviosCampanhaUltimos14Dias: recentDeliveries?.total ?? 0,
+		fonteDadosDefinida: readiness.fonteDados.definida,
+		whatsappOficialConectado: readiness.whatsapp.oficialConectadoEm !== null,
+		whatsappOficialConectadoEm: readiness.whatsapp.oficialConectadoEm,
+		primeiraVendaEm: activity.primeiraVendaEm,
+		primeiroEnvioCampanhaEm: activity.envios.primeiraEntregaEm,
+		primeiroResgateEm: activity.primeiroResgateEm,
+		enviosCampanhaUltimos14Dias: activity.envios.entregas14Dias,
 		now,
 	};
 
@@ -151,7 +129,7 @@ async function loadSnapshot(organization: TSyncOrganization, now: Date) {
 		fonte_de_dados: readiness.fonteDados.modo,
 		whatsapp: readiness.whatsapp.numero,
 		campanhas_ativas: campaignCounts?.ativas ?? 0,
-		envios_campanha_14d: recentDeliveries?.total ?? 0,
+		envios_campanha_14d: activity.envios.entregas14Dias,
 	};
 
 	return { snapshot, customFields };
@@ -260,13 +238,17 @@ export async function syncControlLifecycle({
 	}
 	for (const milestone of isBackfill ? [] : plan.novosMarcos) {
 		const occurredAt = (milestone.quando(snapshot) ?? now).toISOString();
-		await sendControlEvent({
-			evento: milestone.evento,
-			eventId: `${reference}:${milestone.chave}`,
-			oportunidadeId: opportunityId,
-			propriedades: { organizacaoId: organizationId, marco: milestone.chave },
-			dataOcorrencia: occurredAt,
-		});
+		// Marco descoberto tarde (ver `eventoAteDias`): fica na linha do tempo com a data real, mas sem
+		// evento, para nenhum workflow comemorar algo de meses atrás.
+		if (isMilestoneEventDue({ milestone, snapshot })) {
+			await sendControlEvent({
+				evento: milestone.evento,
+				eventId: `${reference}:${milestone.chave}`,
+				oportunidadeId: opportunityId,
+				propriedades: { organizacaoId: organizationId, marco: milestone.chave },
+				dataOcorrencia: occurredAt,
+			});
+		}
 		await logControlInteraction(
 			{ oportunidadeId: opportunityId, titulo: milestone.titulo, canal: "SITE", dataInteracao: occurredAt },
 			`${reference}:interacao:${milestone.chave}`,

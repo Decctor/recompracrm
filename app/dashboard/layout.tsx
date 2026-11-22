@@ -1,6 +1,5 @@
 import AppHeader from "@/components/Layouts/HeaderApp";
 import LoadingComponent from "@/components/Layouts/LoadingComponent";
-import { ActivationPanel } from "@/components/Onboarding/ActivationPanel";
 import { OrgColorsProvider } from "@/components/Providers/OrgColorsProvider";
 import { AppSidebar } from "@/components/Sidebar/AppSidebar";
 import { SidebarInset } from "@/components/ui/sidebar";

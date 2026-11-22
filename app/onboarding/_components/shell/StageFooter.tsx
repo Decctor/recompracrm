@@ -7,7 +7,11 @@ type StageFooterProps = {
 	/** Rótulo da ação secundária. Null = etapa não adiável. */
 	deferLabel: string | null;
 	onDefer?: () => void;
-	continueLabel?: string;
+	/**
+	 * Rótulo da ação principal. Null = a ação principal está dentro da etapa (ex.: "Conectar com a
+	 * Meta"), e o rodapé oferece só voltar e adiar, sem um "continuar" competindo com ela.
+	 */
+	continueLabel?: string | null;
 	onContinue: () => void;
 	isLoading: boolean;
 };
@@ -19,7 +23,9 @@ export function StageFooter({ canGoBack, onBack, deferLabel, onDefer, continueLa
 				<ArrowLeft className="size-4" />
 				Voltar
 			</Button>
-			{deferLabel && onDefer ? (
+			{continueLabel === null ? (
+				<span className="hidden lg:order-2 lg:block" />
+			) : deferLabel && onDefer ? (
 				<Button
 					type="button"
 					variant="link"
@@ -32,17 +38,32 @@ export function StageFooter({ canGoBack, onBack, deferLabel, onDefer, continueLa
 			) : (
 				<span className="hidden lg:order-2 lg:block" />
 			)}
-			<Button
-				type="button"
-				size="lg"
-				onClick={onContinue}
-				disabled={isLoading}
-				className="order-2 h-auto min-h-11 max-w-full gap-1.5 justify-self-end py-2 whitespace-normal lg:order-3"
-			>
-				{isLoading ? <Loader2 className="size-4 animate-spin" /> : null}
-				{continueLabel}
-				{!isLoading ? <ArrowRight className="size-4" /> : null}
-			</Button>
+			{continueLabel === null ? (
+				deferLabel && onDefer ? (
+					<Button
+						type="button"
+						variant="outline"
+						onClick={onDefer}
+						disabled={isLoading}
+						className="order-2 h-auto min-h-11 max-w-full justify-self-end py-2 whitespace-normal lg:order-3"
+					>
+						{isLoading ? <Loader2 className="size-4 animate-spin" /> : null}
+						{deferLabel}
+					</Button>
+				) : null
+			) : (
+				<Button
+					type="button"
+					size="lg"
+					onClick={onContinue}
+					disabled={isLoading}
+					className="order-2 h-auto min-h-11 max-w-full gap-1.5 justify-self-end py-2 whitespace-normal lg:order-3"
+				>
+					{isLoading ? <Loader2 className="size-4 animate-spin" /> : null}
+					{continueLabel}
+					{!isLoading ? <ArrowRight className="size-4" /> : null}
+				</Button>
+			)}
 		</div>
 	);
 }

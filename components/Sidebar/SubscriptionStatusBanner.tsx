@@ -16,20 +16,37 @@ export default function SubscriptionStatusBanner() {
 
 	const isWarn = data.modo === "warn";
 	const isFail = data.modo === "fail";
+	const pillClassName = cn(
+		"flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold transition-all duration-200 hover:opacity-80 shrink-0",
+		isWarn && "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+		isFail && "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
+	);
+
+	// Loja em teste que ainda não ativou: o selo é o próximo passo dela e leva até ele, em vez de
+	// abrir os planos (lib/subscriptions/activation-narrative.ts).
+	if (data.proximoPasso) {
+		return (
+			<Tooltip>
+				<TooltipTrigger
+					render={
+						<Link href={data.proximoPasso.href} className={pillClassName} aria-label={data.status}>
+							<AlertTriangle className="w-3.5 h-3.5" />
+							<span className="hidden sm:inline uppercase">{data.status}</span>
+						</Link>
+					}
+				/>
+				<TooltipContent side="bottom" sideOffset={8} className="max-w-64">
+					{data.mensagem}
+				</TooltipContent>
+			</Tooltip>
+		);
+	}
 
 	return (
 		<Tooltip>
 			<TooltipTrigger
 				render={
-					<button
-						type="button"
-						onClick={() => setPlanSelectionMenuOpen(true)}
-						className={cn(
-							"flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold transition-all duration-200 hover:opacity-80 shrink-0",
-							isWarn && "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
-							isFail && "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
-						)}
-					>
+					<button type="button" onClick={() => setPlanSelectionMenuOpen(true)} className={pillClassName}>
 						{isWarn && <AlertTriangle className="w-3.5 h-3.5" />}
 						{isFail && <AlertCircle className="w-3.5 h-3.5" />}
 						<span className="hidden sm:inline uppercase">{data.status}</span>

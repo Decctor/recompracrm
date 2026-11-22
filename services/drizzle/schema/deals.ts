@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
-import { index, integer, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import type { TSubscriptionAddonEnum } from "@/schemas/enums";
+import { index, integer, jsonb, text, timestamp, varchar } from "drizzle-orm/pg-core";
 import { newTable } from "./common";
 import { dealIntervaloEnum, dealStatusEnum, stripeAccountEnum } from "./enums";
 import { organizations } from "./organizations";
@@ -25,6 +26,9 @@ export const deals = newTable(
 		emailObtentor: text("email_obtentor").notNull(),
 		telefoneObtentor: text("telefone_obtentor"),
 		planoBase: text("plano_base").notNull(), // TAppSubscriptionPlanKey — define as capabilities das orgs do deal
+		// Adicionais incluídos no valor negociado (hoje, o Hub de Atendimentos). Entram nos recursos
+		// de cada organização vinculada; o deal segue com um único price no Stripe.
+		adicionais: jsonb("adicionais").$type<TSubscriptionAddonEnum[]>().notNull().default([]),
 		quantidadeLicencas: integer("quantidade_licencas").notNull(),
 		valorUnitarioCentavos: integer("valor_unitario_centavos").notNull(),
 		intervalo: dealIntervaloEnum("intervalo").notNull().default("MENSAL"),

@@ -1,3 +1,4 @@
+import { PRICE_LABELS, PRICING } from "@/app/_content/pricing";
 import type { FAQItem } from "@/app/_content/blog-posts";
 
 // Conteúdo da página /erp/estoque. Mira "controle de estoque" (5.400/mês, KD 4), "gestão de
@@ -125,6 +126,6 @@ export const STOCK_FAQS: FAQItem[] = [
 	{
 		question: "Quanto custa?",
 		answer:
-			"O controle de estoque faz parte do ERP do RecompraCRM, com proposta sob medida para a sua operação e implantação acompanhada. Fale com um especialista pelo WhatsApp para receber o valor.",
+			`O controle de estoque faz parte do ERP do RecompraCRM. O plano CRM + ERP custa ${PRICE_LABELS.erpMonthly} por mês, com preço fixo por loja e implantação acompanhada. São ${PRICING.trialDays} dias grátis, sem cartão de crédito.`,
 	},
 ];

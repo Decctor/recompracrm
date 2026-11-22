@@ -4,7 +4,7 @@ import { Section } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getErrorMessage } from "@/lib/errors";
 import { cn } from "@/lib/utils";
-import { ArrowUpRight, CircleCheck, TriangleAlert } from "lucide-react";
+import { ArrowUpRight, CircleCheck, CircleDashed, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -159,11 +159,35 @@ function StatTile({ label, value, delta, deltaTone = "success", tone = "default"
 	);
 }
 
-function PanelEmpty({ message }: { message: string }) {
+/**
+ * Vazio do bloco. Sem `action`, o vazio é boa notícia (nada pendente) e leva o check verde. Com
+ * `action`, o vazio é de quem ainda não chegou lá — a loja sem venda, sem WhatsApp — e aponta para o
+ * que o preenche, sem o check que diria "tudo certo".
+ */
+function PanelEmpty({ message, action }: { message: string; action?: { label: string; href: string } | null }) {
+	if (action === undefined) {
+		return (
+			<div className="flex items-center gap-2 text-muted-foreground text-sm">
+				<CircleCheck className="size-4 shrink-0 text-success" aria-hidden />
+				<span>{message}</span>
+			</div>
+		);
+	}
 	return (
-		<div className="flex items-center gap-2 text-muted-foreground text-sm">
-			<CircleCheck className="size-4 shrink-0 text-success" aria-hidden />
-			<span>{message}</span>
+		<div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-muted-foreground text-sm">
+			<span className="flex min-w-0 items-start gap-2">
+				<CircleDashed className="mt-0.5 size-4 shrink-0" aria-hidden />
+				<span>{message}</span>
+			</span>
+			{action ? (
+				<Link
+					href={action.href}
+					className="text-micro flex items-center gap-0.5 rounded-sm font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+				>
+					{action.label}
+					<ArrowUpRight className="size-3.5" aria-hidden />
+				</Link>
+			) : null}
 		</div>
 	);
 }

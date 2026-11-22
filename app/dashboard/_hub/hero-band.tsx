@@ -7,6 +7,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
 import { appRoutes } from "@/lib/navigation/routes";
 import { darkenUntilReadableWithWhite } from "@/lib/organizations/colors";
+import type { THubEmptyHint } from "@/lib/onboarding/hub-hints";
 import { useGoalsStats } from "@/lib/queries/goals";
 import { useSalesPulse } from "@/lib/queries/stats/sales-pulse";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,8 @@ type HeroBandProps = {
 	canCreateGoals: boolean;
 	/** Bloco de risco à direita: cada aba mede o seu. Ausente = a aba não tem o que medir. */
 	risk: HeroRisk | null;
+	/** Antes da primeira venda da loja, o "nenhuma venda" aponta para como registrar a primeira. */
+	emptySalesHint?: THubEmptyHint | null;
 };
 
 export type HeroRisk = {
@@ -45,14 +48,14 @@ export type HeroRisk = {
 
 const PULSE_DAYS = 14;
 
-export function HeroBand({ canViewSales, canViewGoals, canCreateGoals, risk }: HeroBandProps) {
+export function HeroBand({ canViewSales, canViewGoals, canCreateGoals, risk, emptySalesHint }: HeroBandProps) {
 	// Sem permissão de resultados não há faixa de vendas, mas o risco continua valendo: é pendência,
 	// não resultado. Sem a faixa ao lado, ele ocupa a largura toda em vez de flutuar numa coluna.
 	if (!canViewSales) return risk ? <RiskTile risk={risk} /> : null;
-	return <HeroBandCard canViewGoals={canViewGoals} canCreateGoals={canCreateGoals} risk={risk} />;
+	return <HeroBandCard canViewGoals={canViewGoals} canCreateGoals={canCreateGoals} risk={risk} emptySalesHint={emptySalesHint} />;
 }
 
-function HeroBandCard({ canViewGoals, canCreateGoals, risk }: Omit<HeroBandProps, "canViewSales">) {
+function HeroBandCard({ canViewGoals, canCreateGoals, risk, emptySalesHint }: Omit<HeroBandProps, "canViewSales">) {
 	const { colors } = useOrgColors();
 	const dayKey = useDayKey();
 	const dayStart = useMemo(() => resolveTodayRange(dayKey).after.toDate(), [dayKey]);
@@ -74,7 +77,7 @@ function HeroBandCard({ canViewGoals, canCreateGoals, risk }: Omit<HeroBandProps
 				) : pulse.isError ? (
 					<p className="text-sm text-white/90">{getErrorMessage(pulse.error)}</p>
 				) : (
-					<BandContent data={pulse.data} accent={colors.secondary} band={band} />
+					<BandContent data={pulse.data} accent={colors.secondary} band={band} emptySalesHint={emptySalesHint ?? null} />
 				)}
 			</section>
 
@@ -88,7 +91,7 @@ function HeroBandCard({ canViewGoals, canCreateGoals, risk }: Omit<HeroBandProps
 
 type TPulse = NonNullable<ReturnType<typeof useSalesPulse>["data"]>;
 
-function BandContent({ data, accent, band }: { data: TPulse; accent: string; band: string }) {
+function BandContent({ data, accent, band, emptySalesHint }: { data: TPulse; accent: string; band: string; emptySalesHint: THubEmptyHint | null }) {
 	const { hoje, mesmoDiaSemanaAnterior, serie } = data;
 	const chartConfig = { faturamento: { label: "Vendido", color: "#ffffff" } } satisfies ChartConfig;
 	const media = serie.length > 0 ? serie.reduce((acc, day) => acc + day.faturamento, 0) / serie.length : 0;
@@ -103,9 +106,20 @@ function BandContent({ data, accent, band }: { data: TPulse; accent: string; ban
 					<span className="font-black text-[2.75rem] leading-[0.95] tracking-[-0.035em]">{formatToMoney(hoje.faturamento)}</span>
 					<p className="font-medium text-sm text-white/90">
 						{hoje.qtdeVendas === 0
-							? "Nenhuma venda registrada ainda."
+							? emptySalesHint
+								? `Nenhuma venda registrada ainda. ${emptySalesHint.texto}`
+								: "Nenhuma venda registrada ainda."
 							: `${formatDecimalPlaces(hoje.qtdeVendas)} ${hoje.qtdeVendas === 1 ? "venda" : "vendas"} · ticket médio ${formatToMoney(hoje.ticketMedio)}`}
 					</p>
+					{hoje.qtdeVendas === 0 && emptySalesHint?.acao ? (
+						<Link
+							href={emptySalesHint.acao.href}
+							className="mt-1 flex w-fit items-center gap-1 rounded-sm font-bold text-sm text-white underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+						>
+							{emptySalesHint.acao.rotulo}
+							<ArrowRight className="size-4" aria-hidden />
+						</Link>
+					) : null}
 				</div>
 
 				<dl className="flex shrink-0 gap-7 pt-1">

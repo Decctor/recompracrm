@@ -1,3 +1,4 @@
+import { PRICE_LABELS, PRICING } from "@/app/_content/pricing";
 import { ArrowRight } from "lucide-react";
 import { TrackedCta } from "./TrackedCta";
 import { ERP_WHATSAPP_URL } from "./erp-links";
@@ -13,7 +14,8 @@ export function ErpContact() {
 					Vamos montar o ERP da sua loja.
 				</h2>
 				<p className="mt-5 max-w-[560px] text-[18px] leading-[1.6] text-white/66 max-md:text-[16px]">
-					Proposta sob medida para a sua operação, com implantação acompanhada. O plano de CRM pode ser contratado junto ou separado.
+					O plano CRM + ERP custa {PRICE_LABELS.erpMonthly} por mês, com implantação acompanhada e sem limite de usuários. São {PRICING.trialDays} dias grátis para
+					testar.
 				</p>
 				<div className="mt-9 flex flex-wrap justify-center gap-2.5">
 					<TrackedCta

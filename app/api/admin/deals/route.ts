@@ -1,5 +1,6 @@
 import { AppSubscriptionPlans, DEAL_PLAN_KEY } from "@/config";
 import { appApiHandler } from "@/lib/app-api";
+import { SubscriptionAddonEnum, SubscriptionBasePlanEnum } from "@/schemas/enums";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { DEFAULT_PAGE_SIZE, pageSizeInputSchema } from "@/lib/pagination";
 import {
@@ -161,8 +162,8 @@ async function getDealsRoute(request: NextRequest) {
 
 const CreateDealInputSchema = z.object({
 	deal: DealSchema.omit({
-		// O tier não é negociável pelo admin: o servidor grava DEAL_PLAN_KEY (separação deprecada).
 		planoBase: true,
+		adicionais: true,
 		status: true,
 		stripePriceId: true,
 		stripeCustomerId: true,
@@ -172,16 +173,27 @@ const CreateDealInputSchema = z.object({
 		stripeSubscriptionStatusUltimaAlteracao: true,
 		autorId: true,
 		dataInsercao: true,
+	}).extend({
+		// Deal novo só nasce com um plano-base vendido hoje — os tiers antigos ficam para os deals
+		// que já existem.
+		planoBase: SubscriptionBasePlanEnum.optional().default(DEAL_PLAN_KEY),
+		// Adicional de software incluído no valor negociado. A consultoria não entra: nas
+		// organizações de deal ela é ligada pelo admin, organização a organização.
+		adicionais: z
+			.array(SubscriptionAddonEnum, { invalid_type_error: "Tipo não válido para os adicionais do deal." })
+			.refine((addons) => !addons.includes("CONSULTORIA"), "A consultoria não é um adicional de deal: ative-a na organização.")
+			.optional()
+			.default([]),
 	}),
 });
-export type TCreateDealInput = z.infer<typeof CreateDealInputSchema>;
+export type TCreateDealInput = z.input<typeof CreateDealInputSchema>;
+type TCreateDealParsedInput = z.infer<typeof CreateDealInputSchema>;
 
-async function createDeal({ input, authorId }: { input: TCreateDealInput; authorId: string }) {
+async function createDeal({ input, authorId }: { input: TCreateDealParsedInput; authorId: string }) {
 	const { deal: dealInput } = input;
 
-	// Plano fixo (DEAL_PLAN_KEY) — a separação em tiers está deprecada. Valida contra a
-	// configuração antes de tocar no Stripe para falhar cedo se o plano sumir do config.
-	const plan = AppSubscriptionPlans[DEAL_PLAN_KEY];
+	// Valida contra a configuração antes de tocar no Stripe, para falhar cedo se o plano sumir do config.
+	const plan = AppSubscriptionPlans[dealInput.planoBase];
 	if (!plan) throw new createHttpError.InternalServerError("Plano base de assinatura não configurado.");
 
 	// Se o obtentor não foi selecionado manualmente, tenta o match por email — caso o
@@ -201,7 +213,6 @@ async function createDeal({ input, authorId }: { input: TCreateDealInput; author
 		.insert(deals)
 		.values({
 			...dealInput,
-			planoBase: DEAL_PLAN_KEY,
 			usuarioObtentorId,
 			status: "PENDENTE",
 			autorId: authorId,

@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { ImportProgress } from "../shared/ImportProgress";
 import { formatCount, getConclusionCopy } from "@/lib/onboarding/copy";
+import { INACTIVITY_IMPACT_DAYS } from "@/lib/onboarding/impact";
 import type { TOnboardingReadiness } from "@/lib/onboarding/readiness";
 import { ArrowRight, Loader2 } from "lucide-react";
 import Link from "next/link";
@@ -57,7 +58,8 @@ function describeSource(readiness: TOnboardingReadiness): { value: string; tone:
 		case "POI":
 			return { value: "Registro no balcão", tone: "ok" };
 		default:
-			return { value: "Não definida", tone: "adiado" };
+			// Com ERP, as vendas nascem no PDV: a fonte existe mesmo sem integração nem balcão.
+			return readiness.fonteDados.definida ? { value: "PDV do ERP", tone: "ok" } : { value: "Não definida", tone: "adiado" };
 	}
 }
 
@@ -76,7 +78,9 @@ function describeWhatsapp(readiness: TOnboardingReadiness): { value: string; ton
 
 function describeCampaigns(readiness: TOnboardingReadiness): { value: string; tone: TReadinessTone } {
 	const total = readiness.campanhas.length;
-	if (total === 0) return { value: "Nenhuma por enquanto", tone: "adiado" };
+	const manual = readiness.campanhasManuais.ativas;
+	if (total === 0)
+		return manual > 0 ? { value: formatCount(manual, "ativa", "ativas"), tone: "ok" } : { value: "Nenhuma por enquanto", tone: "adiado" };
 	const active = readiness.campanhas.filter((campaign) => campaign.estado === "ATIVA").length;
 	const ready = readiness.campanhas.filter((campaign) => campaign.estado === "PRONTA").length;
 	if (active === total) return { value: `${formatCount(active, "enviando", "enviando")}`, tone: "ok" };
@@ -93,6 +97,7 @@ export function EntryStage({ readiness, deferredStages, onEnableCampaigns, isEna
 	const campaigns = describeCampaigns(readiness);
 	const readyCampaigns = readiness.campanhas.filter((campaign) => campaign.estado === "PRONTA");
 	const pendingCampaigns = readiness.campanhas.filter((campaign) => campaign.estado !== "ATIVA");
+	const inactive = readiness.dados.clientesInativos;
 
 	return (
 		<div className="flex w-full flex-col gap-8">
@@ -101,6 +106,27 @@ export function EntryStage({ readiness, deferredStages, onEnableCampaigns, isEna
 				<h2 className="text-xl font-extrabold tracking-tight">{copy.titulo}</h2>
 				<p className="max-w-[68ch] text-sm text-muted-foreground">{copy.descricao}</p>
 			</div>
+
+			{/* O número da própria loja, no pico de curiosidade. Só com cobertura que permite afirmar
+			    ausência de compra (lib/onboarding/impact.ts); sem isso, a entrada fica como sempre. */}
+			{inactive && inactive.clientes > 0 ? (
+				<section className="flex flex-col gap-1 rounded-2xl border border-border p-5" aria-label="Sua base hoje">
+					<p className="text-[11px] font-extrabold tracking-[0.08em] text-muted-foreground uppercase">Sua base hoje</p>
+					<p className="text-lg leading-snug">
+						<span className="text-3xl font-black tracking-tight tabular-nums">{inactive.clientes.toLocaleString("pt-BR")}</span>{" "}
+						{inactive.clientes === 1 ? "cliente não compra" : "clientes não compram"} há mais de {INACTIVITY_IMPACT_DAYS} dias.
+					</p>
+					{inactive.valorTotal > 0 ? (
+						<p className="text-sm text-muted-foreground">
+							Nas vendas que chegaram até agora, {inactive.clientes === 1 ? "ele soma" : "eles somam"}{" "}
+							<span className="font-bold text-foreground tabular-nums">
+								{inactive.valorTotal.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+							</span>
+							. As campanhas de recuperação são para eles.
+						</p>
+					) : null}
+				</section>
+			) : null}
 
 			<div className="grid min-w-0 grid-cols-1 gap-8">
 				<section className="flex min-w-0 flex-col gap-2">

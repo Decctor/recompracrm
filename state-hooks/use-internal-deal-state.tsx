@@ -1,11 +1,10 @@
+import { DEAL_PLAN_KEY } from "@/config";
 import { DealSchema } from "@/schemas/deals";
 import { useCallback, useState } from "react";
 import z from "zod";
 
 const DealStateSchema = z.object({
 	deal: DealSchema.omit({
-		// planoBase não é escolhido pelo admin: o servidor grava DEAL_PLAN_KEY na criação.
-		planoBase: true,
 		status: true,
 		stripeConta: true,
 		stripePriceId: true,
@@ -29,6 +28,9 @@ export function useInternalDealState({ initialState }: { initialState: Partial<T
 			nomeObtentor: "",
 			emailObtentor: "",
 			telefoneObtentor: null,
+			// O admin escolhe o plano-base e os adicionais incluídos no valor negociado.
+			planoBase: DEAL_PLAN_KEY,
+			adicionais: [],
 			quantidadeLicencas: 1,
 			valorUnitarioCentavos: 0,
 			intervalo: "MENSAL",

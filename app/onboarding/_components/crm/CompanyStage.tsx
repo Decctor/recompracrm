@@ -3,6 +3,7 @@
 import TextInput from "@/components/Inputs/TextInput";
 import { OrganizationSlugFeedback } from "@/components/Organizations/OrganizationSlugFeedback";
 import { Checkbox } from "@/components/ui/checkbox";
+import { AppSubscriptionPlans } from "@/config";
 import { OrganizationNicheOptions } from "@/config/onboarding";
 import { formatToCPForCNPJ, formatToPhone } from "@/lib/formatting";
 import { slugifyOrganizationName } from "@/lib/organizations/slug";
@@ -12,6 +13,8 @@ import { BadgeCheck, ImagePlus } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
+import { MAIN_PAIN_OPTIONS, TRIAL_GOAL_TARGET } from "@/lib/onboarding/main-pain";
+import type { TOnboardingMainPainEnum } from "@/schemas/enums";
 import { ChoiceList } from "../shared/ChoiceList";
 
 type CompanyStageProps = {
@@ -21,13 +24,27 @@ type CompanyStageProps = {
 	updateOnboarding: TUseOrganizationOnboardingState["updateOnboarding"];
 	/** Organização já existe: a etapa vira edição e os termos já foram aceitos. */
 	isEditing: boolean;
+	/**
+	 * Jornada da etapa. No CRM ficam só os dados que mudam o percurso ou o cadastro exige (nome, CNPJ,
+	 * telefone, segmento) mais a pergunta de intenção; logo, endereço da loja online e e-mail ficam
+	 * para quando forem usados (o servidor gera o endereço a partir do nome). No ERP, a loja digital
+	 * usa o endereço e a logo, então eles continuam aqui.
+	 */
+	produto: "CRM" | "ERP";
 };
+
+/** Nome do plano para quem lê ("CRM + ERP"), não a chave ("CRM_ERP"); chave desconhecida passa como veio. */
+function planName(planKey: string) {
+	return planKey in AppSubscriptionPlans ? AppSubscriptionPlans[planKey as keyof typeof AppSubscriptionPlans].name : planKey;
+}
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
 	return <p className="text-[11px] font-extrabold tracking-[0.08em] text-muted-foreground uppercase">{children}</p>;
 }
 
-export function CompanyStage({ state, updateOrganization, updateOrganizationLogoHolder, updateOnboarding, isEditing }: CompanyStageProps) {
+export function CompanyStage({ state, updateOrganization, updateOrganizationLogoHolder, updateOnboarding, isEditing, produto }: CompanyStageProps) {
+	const isCrm = produto === "CRM";
+	const showIntent = isCrm;
 	// Licença de deal (venda B2B multi-licença): org ativada sem trial e sem checkout.
 	const { data: dealLicense } = useAvailableDealLicense();
 	// O endereço acompanha o nome até o usuário mexer nele.
@@ -57,7 +74,7 @@ export function CompanyStage({ state, updateOrganization, updateOrganizationLogo
 						<p className="text-sm font-bold">Você possui licenças disponíveis</p>
 						<p className="text-sm text-muted-foreground">
 							{dealLicense.licencasUtilizadas} de {dealLicense.deal.quantidadeLicencas} licenças do seu plano estão em uso. Esta organização será ativada no
-							plano {dealLicense.deal.planoBase}, sem período de teste e sem checkout.
+							plano {planName(dealLicense.deal.planoBase)}, sem período de teste e sem checkout.
 						</p>
 					</div>
 				</div>
@@ -66,29 +83,31 @@ export function CompanyStage({ state, updateOrganization, updateOrganizationLogo
 			<section className="flex flex-col gap-4">
 				<SectionLabel>Identificação</SectionLabel>
 				<div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-					<label
-						htmlFor="onboarding-logo"
-						className="relative flex size-28 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-border bg-muted/40 text-muted-foreground transition-colors hover:bg-muted/70"
-					>
-						{previewUrl ? (
-							<Image alt="Logo da organização" fill className="object-cover" src={previewUrl} />
-						) : (
-							<span className="flex flex-col items-center gap-1 text-center">
-								<ImagePlus className="size-5" />
-								<span className="text-[11px] font-semibold">Logo</span>
-							</span>
-						)}
-						<input
-							id="onboarding-logo"
-							type="file"
-							accept=".png,.jpeg,.jpg"
-							className="absolute inset-0 cursor-pointer opacity-0"
-							onChange={(event) => {
-								const file = event.target.files?.[0] ?? null;
-								updateOrganizationLogoHolder({ file, previewUrl: file ? URL.createObjectURL(file) : null });
-							}}
-						/>
-					</label>
+					{isCrm ? null : (
+						<label
+							htmlFor="onboarding-logo"
+							className="relative flex size-28 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-border bg-muted/40 text-muted-foreground transition-colors hover:bg-muted/70"
+						>
+							{previewUrl ? (
+								<Image alt="Logo da organização" fill className="object-cover" src={previewUrl} />
+							) : (
+								<span className="flex flex-col items-center gap-1 text-center">
+									<ImagePlus className="size-5" />
+									<span className="text-[11px] font-semibold">Logo</span>
+								</span>
+							)}
+							<input
+								id="onboarding-logo"
+								type="file"
+								accept=".png,.jpeg,.jpg"
+								className="absolute inset-0 cursor-pointer opacity-0"
+								onChange={(event) => {
+									const file = event.target.files?.[0] ?? null;
+									updateOrganizationLogoHolder({ file, previewUrl: file ? URL.createObjectURL(file) : null });
+								}}
+							/>
+						</label>
+					)}
 					<div className="flex w-full flex-col gap-3">
 						<TextInput
 							value={state.organization.nome}
@@ -97,16 +116,18 @@ export function CompanyStage({ state, updateOrganization, updateOrganizationLogo
 							handleChange={handleNomeChange}
 							required
 						/>
-						<div className="flex flex-col gap-1">
-							<TextInput
-								value={state.organization.slug}
-								label="Endereço da loja online"
-								placeholder="endereco-da-sua-loja"
-								handleChange={handleSlugChange}
-								handleOnBlur={() => updateOrganization({ slug: slugifyOrganizationName(state.organization.slug) })}
-							/>
-							<OrganizationSlugFeedback slug={state.organization.slug} onApplySuggestion={(suggestion) => updateOrganization({ slug: suggestion })} />
-						</div>
+						{isCrm ? null : (
+							<div className="flex flex-col gap-1">
+								<TextInput
+									value={state.organization.slug}
+									label="Endereço da loja online"
+									placeholder="endereco-da-sua-loja"
+									handleChange={handleSlugChange}
+									handleOnBlur={() => updateOrganization({ slug: slugifyOrganizationName(state.organization.slug) })}
+								/>
+								<OrganizationSlugFeedback slug={state.organization.slug} onApplySuggestion={(suggestion) => updateOrganization({ slug: suggestion })} />
+							</div>
+						)}
 						<TextInput
 							value={state.organization.cnpj || ""}
 							label="CNPJ"
@@ -114,13 +135,15 @@ export function CompanyStage({ state, updateOrganization, updateOrganizationLogo
 							handleChange={(value) => updateOrganization({ cnpj: formatToCPForCNPJ(value) })}
 							required
 						/>
-						<div className="grid gap-3 sm:grid-cols-2">
-							<TextInput
-								value={state.organization.email || ""}
-								label="E-mail corporativo"
-								placeholder="contato@sualoja.com.br"
-								handleChange={(value) => updateOrganization({ email: value })}
-							/>
+						<div className={isCrm ? "grid gap-3" : "grid gap-3 sm:grid-cols-2"}>
+							{isCrm ? null : (
+								<TextInput
+									value={state.organization.email || ""}
+									label="E-mail corporativo"
+									placeholder="contato@sualoja.com.br"
+									handleChange={(value) => updateOrganization({ email: value })}
+								/>
+							)}
 							<TextInput
 								value={state.organization.telefone || ""}
 								label="Telefone ou WhatsApp"
@@ -147,6 +170,37 @@ export function CompanyStage({ state, updateOrganization, updateOrganizationLogo
 					options={OrganizationNicheOptions.map((niche) => ({ value: niche.value, titulo: niche.label, icon: niche.renderIcon("size-4") }))}
 				/>
 			</section>
+
+			{showIntent ? (
+				<section className="flex flex-col gap-3">
+					<div className="flex flex-col gap-1">
+						<SectionLabel>O que mais te incomoda hoje?</SectionLabel>
+						<p className="text-sm text-muted-foreground">Opcional. A resposta escolhe a campanha que sugerimos primeiro.</p>
+					</div>
+					<ChoiceList<TOnboardingMainPainEnum>
+						label="O que mais te incomoda hoje"
+						value={state.dorPrincipal}
+						onChange={(value) => updateOnboarding({ dorPrincipal: value })}
+						options={MAIN_PAIN_OPTIONS.map((option) => ({ value: option.value, titulo: option.titulo, descricao: option.descricao }))}
+					/>
+					{state.dorPrincipal ? (
+						<div className="flex items-start gap-2 rounded-xl border border-border p-4">
+							<Checkbox
+								id="trial-goal"
+								checked={state.metaTesteAceita}
+								onCheckedChange={(checked) => updateOnboarding({ metaTesteAceita: checked === true })}
+								className="mt-0.5"
+							/>
+							<label htmlFor="trial-goal" className="flex cursor-pointer flex-col gap-0.5">
+								<span className="text-sm font-bold">Meta do teste: {TRIAL_GOAL_TARGET} clientes de volta</span>
+								<span className="text-sm text-muted-foreground">
+									Clientes que voltam a comprar depois de receber uma campanha, até o fim do teste. Acompanhe no painel.
+								</span>
+							</label>
+						</div>
+					) : null}
+				</section>
+			) : null}
 
 			{!isEditing ? (
 				<div className="flex items-start gap-2">

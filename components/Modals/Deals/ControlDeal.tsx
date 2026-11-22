@@ -10,6 +10,7 @@ import { updateDeal } from "@/lib/mutations/deals";
 import { useAdminDealById } from "@/lib/queries/deals";
 import { useOrganizations } from "@/lib/queries/admin";
 import { cn, copyToClipboard } from "@/lib/utils";
+import type { TDeal } from "@/schemas/deals";
 import { useInternalDealState } from "@/state-hooks/use-internal-deal-state";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Building2, Copy, CreditCard, Link2, Unlink, XCircle } from "lucide-react";
@@ -75,6 +76,8 @@ export default function ControlDeal({ dealId, closeModal, callbacks }: ControlDe
 				nomeObtentor: deal.nomeObtentor,
 				emailObtentor: deal.emailObtentor,
 				telefoneObtentor: deal.telefoneObtentor,
+				planoBase: deal.planoBase as TDeal["planoBase"],
+				adicionais: deal.adicionais ?? [],
 				quantidadeLicencas: deal.quantidadeLicencas,
 				valorUnitarioCentavos: deal.valorUnitarioCentavos,
 				intervalo: deal.intervalo,

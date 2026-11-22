@@ -5,6 +5,7 @@ import type {
 	TOrganizationFiscalConfig,
 	TOrganizationPoiConfig,
 } from "@/schemas/organizations";
+import type { TSubscriptionAddonEnum } from "@/schemas/enums";
 import { relations } from "drizzle-orm";
 import { boolean, integer, jsonb, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
 import { newTable } from "./common";
@@ -57,7 +58,12 @@ export const organizations = newTable(
 		// Nenhum evento revoga: o acesso expira sozinho quando a data passa.
 		assinaturaAcessoProvisorioFim: timestamp("assinatura_acesso_provisorio_fim"),
 
+		// Plano-base (CRM, CRM_ERP) ou, em quem assinou antes, um dos tiers antigos.
 		assinaturaPlano: text("assinatura_plano").default("ESSENCIAL"),
+		// Adicionais contratados sobre o plano-base — espelho dos itens da assinatura no Stripe,
+		// gravado pelo webhook (lib/subscriptions/entitlements-sync.ts). Serve para a UI mostrar o que
+		// a organização paga e para o webhook saber se algo mudou antes de reescrever os recursos.
+		assinaturaAdicionais: jsonb("assinatura_adicionais").$type<TSubscriptionAddonEnum[]>().notNull().default([]),
 		// Deal (venda B2B multi-licença): quando presente, a assinatura desta org é governada
 		// pelo deal — o webhook replica o status para cá e os campos stripe* acima ficam nulos.
 		dealId: varchar("deal_id", { length: 255 }).references(() => deals.id, { onDelete: "set null" }),

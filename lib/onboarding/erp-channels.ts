@@ -1,3 +1,4 @@
+import { appRoutes } from "@/lib/navigation/routes";
 import type { TOnboardingAnswers } from "@/schemas/onboarding";
 
 export const ERP_CHANNELS = [
@@ -16,6 +17,6 @@ export function getLaunchChecklist(channel: TErpChannel | null, readiness: { ace
   { chave: "produtos", rotulo: "Produtos com nome e preço disponíveis no canal", concluida: readiness.produtosUtilizaveis > 0, href: "/dashboard/catalog/products" },
  ];
  if (channel === "CATALOGO") checks.push({ chave: "loja", rotulo: "Loja com atendimento e pagamento configurados", concluida: readiness.lojaDigital.existe && readiness.lojaDigital.configurada, href: "/dashboard/catalog/store" });
- if (channel === "MESAS") checks.push({ chave: "mesas", rotulo: "Ao menos um ponto de atendimento ativo", concluida: readiness.pontosAtendimento > 0, href: "/dashboard/sales/tabs" });
+ if (channel === "MESAS") checks.push({ chave: "mesas", rotulo: "Ao menos um ponto de atendimento ativo", concluida: readiness.pontosAtendimento > 0, href: appRoutes.sales.serviceAccounts() });
  return checks;
 }

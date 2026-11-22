@@ -23,7 +23,8 @@ const readiness: TOnboardingReadiness = {
 	organizacao: { id: "preview", nome: "Loja de exemplo", atuacaoNicho: "VAREJO", dataOnboardingConclusao: null, produtosHabilitados: ["CRM", "ERP"] },
 	fonteDados: {
 		modo: "INTEGRACAO",
-		poi: { registroAtivo: false },
+		definida: true,
+		poi: { registroAtivo: false, vendasRecentes: 0 },
 		integracoes: [
 			{
 				id: "preview",
@@ -56,7 +57,7 @@ const readiness: TOnboardingReadiness = {
 			},
 		],
 	},
-	dados: { vendasValidas: 126, clientes: 65, clientesComAniversario: 8, coberturaInicio: new Date("2026-08-15"), coberturaParcial: true },
+	dados: { vendasValidas: 126, clientes: 65, clientesComAniversario: 8, coberturaInicio: new Date("2026-08-15"), coberturaParcial: true, clientesInativos: null },
 	cashback: {
 		estado: "ATIVO",
 		programaId: "p",
@@ -76,7 +77,8 @@ const readiness: TOnboardingReadiness = {
 			],
 		},
 	],
-	whatsapp: { numero: "CONECTADO", tipoConexao: "META_CLOUD_API", telefones: [], pagamento: "DESCONHECIDO", templates: [] },
+	campanhasManuais: { ativas: 0 },
+	whatsapp: { numero: "CONECTADO", tipoConexao: "META_CLOUD_API", oficialConectadoEm: new Date("2026-11-20T12:00:00Z"), telefones: [], pagamento: "DESCONHECIDO", templates: [] },
 	erp: {
 		acesso: true,
 		testeDisponivel: true,
@@ -119,6 +121,7 @@ export default function Preview() {
 						updateOrganizationLogoHolder={form.updateOrganizationLogoHolder}
 						updateOnboarding={form.updateOnboarding}
 						isEditing
+						produto={produto}
 					/>
 				);
 			case "whatsapp":
@@ -135,6 +138,7 @@ export default function Preview() {
 						enableSendingWhenReady={false}
 						onToggleEnableSending={noop}
 						readiness={null}
+						dorPrincipal={form.state.dorPrincipal}
 					/>
 				);
 			case "fonte-dados":
@@ -204,6 +208,8 @@ export default function Preview() {
 				canGoBack={index > 0}
 				onBack={() => setStage(definition.etapas[index - 1].id)}
 				deferLabel={current.adiarRotulo}
+				// Como no fluxo real: sem número conectado, a ação principal é a de dentro da etapa.
+				continueLabel={stage === "whatsapp" ? null : undefined}
 				onDefer={() => setStage(definition.etapas[Math.min(index + 1, definition.etapas.length - 1)].id)}
 				onContinue={() => setStage(definition.etapas[Math.min(index + 1, definition.etapas.length - 1)].id)}
 				isLoading={false}

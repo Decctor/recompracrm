@@ -76,7 +76,11 @@ export function AdminControlOrganization({ organizationId, closeModal, callbacks
 			{organization && !isLoading && !stateError ? (
 				<>
 					<AdminOrganizationSummaryBlock organization={state.organization} />
-					<AdminOrganizationTrialPeriodBlock organization={state.organization} updateOrganization={updateOrganization} />
+					<AdminOrganizationTrialPeriodBlock
+						organization={state.organization}
+						updateOrganization={updateOrganization}
+						stripeSubscriptionStatus={organization?.stripeSubscriptionStatus}
+					/>
 					<AdminOrganizationManagedServiceBlock organization={state.organization} updateOrganization={updateOrganization} />
 					<AdminOrganizationPointOfInteractionBlock
 						poiConfirmacaoValorObrigatoria={state.organization.poiConfirmacaoValorObrigatoria}

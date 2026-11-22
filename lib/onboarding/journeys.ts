@@ -59,7 +59,7 @@ const CRM_JOURNEY: TOnboardingJourneyDefinition = {
 			titulo: "De onde vêm suas vendas",
 			descricao: "Conecte o sistema que você já usa ou registre as vendas no balcão. A importação continua em segundo plano.",
 			adiarRotulo: "Fazer depois",
-			isComplete: (readiness) => readiness.fonteDados.modo !== "NENHUMA",
+			isComplete: (readiness) => readiness.fonteDados.definida,
 		},
 		{
 			id: "cashback",

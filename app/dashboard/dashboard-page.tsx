@@ -16,7 +16,8 @@ import { OperationsTab } from "./_hub/tabs/operations-tab";
 import { RelationshipTab } from "./_hub/tabs/relationship-tab";
 import { TeamTab } from "./_hub/tabs/team-tab";
 import { useOperationsPending } from "./_hub/use-operations-pending";
-import { WhatsappChannelNotice } from "./_hub/whatsapp-channel-notice";
+import { ActivationSlot } from "./_hub/activation-panel";
+import { useHubEmptyHints } from "./_hub/use-hub-empty-hints";
 
 type DashboardPageProps = {
 	user: TAuthUserSession["user"];
@@ -98,6 +99,9 @@ export function DashboardPage({ user, userOrg, membership, scopeSellersIds }: Da
 		operacao: operations.totalItens > 0 ? ({ count: operations.totalItens, tone: "destructive" } as const) : undefined,
 	};
 
+	const canEditCompany = !!membership.permissoes.empresa?.editar;
+	const emptyHints = useHubEmptyHints({ enabled: canEditCompany });
+
 	const firstName = user.nome?.trim().split(/\s+/)[0] ?? "";
 	// Sem resultados, sem ERP e sem carteiras, só sobra Relacionamento, que tem leitura se o membro vê
 	// clientes, campanhas, cashback ou atendimentos (os blocos e a régua do dia da aba).
@@ -121,8 +125,9 @@ export function DashboardPage({ user, userOrg, membership, scopeSellersIds }: Da
 				</div>
 			</div>
 
-			{/* Quem recebe o aviso de saúde por e-mail é quem pode editar a empresa; o aviso daqui segue a mesma regra. */}
-			<WhatsappChannelNotice enabled={!!membership.permissoes.empresa?.editar} />
+			{/* Primeiros passos (ou, depois da ativação, o aviso do WhatsApp oficial). Quem recebe o aviso de
+			    saúde por e-mail é quem pode editar a empresa; os dois seguem a mesma regra. */}
+			<ActivationSlot enabled={canEditCompany} />
 
 			{!hasContent ? (
 				<Empty className="justify-center bg-muted/25 py-12">
@@ -143,6 +148,7 @@ export function DashboardPage({ user, userOrg, membership, scopeSellersIds }: Da
 						canViewGoals={canViewGoals}
 						canCreateGoals={resolveGoalPermissions(membership.permissoes).criar}
 						risk={risk}
+						emptySalesHint={emptyHints.vendas}
 					/>
 					<TabBar tabs={tabs} active={activeTab} onSelect={setTab} badges={badges} hint={hint} />
 					{activeTab === "relacionamento" ? <RelationshipTab context={context} /> : null}

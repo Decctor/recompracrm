@@ -26,6 +26,7 @@ import { HubTable, type THubTableColumn } from "../hub-table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Panel, StatTile } from "../panel";
 import { resolveTodayRange, useDayKey } from "../use-day-key";
+import { useHubEmptyHints } from "../use-hub-empty-hints";
 
 /**
  * A aba de Relacionamento: o tamanho da base, como ela se move entre segmentos e quem precisa de
@@ -40,6 +41,8 @@ export function RelationshipTab({ context }: { context: TCapabilityContext }) {
 	const canViewCampaigns = canAccessDashboardCapability("campaigns", context);
 	// Base, recompra e segmentos são leituras do módulo de clientes (clientes.visualizar).
 	const canViewClients = canAccessDashboardCapability("customers", context);
+	// As dicas dos vazios seguem o bloco de primeiros passos: só para quem edita a empresa.
+	const canEditCompany = !!context.permissions.empresa?.editar;
 
 	return (
 		<div className="grid w-full grid-cols-1 items-start gap-3 xl:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)]">
@@ -49,8 +52,8 @@ export function RelationshipTab({ context }: { context: TCapabilityContext }) {
 					{canViewClients ? <RepurchaseTile /> : null}
 					{canViewCashback ? <CashbackUsageTile /> : null}
 				</div>
-				{canViewClients ? <SegmentMovement /> : null}
-				{canViewCampaigns ? <CampaignsPanel /> : null}
+				{canViewClients ? <SegmentMovement hintsEnabled={canEditCompany} /> : null}
+				{canViewCampaigns ? <CampaignsPanel hintsEnabled={canEditCompany} /> : null}
 			</div>
 			<TalkToTodayRail context={context} />
 		</div>
@@ -176,8 +179,9 @@ function CashbackUsageTile() {
  * que importa. O número ao lado de cada rótulo é **quem chegou** na janela, não saldo: não há
  * histórico de segmentação para dizer quem saiu (ver a rota `/api/segmentations/distribution`).
  */
-function SegmentMovement() {
+function SegmentMovement({ hintsEnabled }: { hintsEnabled: boolean }) {
 	const { data, isPending, isError, error } = useSegmentDistribution({ days: WINDOW_DAYS });
+	const hint = useHubEmptyHints({ enabled: hintsEnabled }).segmentos;
 	const segmentos = useMemo(() => data?.segmentos.filter((segment) => segment.qtde > 0) ?? [], [data]);
 
 	return (
@@ -194,7 +198,10 @@ function SegmentMovement() {
 				) : isError ? (
 					<Panel.Error error={error} />
 				) : segmentos.length === 0 ? (
-					<Panel.Empty message="Nenhum cliente segmentado ainda." />
+					<Panel.Empty
+						message={hint?.texto ?? "Nenhum cliente segmentado ainda."}
+						action={hint ? (hint.acao ? { label: hint.acao.rotulo, href: hint.acao.href } : null) : undefined}
+					/>
 				) : (
 					<>
 						<div className="flex h-10 gap-0.5 overflow-hidden rounded-lg" role="img" aria-label="Distribuição da base por segmento">
@@ -261,8 +268,9 @@ const CAMPAIGN_COLUMNS: THubTableColumn[] = [
  * campanha, e é dela que sai a receita ao lado. Chamar isso de resposta prometeria uma métrica de
  * conversa que não existe.
  */
-function CampaignsPanel() {
+function CampaignsPanel({ hintsEnabled }: { hintsEnabled: boolean }) {
 	const dayKey = useDayKey();
+	const hint = useHubEmptyHints({ enabled: hintsEnabled }).campanhas;
 	const period = useMemo(() => {
 		const { after, before } = resolveTodayRange(dayKey);
 		return { startDate: after.subtract(29, "day").toDate(), endDate: before.toDate() };
@@ -286,7 +294,10 @@ function CampaignsPanel() {
 					) : isError ? (
 						<Panel.Error error={error} />
 					) : (
-						<Panel.Empty message="Nenhuma mensagem enviada nos últimos 30 dias." />
+						<Panel.Empty
+							message={hint?.texto ?? "Nenhuma mensagem enviada nos últimos 30 dias."}
+							action={hint ? (hint.acao ? { label: hint.acao.rotulo, href: hint.acao.href } : null) : undefined}
+						/>
 					)}
 				</Panel.Body>
 			) : (

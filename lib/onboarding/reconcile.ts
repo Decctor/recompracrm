@@ -4,6 +4,7 @@ import { campaigns, whatsappConnections } from "@/services/drizzle/schema";
 import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { getOnboardingReadiness } from "./readiness";
 import { captureOnboardingEvent } from "./analytics";
+import { resolvePhoneNumberState } from "@/lib/whatsapp/meta-access";
 
 /**
  * Liga `campaigns.ativo` só quando a campanha semeada por preset está pronta E o usuário liberou
@@ -29,12 +30,10 @@ export async function reconcileOnboardingCampaigns({
 		where: eq(whatsappConnections.organizacaoId, organizationId),
 		with: { telefones: true },
 	});
-	const connection = connections.find(
-		(item) =>
-			item.telefones.length &&
-			(item.tipoConexao === "INTERNAL_GATEWAY" ? item.gatewayStatus === "connected" : !item.dataExpiracao || item.dataExpiracao > new Date()),
-	);
-	const phone = connection?.telefones[0];
+	const now = new Date();
+	const phone = connections
+		.flatMap((connection) => connection.telefones.map((item) => ({ connection, phone: item })))
+		.find(({ connection, phone: item }) => resolvePhoneNumberState({ connection, phone: item, now }) === "CONECTADO")?.phone;
 	if (phone)
 		await executor
 			.update(campaigns)
