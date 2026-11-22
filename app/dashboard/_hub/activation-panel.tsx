@@ -6,7 +6,7 @@ import type { TActivation, TActivationCelebration } from "@/lib/onboarding/activ
 import { useOnboardingActivation } from "@/lib/queries/onboarding";
 import { cn } from "@/lib/utils";
 import { IsoIcon } from "@/components/Illustrations/Isometric/IsoIcon";
-import { ArrowRight, CircleCheck, TriangleAlert, X } from "lucide-react";
+import { ArrowRight, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { resolveActionArt, resolveCelebrationArt, resolveRegressionArt } from "./activation-art";
@@ -113,22 +113,10 @@ function useCelebration(celebration: TActivationCelebration | null): TCelebratio
 	};
 }
 
-function CelebrationNote({
-	celebration,
-	onDismiss,
-	illustrated = true,
-}: {
-	celebration: TActivationCelebration;
-	onDismiss: () => void;
-	illustrated?: boolean;
-}) {
+function CelebrationNote({ celebration, onDismiss }: { celebration: TActivationCelebration; onDismiss: () => void }) {
 	return (
 		<div className="flex items-center gap-3 rounded-xl bg-success-surface px-3 py-3 text-success-surface-foreground" role="status">
-			{illustrated ? (
-				<IsoIcon icon={resolveCelebrationArt(celebration)} className="size-12 shrink-0" />
-			) : (
-				<CircleCheck className="size-5 shrink-0" aria-hidden />
-			)}
+			<IsoIcon icon={resolveCelebrationArt(celebration)} className="size-12 shrink-0" />
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 				<p className="font-bold text-sm">{celebration.titulo}</p>
 				<p className="text-sm">{celebration.texto}</p>
@@ -156,11 +144,13 @@ const REGRESSION_TITLE: Record<NonNullable<TActivation["regressao"]>["motivo"], 
 type ActivationPanelProps = {
 	activation: TActivation;
 	celebration?: TCelebrationState;
-	/** Cena isométrica ao lado da ação (padrão). Desligada, o bloco fica só com marcas e escada. */
-	illustrated?: boolean;
 };
 
-export function ActivationPanel({ activation, celebration, illustrated = true }: ActivationPanelProps) {
+/**
+ * Cada ação, regressão e celebração vem com uma cena isométrica do kit do blog (activation-art.ts):
+ * a cena diz de que se trata antes do texto, e fica ao lado do botão, sem custar altura.
+ */
+export function ActivationPanel({ activation, celebration }: ActivationPanelProps) {
 	const next = activation.proximaAcao;
 	if (activation.regressao) {
 		return (
@@ -168,13 +158,7 @@ export function ActivationPanel({ activation, celebration, illustrated = true }:
 				<Panel.Header title={REGRESSION_TITLE[activation.regressao.motivo]} />
 				<Panel.Body>
 					<div className="flex items-center gap-4">
-						{illustrated ? (
-							<IsoIcon icon={resolveRegressionArt(activation)} className="size-16 shrink-0 sm:size-20" />
-						) : (
-							<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-warning-surface text-warning-surface-foreground">
-								<TriangleAlert className="size-4" aria-hidden />
-							</span>
-						)}
+						<IsoIcon icon={resolveRegressionArt(activation)} className="size-16 shrink-0 sm:size-20" />
 						{next ? <NextAction action={next} segmento={activation.segmento} /> : null}
 					</div>
 				</Panel.Body>
@@ -186,13 +170,13 @@ export function ActivationPanel({ activation, celebration, illustrated = true }:
 		<Panel>
 			<Panel.Header title="Primeiros passos" hint={`${activation.progresso.feitos} de ${activation.progresso.total} feitos`} />
 			<Panel.Body>
-				{celebration?.value ? <CelebrationNote celebration={celebration.value} onDismiss={celebration.dismiss} illustrated={illustrated} /> : null}
+				{celebration?.value ? <CelebrationNote celebration={celebration.value} onDismiss={celebration.dismiss} /> : null}
 				<div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:gap-0">
 					{/* A ação vem antes no DOM: no celular fica no topo, e o leitor de tela ouve o que fazer
 					    antes da escada. No desktop ela vai para a direita, separada por um fio, sem virar um
 					    cartão dentro do cartão. */}
 					<div className="flex items-center gap-4 border-border border-b pb-5 lg:order-last lg:border-b-0 lg:border-l lg:pb-0 lg:pl-6">
-						{illustrated ? <IsoIcon icon={resolveActionArt(next?.chave)} className="size-16 shrink-0 sm:size-20" /> : null}
+						<IsoIcon icon={resolveActionArt(next?.chave)} className="size-16 shrink-0 sm:size-20" />
 						{next ? (
 							<NextAction action={next} segmento={activation.segmento} />
 						) : (

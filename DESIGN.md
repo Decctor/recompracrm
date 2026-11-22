@@ -444,6 +444,13 @@ que mais cresce, a moeda, o presente), azul é a estrutura. Matiz nova exige reg
 **Sem `<filter>`.** Ids de filtro e gradiente colidem quando várias ilustrações dividem a página
 (e um `<svg>` escondido derruba a referência). Sombras são losangos translúcidos empilhados.
 
+**No produto, só em "Primeiros passos".** O bloco de ativação do hub (`app/dashboard/_hub/activation-panel.tsx`)
+usa `IsoIcon` ao lado da próxima ação, da regressão, da celebração e da meta do teste; o mapa
+ação → cena fica em `activation-art.ts`, e uma ação nova sem cena cai na prancheta. Cenas novas do
+hub entram no mesmo `IsoIcon` (`phoneChat`, `boxes`), feitas com as primitivas. As cenas não trocam
+de cor no tema escuro: são a paleta fechada das capas, clara sobre qualquer fundo. Fora desse bloco,
+a interface do app continua com ícones de traço do lucide.
+
 ## 6. Do's and Don'ts
 
 ### Do
