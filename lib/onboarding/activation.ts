@@ -2,6 +2,7 @@ import { appRoutes } from "@/lib/navigation/routes";
 import type { TOnboardingCampaignStateEnum, TWhatsappPaymentStatusEnum } from "@/schemas/enums";
 import type { TWhatsappNumberState } from "@/lib/whatsapp/meta-access";
 import type { TDataSourceMode } from "./data-source-mode";
+import type { TDataSourceIntegrationType } from "@/lib/integrations/data-sources";
 import type { TErpChannel } from "./erp-channels";
 import { TRIAL_GOAL_TARGET } from "./main-pain";
 
@@ -38,6 +39,8 @@ export type TActivationFacts = {
 	fonte: {
 		modo: TDataSourceMode;
 		integracaoComErro: { nome: string } | null;
+		/** Tipos das integrações de fonte de dados ativas, para mostrar a marca do sistema conectado. */
+		integracoes: TDataSourceIntegrationType[];
 		importacao: { emAndamento: boolean; vendasImportadas: number };
 	};
 	base: { clientes: number; clientesSegmentados: number };
@@ -75,7 +78,19 @@ export type TActivationMilestone = {
 	detalhe: string | null;
 	/** O que resolve este marco; null quando feito ou quando ainda não há o que fazer. */
 	acao: TActivationAction | null;
+	/** De quem é o marco, quando é de alguém: o hub desenha a marca (Meta, o sistema conectado, o canal). */
+	marca?: TActivationMark | null;
 };
+
+/**
+ * A marca de um marco que pertence a um terceiro ou a um canal: a Meta no WhatsApp oficial, o
+ * sistema que a loja conectou (Bling, Nuvemshop…), o RecompraCRM no balcão, o canal do ERP.
+ */
+export type TActivationMark =
+	| { tipo: "META" }
+	| { tipo: "INTEGRACAO"; integracoes: TDataSourceIntegrationType[] }
+	| { tipo: "RECOMPRACRM" }
+	| { tipo: "CANAL"; canal: TErpChannel };
 
 /** `href` nulo = a etapa espera alguém de fora; mostrar o texto, sem botão. */
 export type TActivationAction = { chave: string; rotulo: string; descricao: string; href: string | null };
@@ -159,12 +174,17 @@ const todo = (chave: string, rotulo: string, acao: TActivationAction | null, det
 });
 
 const accountStep = () => done("conta", "Conta criada");
+const withMark = (step: TStep, marca: TActivationMark): TStep => ({ ...step, marca });
 
 function whatsappSettingsHref() {
 	return `${appRoutes.settings()}?view=meta-oauth`;
 }
 
 function channelStep(facts: TActivationFacts): TStep {
+	return withMark(channelStepBase(facts), { tipo: "META" });
+}
+
+function channelStepBase(facts: TActivationFacts): TStep {
 	const rotulo = "WhatsApp oficial conectado";
 	switch (facts.canal.numero) {
 		case "CONECTADO":
@@ -256,6 +276,10 @@ function firstDeliveryStep(facts: TActivationFacts): TStep {
 }
 
 function integrationSourceStep(facts: TActivationFacts): TStep {
+	return withMark(integrationSourceStepBase(facts), { tipo: "INTEGRACAO", integracoes: facts.fonte.integracoes });
+}
+
+function integrationSourceStepBase(facts: TActivationFacts): TStep {
 	const rotulo = "Sistema conectado";
 	if (facts.fonte.integracaoComErro) {
 		return todo("fonte", rotulo, {
@@ -350,7 +374,7 @@ function erpSteps(facts: TActivationFacts, channel: TErpChannel): TStep[] {
 	const steps: TStep[] = [accountStep()];
 	steps.push(
 		facts.jornadas.erpCanal || sales.total > 0
-			? done("canal-erp", "Canal escolhido")
+			? withMark(done("canal-erp", "Canal escolhido", ERP_CHANNEL_NAME[channel]), { tipo: "CANAL", canal: channel })
 			: todo("canal-erp", "Canal escolhido", {
 					chave: "escolher-canal",
 					rotulo: "Escolher como vender",
@@ -402,8 +426,8 @@ function erpSteps(facts: TActivationFacts, channel: TErpChannel): TStep[] {
 
 function crmSteps(facts: TActivationFacts, segment: TActivationSegment): TStep[] {
 	const steps: TStep[] = [accountStep()];
-	if (segment === "CRM_ERP") steps.push(done("fonte", "Vendas pelo PDV"));
-	else if (segment === "CRM_BALCAO") steps.push(done("fonte", "Balcão escolhido"), ...counterSteps(facts));
+	if (segment === "CRM_ERP") steps.push(withMark(done("fonte", "Vendas pelo PDV"), { tipo: "CANAL", canal: "BALCAO" }));
+	else if (segment === "CRM_BALCAO") steps.push(withMark(done("fonte", "Balcão escolhido"), { tipo: "RECOMPRACRM" }), ...counterSteps(facts));
 	else steps.push(integrationSourceStep(facts), baseStep(facts));
 	steps.push(channelStep(facts), firstDeliveryStep(facts));
 	return steps;
@@ -449,6 +473,8 @@ function resolveErpRegression(facts: TActivationFacts): TActivationRegression | 
 	if (last && facts.now.getTime() - last.getTime() > ACTIVATION_ERP_REGRESSION_DAYS * DAY_MS) return { motivo: "SEM_VENDA", desde: last };
 	return null;
 }
+
+const ERP_CHANNEL_NAME: Record<TErpChannel, string> = { BALCAO: "Balcão", CATALOGO: "Loja digital", MESAS: "Mesas e comandas" };
 
 const CHANNEL_NAME: Record<TErpChannel, string> = { BALCAO: "PDV", CATALOGO: "loja digital", MESAS: "comandas" };
 

@@ -36,6 +36,7 @@ function composeActivationFacts({
 		fonte: {
 			modo: readiness.fonteDados.modo,
 			integracaoComErro: broken ? { nome: broken.apelido ?? broken.tipo } : null,
+			integracoes: readiness.fonteDados.integracoes.map((integration) => integration.tipo),
 			importacao: {
 				emAndamento: running.length > 0,
 				vendasImportadas: running.reduce((total, integration) => total + (integration.cargaHistorica?.contadores.importados ?? 0), 0),

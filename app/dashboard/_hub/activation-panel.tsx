@@ -2,12 +2,15 @@
 
 import { Button } from "@/components/ui/button";
 import { captureClientEvent } from "@/lib/analytics/posthog-client";
-import type { TActivation, TActivationCelebration, TActivationMilestone } from "@/lib/onboarding/activation";
+import type { TActivation, TActivationCelebration } from "@/lib/onboarding/activation";
 import { useOnboardingActivation } from "@/lib/queries/onboarding";
 import { cn } from "@/lib/utils";
-import { ArrowRight, CircleCheck, Clock, TriangleAlert, X } from "lucide-react";
+import { IsoIcon } from "@/components/Illustrations/Isometric/IsoIcon";
+import { ArrowRight, CircleCheck, TriangleAlert, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { resolveActionArt, resolveCelebrationArt, resolveRegressionArt } from "./activation-art";
+import { ActivationTrack } from "./activation-track";
 import { Panel } from "./panel";
 import { WhatsappChannelNotice } from "./whatsapp-channel-notice";
 
@@ -56,10 +59,13 @@ function TrialGoalPanel({ goal }: { goal: NonNullable<TActivation["metaTeste"]> 
 		<Panel>
 			<Panel.Header title="Meta do teste" hint={`até ${until}`} />
 			<Panel.Body>
-				<p className="text-sm">
-					<span className="font-black text-2xl tabular-nums">{goal.atual.toLocaleString("pt-BR")}</span>
-					<span className="text-muted-foreground"> de {goal.alvo} clientes de volta depois de uma campanha</span>
-				</p>
+				<div className="flex items-center gap-3">
+					<IsoIcon icon="target" className="size-12 shrink-0" />
+					<p className="text-sm">
+						<span className="font-black text-2xl tabular-nums">{goal.atual.toLocaleString("pt-BR")}</span>
+						<span className="text-muted-foreground"> de {goal.alvo} clientes de volta depois de uma campanha</span>
+					</p>
+				</div>
 				<div
 					className="h-2 w-full overflow-hidden rounded-full bg-muted"
 					role="meter"
@@ -107,10 +113,22 @@ function useCelebration(celebration: TActivationCelebration | null): TCelebratio
 	};
 }
 
-function CelebrationNote({ celebration, onDismiss }: { celebration: TActivationCelebration; onDismiss: () => void }) {
+function CelebrationNote({
+	celebration,
+	onDismiss,
+	illustrated = true,
+}: {
+	celebration: TActivationCelebration;
+	onDismiss: () => void;
+	illustrated?: boolean;
+}) {
 	return (
-		<div className="flex items-start gap-3 rounded-lg bg-success-surface px-3 py-3 text-success-surface-foreground" role="status">
-			<CircleCheck className="mt-0.5 size-5 shrink-0" aria-hidden />
+		<div className="flex items-center gap-3 rounded-xl bg-success-surface px-3 py-3 text-success-surface-foreground" role="status">
+			{illustrated ? (
+				<IsoIcon icon={resolveCelebrationArt(celebration)} className="size-12 shrink-0" />
+			) : (
+				<CircleCheck className="size-5 shrink-0" aria-hidden />
+			)}
 			<div className="flex min-w-0 flex-1 flex-col gap-0.5">
 				<p className="font-bold text-sm">{celebration.titulo}</p>
 				<p className="text-sm">{celebration.texto}</p>
@@ -135,17 +153,28 @@ const REGRESSION_TITLE: Record<NonNullable<TActivation["regressao"]>["motivo"], 
 	SEM_VENDA: "As vendas pelo sistema pararam",
 };
 
-export function ActivationPanel({ activation, celebration }: { activation: TActivation; celebration?: TCelebrationState }) {
+type ActivationPanelProps = {
+	activation: TActivation;
+	celebration?: TCelebrationState;
+	/** Cena isométrica ao lado da ação (padrão). Desligada, o bloco fica só com marcas e escada. */
+	illustrated?: boolean;
+};
+
+export function ActivationPanel({ activation, celebration, illustrated = true }: ActivationPanelProps) {
 	const next = activation.proximaAcao;
 	if (activation.regressao) {
 		return (
 			<Panel>
 				<Panel.Header title={REGRESSION_TITLE[activation.regressao.motivo]} />
 				<Panel.Body>
-					<div className="flex items-start gap-3">
-						<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-warning-surface text-warning-surface-foreground">
-							<TriangleAlert className="size-4" aria-hidden />
-						</span>
+					<div className="flex items-center gap-4">
+						{illustrated ? (
+							<IsoIcon icon={resolveRegressionArt(activation)} className="size-16 shrink-0 sm:size-20" />
+						) : (
+							<span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-warning-surface text-warning-surface-foreground">
+								<TriangleAlert className="size-4" aria-hidden />
+							</span>
+						)}
 						{next ? <NextAction action={next} segmento={activation.segmento} /> : null}
 					</div>
 				</Panel.Body>
@@ -153,33 +182,26 @@ export function ActivationPanel({ activation, celebration }: { activation: TActi
 		);
 	}
 
-	const current = activation.marcos.find((milestone) => milestone.estado !== "FEITO")?.chave ?? null;
 	return (
 		<Panel>
 			<Panel.Header title="Primeiros passos" hint={`${activation.progresso.feitos} de ${activation.progresso.total} feitos`} />
 			<Panel.Body>
-				{celebration?.value ? <CelebrationNote celebration={celebration.value} onDismiss={celebration.dismiss} /> : null}
-				<div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:gap-6">
-					{/* A ação vem antes no DOM: no celular ela fica no topo, e quem lê com leitor de tela
-					    ouve o que fazer antes da lista. No desktop a escada vai para a esquerda. */}
-					<div className="flex flex-col gap-3 self-start rounded-lg bg-muted/50 p-4 lg:order-last">
+				{celebration?.value ? <CelebrationNote celebration={celebration.value} onDismiss={celebration.dismiss} illustrated={illustrated} /> : null}
+				<div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:gap-0">
+					{/* A ação vem antes no DOM: no celular fica no topo, e o leitor de tela ouve o que fazer
+					    antes da escada. No desktop ela vai para a direita, separada por um fio, sem virar um
+					    cartão dentro do cartão. */}
+					<div className="flex items-center gap-4 border-border border-b pb-5 lg:order-last lg:border-b-0 lg:border-l lg:pb-0 lg:pl-6">
+						{illustrated ? <IsoIcon icon={resolveActionArt(next?.chave)} className="size-16 shrink-0 sm:size-20" /> : null}
 						{next ? (
 							<NextAction action={next} segmento={activation.segmento} />
 						) : (
 							<p className="text-sm text-muted-foreground">Nada pendente por enquanto.</p>
 						)}
 					</div>
-					<ol className="flex flex-col" aria-label="Passos da ativação">
-						{activation.marcos.map((milestone) => (
-							<MilestoneRow
-								key={milestone.chave}
-								milestone={milestone}
-								current={milestone.chave === current}
-								// O texto da etapa que a caixa de ação já explica não se repete na lista.
-								showDetail={milestone.acao?.chave !== next?.chave}
-							/>
-						))}
-					</ol>
+					<div className="min-w-0 lg:pr-6">
+						<ActivationTrack marcos={activation.marcos} actionKey={next?.chave ?? null} />
+					</div>
 				</div>
 			</Panel.Body>
 		</Panel>
@@ -195,7 +217,7 @@ function NextAction({ action, segmento }: { action: NonNullable<TActivation["pro
 				<p className="text-sm text-muted-foreground">{action.descricao}</p>
 			</div>
 			{action.href ? (
-				<Button asChild size="sm" className="w-fit gap-1.5 font-bold">
+				<Button asChild size="sm" className="h-auto min-h-9 w-fit max-w-full gap-1.5 py-2 font-bold whitespace-normal">
 					<Link
 						href={action.href}
 						onClick={() => captureClientEvent({ event: "onboarding_next_action_clicked", properties: { chave: action.chave, segmento, origem: "hub" } })}
@@ -206,32 +228,5 @@ function NextAction({ action, segmento }: { action: NonNullable<TActivation["pro
 				</Button>
 			) : null}
 		</div>
-	);
-}
-
-function MilestoneRow({ milestone, current, showDetail }: { milestone: TActivationMilestone; current: boolean; showDetail: boolean }) {
-	const isDone = milestone.estado === "FEITO";
-	const isWaiting = milestone.estado === "EM_ANDAMENTO";
-	return (
-		<li className="flex min-w-0 items-start gap-3 border-border/60 border-b py-2 last:border-b-0" aria-current={current ? "step" : undefined}>
-			<span
-				className={cn(
-					"mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full",
-					isDone ? "text-success" : isWaiting ? "text-muted-foreground" : current ? "border-2 border-primary" : "border border-border",
-				)}
-				aria-hidden
-			>
-				{isDone ? <CircleCheck className="size-5" /> : isWaiting ? <Clock className="size-4" /> : null}
-			</span>
-			<span className="flex min-w-0 flex-1 flex-col">
-				<span className={cn("text-sm leading-tight", isDone ? "text-muted-foreground" : "font-bold")}>
-					{milestone.rotulo}
-					<span className="sr-only">{isDone ? " (feito)" : isWaiting ? " (em andamento)" : current ? " (próximo)" : " (pendente)"}</span>
-				</span>
-				{milestone.detalhe && showDetail && (isDone || isWaiting) ? (
-					<span className="text-micro font-normal text-muted-foreground">{milestone.detalhe}</span>
-				) : null}
-			</span>
-		</li>
 	);
 }

@@ -27,6 +27,7 @@ import {
 	Tag,
 	Target,
 	TriangleAlert,
+	Package,
 	Trophy,
 	Zap,
 } from "lucide-react";
@@ -57,6 +58,8 @@ const FEATURE_ICONS: Record<TIsoIconKey, LucideIcon> = {
 	store: Store,
 	calendar: Calendar,
 	phone: Smartphone,
+	phoneChat: Smartphone,
+	boxes: Package,
 	chat: MessageCircle,
 	coins: Coins,
 	chart: ChartColumn,

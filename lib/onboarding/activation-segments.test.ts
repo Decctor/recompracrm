@@ -22,7 +22,7 @@ function facts(overrides: Partial<TActivationFacts> = {}): TActivationFacts {
 		now: NOW,
 		organizacao: { id: "org", criadaEm: daysAgo(10), slug: "loja", erpAcesso: false },
 		jornadas: { crm: true, erp: false, erpCanal: null },
-		fonte: { modo: "INTEGRACAO", integracaoComErro: null, importacao: { emAndamento: false, vendasImportadas: 0 } },
+		fonte: { modo: "INTEGRACAO", integracaoComErro: null, integracoes: ["BLING"], importacao: { emAndamento: false, vendasImportadas: 0 } },
 		base: { clientes: 1284, clientesSegmentados: 1200 },
 		vendas: { balcao: none, integracao: sold({}), erp: { BALCAO: none, CATALOGO: none, MESAS: none } },
 		canal: { numero: "NENHUM", pagamento: "DESCONHECIDO" },
@@ -39,7 +39,7 @@ const erpFacts = (erp: Partial<TActivationFacts["vendas"]["erp"]>, overrides: Pa
 	facts({
 		organizacao: { id: "org", criadaEm: daysAgo(20), slug: "loja", erpAcesso: true },
 		jornadas: { crm: false, erp: true, erpCanal: "BALCAO" },
-		fonte: { modo: "NENHUMA", integracaoComErro: null, importacao: { emAndamento: false, vendasImportadas: 0 } },
+		fonte: { modo: "NENHUMA", integracaoComErro: null, integracoes: ["BLING"], importacao: { emAndamento: false, vendasImportadas: 0 } },
 		base: { clientes: 3, clientesSegmentados: 0 },
 		vendas: { balcao: none, integracao: none, erp: { BALCAO: none, CATALOGO: none, MESAS: none, ...erp } },
 		erp: { produtosUtilizaveis: 12, pendenciasLancamento: [] },
@@ -324,4 +324,19 @@ test("meta do teste: aceita, ativada e em teste; conta as compras atribuídas", 
 test("ERP na primeira semana: ritmo da semana com o número real de dias", () => {
 	const activation = resolveActivation(erpFacts({ BALCAO: sold({ semanas: 1, diasUltimos7: 3 }) }));
 	assert.equal(activation.proximaAcao?.descricao, "Vendas em 3 dias dos últimos 7. Meta da semana: vender pelo sistema em 5.");
+});
+
+// ------------------------------------------------------------------ marcas
+
+test("marcas: o sistema conectado, a Meta e o canal do ERP", () => {
+	const crm = resolveActivation(facts());
+	assert.deepEqual(crm.marcos.find((milestone) => milestone.chave === "fonte")?.marca, { tipo: "INTEGRACAO", integracoes: ["BLING"] });
+	assert.deepEqual(crm.marcos.find((milestone) => milestone.chave === "whatsapp")?.marca, { tipo: "META" });
+	assert.equal(crm.marcos.find((milestone) => milestone.chave === "conta")?.marca ?? null, null);
+	const erp = resolveActivation(erpFacts({}, { jornadas: { crm: false, erp: true, erpCanal: "MESAS" } }));
+	const channel = erp.marcos.find((milestone) => milestone.chave === "canal-erp");
+	assert.deepEqual(channel?.marca, { tipo: "CANAL", canal: "MESAS" });
+	assert.equal(channel?.detalhe, "Mesas e comandas");
+	const counter = resolveActivation(facts({ fonte: { ...facts().fonte, modo: "POI" } }));
+	assert.deepEqual(counter.marcos.find((milestone) => milestone.chave === "fonte")?.marca, { tipo: "RECOMPRACRM" });
 });
