@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { resolveBuiltSummary, resolveTrialNarrative, type TTrialNarrativeInput } from "./activation-narrative";
+import { resolveBuiltSummary, resolvePlanSuggestion, resolveTrialNarrative, type TTrialNarrativeInput } from "./activation-narrative";
 
 const trialEnd = new Date("2026-11-30T15:00:00Z");
 const connect = {
@@ -64,6 +64,7 @@ test("o que a loja construiu: números exatos, sem zeros, vendas do canal do seg
 		clientesComCashback: 57,
 		vendasBalcao: 40,
 		vendasErp: 0,
+		conversasHub: 0,
 	};
 	assert.deepEqual(
 		resolveBuiltSummary({ segmento: "CRM_BALCAO", counts, maximo: 10 }).map((item) => `${item.valor} ${item.rotulo}`),
@@ -86,5 +87,64 @@ test("o que a loja construiu: números exatos, sem zeros, vendas do canal do seg
 			counts: { ...counts, clientes: 0, campanhasAtivas: 0, recomprasAtribuidas: 0, clientesComCashback: 0 },
 		}),
 		[],
+	);
+});
+
+test("o Hub entra no resumo de quem o usou, no último lugar, sem passar de três", () => {
+	const counts = {
+		clientes: 1284,
+		campanhasAtivas: 3,
+		mensagensEntregues: 900,
+		recomprasAtribuidas: 12,
+		clientesComCashback: 0,
+		vendasBalcao: 0,
+		vendasErp: 0,
+		conversasHub: 48,
+	};
+	assert.deepEqual(
+		resolveBuiltSummary({ segmento: "CRM_INTEGRACAO", counts }).map((item) => `${item.valor} ${item.rotulo}`),
+		["1.284 clientes na base", "12 compras de quem recebeu campanha", "48 conversas respondidas no Hub de atendimentos"],
+	);
+	// Com pouco a mostrar, o Hub não fica sozinho no fim: vem logo depois do que houver.
+	assert.deepEqual(
+		resolveBuiltSummary({
+			segmento: "SEM_FONTE",
+			counts: { ...counts, clientes: 0, campanhasAtivas: 0, mensagensEntregues: 0, recomprasAtribuidas: 0, conversasHub: 1 },
+		}).map((item) => `${item.valor} ${item.rotulo}`),
+		["1 conversa respondida no Hub de atendimentos"],
+	);
+});
+
+const noErpSales = { BALCAO: 0, CATALOGO: 0, MESAS: 0 };
+
+test("sugestão do checkout: CRM para quem não usou o ERP, sem motivo a explicar", () => {
+	for (const segmento of ["CRM_INTEGRACAO", "CRM_BALCAO", "SEM_FONTE"] as const) {
+		assert.deepEqual(resolvePlanSuggestion({ segmento, vendasErp: noErpSales, conversasHub: 0 }), { planoBase: "CRM", motivo: null, adicionais: [] });
+	}
+});
+
+test("sugestão do checkout: CRM + ERP pelo canal que mais vendeu, ou pela jornada escolhida", () => {
+	assert.deepEqual(resolvePlanSuggestion({ segmento: "ERP", vendasErp: { BALCAO: 3, CATALOGO: 41, MESAS: 0 }, conversasHub: 0 }), {
+		planoBase: "CRM_ERP",
+		motivo: "Sugerido porque sua loja vende pelo catálogo digital.",
+		adicionais: [],
+	});
+	assert.equal(
+		resolvePlanSuggestion({ segmento: "CRM_ERP", vendasErp: { BALCAO: 120, CATALOGO: 0, MESAS: 0 }, conversasHub: 0 }).motivo,
+		"Sugerido porque sua loja vende pelo PDV.",
+	);
+	assert.equal(
+		resolvePlanSuggestion({ segmento: "ERP", vendasErp: noErpSales, conversasHub: 0 }).motivo,
+		"Sugerido porque você começou pelo ERP no cadastro.",
+	);
+});
+
+test("sugestão do checkout: o Hub vem marcado só para quem respondeu conversas nele", () => {
+	assert.deepEqual(resolvePlanSuggestion({ segmento: "CRM_INTEGRACAO", vendasErp: noErpSales, conversasHub: 1 }).adicionais, [
+		{ chave: "HUB_ATENDIMENTOS", motivo: "Sua equipe já respondeu 1 conversa pelo Hub." },
+	]);
+	assert.equal(
+		resolvePlanSuggestion({ segmento: "CRM_INTEGRACAO", vendasErp: noErpSales, conversasHub: 1530 }).adicionais[0]?.motivo,
+		"Sua equipe já respondeu 1.530 conversas pelo Hub.",
 	);
 });

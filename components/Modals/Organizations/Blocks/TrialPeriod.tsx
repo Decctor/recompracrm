@@ -4,6 +4,7 @@ import DateInput from "@/components/Inputs/DateInput";
 import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
 import { Button } from "@/components/ui/button";
 import { formatDateAsLocale, formatDateForInputValue, formatDateOnInputChange } from "@/lib/formatting";
+import { hasChargeableStripeSubscription } from "@/lib/subscriptions/stripe-status";
 import type { TOrganizationBaseState, TUseOrganizationBaseState } from "@/state-hooks/use-organization-state";
 import dayjs from "dayjs";
 import { CalendarClock } from "lucide-react";
@@ -11,14 +12,17 @@ import { CalendarClock } from "lucide-react";
 type AdminOrganizationTrialPeriodBlockProps = {
 	organization: TOrganizationBaseState["organization"];
 	updateOrganization: TUseOrganizationBaseState["updateOrganization"];
+	/** Status da assinatura no Stripe, do registro salvo: não faz parte do formulário. */
+	stripeSubscriptionStatus: string | null | undefined;
 };
 
-function getTrialStatusLabel(organization: TOrganizationBaseState["organization"]) {
+function getTrialStatusLabel(organization: TOrganizationBaseState["organization"], stripeSubscriptionStatus: string | null | undefined) {
 	const now = dayjs();
 	const start = organization.periodoTesteInicio ? dayjs(organization.periodoTesteInicio) : null;
 	const end = organization.periodoTesteFim ? dayjs(organization.periodoTesteFim) : null;
 
-	if (organization.assinaturaPlano) {
+	// Quem testa também tem `assinaturaPlano` (o plano do teste): quem paga é quem tem assinatura no Stripe.
+	if (hasChargeableStripeSubscription(stripeSubscriptionStatus)) {
 		return "Organização com plano pago — período de teste não se aplica.";
 	}
 	if (!start && !end) {
@@ -44,7 +48,11 @@ function getExtendedTrialEndDate(organization: TOrganizationBaseState["organizat
 	return base.add(extraDays, "day").endOf("day").toDate();
 }
 
-export default function AdminOrganizationTrialPeriodBlock({ organization, updateOrganization }: AdminOrganizationTrialPeriodBlockProps) {
+export default function AdminOrganizationTrialPeriodBlock({
+	organization,
+	updateOrganization,
+	stripeSubscriptionStatus,
+}: AdminOrganizationTrialPeriodBlockProps) {
 	function handleExtendTrial(extraDays: number) {
 		const periodoTesteFim = getExtendedTrialEndDate(organization, extraDays);
 		const updates: Partial<TOrganizationBaseState["organization"]> = { periodoTesteFim };
@@ -61,7 +69,7 @@ export default function AdminOrganizationTrialPeriodBlock({ organization, update
 			<p className="text-xs text-muted-foreground">
 				Ajuste manualmente as datas do período de teste quando precisar estender o acesso de uma organização.
 			</p>
-			<p className="text-xs font-medium text-foreground/80">{getTrialStatusLabel(organization)}</p>
+			<p className="text-xs font-medium text-foreground/80">{getTrialStatusLabel(organization, stripeSubscriptionStatus)}</p>
 
 			<div className="flex w-full flex-col gap-3 lg:flex-row">
 				<DateInput

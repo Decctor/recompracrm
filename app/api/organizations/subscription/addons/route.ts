@@ -7,6 +7,8 @@ import {
 } from "@/config";
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
+import { getSubscriptionPlanSuggestion } from "@/lib/onboarding/activation-status";
+import type { TPlanSuggestion } from "@/lib/subscriptions/activation-narrative";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import {
 	getSubscriptionAddonPriceId,
@@ -97,6 +99,19 @@ async function loadManageableSubscription(
 // GET — o que a organização tem e o que pode contratar
 // ---------------------------------------------------------------------------------------------
 
+/**
+ * A sugestão pelo uso nunca derruba a tela de planos: se a leitura falhar, fica a regra antiga
+ * (quem tem o ERP liberado vê o CRM + ERP marcado) e nenhum adicional marcado.
+ */
+async function loadPlanSuggestionSafely(organization: TOrganizationBillingRow): Promise<TPlanSuggestion> {
+	try {
+		return await getSubscriptionPlanSuggestion({ executor: db, organizationId: organization.id });
+	} catch (error) {
+		console.log("[SUBSCRIPTION_ADDONS] Falha ao sugerir o plano pelo uso.", { organizationId: organization.id, error });
+		return { planoBase: organization.configuracao.recursos.erp.acesso ? "CRM_ERP" : "CRM", motivo: null, adicionais: [] };
+	}
+}
+
 async function getSubscriptionAddons({ session }: { session: TAuthUserSession }) {
 	const organizationId = session.membership?.organizacao.id;
 	if (!organizationId) throw new createHttpError.BadRequest("Nenhuma organização associada.");
@@ -111,23 +126,26 @@ async function getSubscriptionAddons({ session }: { session: TAuthUserSession })
 	const plan = planKey ? (AppSubscriptionPlans[planKey] ?? null) : null;
 
 	const unavailableReason: TAddonsUnavailableReason | null = reason ?? (canManageSubscriptionAddons(session) ? null : "SEM_PERMISSAO");
+	const subscriber = hasChargeableStripeSubscription(organization.stripeSubscriptionStatus) && !organization.dealId;
+	// Quem assina já tem um plano: a sugestão é a dele. Quem testa tem `assinaturaPlano` gravado
+	// também (o plano do teste), mas o teste libera tudo — vale o que a loja usou.
+	const subscribedBasePlan = live?.selection.basePlan ?? (subscriber && isSubscriptionBasePlanKey(planKey) ? planKey : null);
+	const suggestion = subscribedBasePlan ? null : await loadPlanSuggestionSafely(organization);
 
 	return {
 		data: {
 			// Só há assinatura própria cobrável quando `assinante` é true; em teste, ou com o
 			// acesso vindo de um deal, o que a organização enxerga é o que está em `recursos`.
-			assinante: hasChargeableStripeSubscription(organization.stripeSubscriptionStatus) && !organization.dealId,
+			assinante: subscriber,
 			gerenciavel: unavailableReason === null,
 			motivoIndisponivel: unavailableReason,
 			planoBase: planKey,
 			planoNome: plan?.name ?? null,
-			// Plano-base que o checkout deve trazer marcado. Quem testa (ou assinava) um tier antigo
-			// não tem um plano-base gravado: vale o que a organização usa hoje — com ERP, CRM + ERP.
-			planoSugerido: isSubscriptionBasePlanKey(planKey)
-				? planKey
-				: organization.configuracao.recursos.erp.acesso
-					? ("CRM_ERP" as const)
-					: ("CRM" as const),
+			// O que o checkout traz marcado. Para quem não assina, pelo uso no teste: CRM + ERP para
+			// quem usou o ERP, o Hub para quem respondeu conversas nele (activation-narrative.ts).
+			planoSugerido: subscribedBasePlan ?? suggestion?.planoBase ?? ("CRM" as const),
+			planoSugeridoMotivo: suggestion?.motivo ?? null,
+			adicionaisSugeridos: suggestion?.adicionais.map((addon) => addon.chave) ?? [],
 			ciclo: cycle,
 			adicionais: SUBSCRIPTION_ADDON_KEYS.map((key) => {
 				const addon = SUBSCRIPTION_ADDONS[key];
@@ -138,6 +156,7 @@ async function getSubscriptionAddons({ session }: { session: TAuthUserSession })
 					descricao: addon.description,
 					recursos: addon.pricingTableFeatures.map((feature) => feature.label),
 					contratado: contractedAddons.includes(key),
+					motivoSugestao: suggestion?.adicionais.find((addon) => addon.chave === key)?.motivo ?? null,
 					// Consultoria não existe no ciclo anual: o Stripe não mistura intervalos na mesma assinatura.
 					disponivelNoCiclo: cycle ? isAddonAvailableInCycle(key, cycle) : true,
 					preco: pricing?.price ?? null,

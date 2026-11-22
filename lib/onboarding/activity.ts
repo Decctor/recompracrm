@@ -1,6 +1,6 @@
 import { getValidSaleConditions } from "@/lib/sales/valid-sale";
 import type { DB, DBTransaction } from "@/services/drizzle";
-import { campaignConversions, cashbackProgramTransactions, clients, interactions, sales } from "@/services/drizzle/schema";
+import { campaignConversions, cashbackProgramTransactions, chatMessages, clients, interactions, sales } from "@/services/drizzle/schema";
 import { and, asc, count, countDistinct, eq, gte, inArray, isNotNull, max, min, sql } from "drizzle-orm";
 import type { TActivationSalesOrigin } from "./activation";
 import type { TErpChannel } from "./erp-channels";
@@ -14,6 +14,27 @@ import type { TErpChannel } from "./erp-channels";
  */
 
 export const DELIVERED_CAMPAIGN_STATUSES = ["ENTREGUE", "LIDO"] as const;
+
+/**
+ * Conversas do Hub de atendimentos em que alguém da loja ou o agente de IA respondeu desde `since`.
+ * Mensagem do cliente e envio automático (campanha, aviso) não contam: chegar mensagem não é usar
+ * o Hub, atender é. Serve ao resumo do paywall e à sugestão do checkout.
+ */
+export async function countHubRepliedChats({
+	executor,
+	organizationId,
+	since,
+}: {
+	executor: DB | DBTransaction;
+	organizationId: string;
+	since: Date;
+}) {
+	const [row] = await executor
+		.select({ total: countDistinct(chatMessages.chatId) })
+		.from(chatMessages)
+		.where(and(eq(chatMessages.organizacaoId, organizationId), gte(chatMessages.dataEnvio, since), inArray(chatMessages.autorTipo, ["USUÁRIO", "AI"])));
+	return row?.total ?? 0;
+}
 
 const WEEK_SECONDS = 7 * 24 * 60 * 60;
 const DAY_MS = 24 * 60 * 60 * 1000;

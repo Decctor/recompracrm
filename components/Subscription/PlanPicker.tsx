@@ -51,15 +51,17 @@ function toMonthlyEquivalent(value: number, cycle: TSubscriptionCycleEnum) {
 export default function PlanPicker({ acao = "ASSINAR", className }: PlanPickerProps) {
 	const [cycle, setCycle] = useState<TSubscriptionCycleEnum>("MENSAL");
 	const [chosenBasePlan, setChosenBasePlan] = useState<TSubscriptionBasePlanKey | null>(null);
-	const [chosenAddons, setChosenAddons] = useState<TSubscriptionAddonKey[]>([]);
+	const [chosenAddons, setChosenAddons] = useState<TSubscriptionAddonKey[] | null>(null);
 
-	// Quem já usa o ERP (em teste ou num plano antigo) chega com o CRM + ERP marcado. É só uma
-	// sugestão: enquanto a pessoa não escolher, vale o que ela usa hoje; depois, vale a escolha dela.
+	// O checkout chega marcado com o que a loja usou no teste: CRM + ERP para quem vendeu pelo ERP, o
+	// Hub para quem respondeu conversas nele. É só o ponto de partida: enquanto a pessoa não mexer,
+	// vale a sugestão; depois que ela mexe, vale a escolha dela — a sugestão nunca a sobrescreve.
 	const { data: currentSubscription } = useSubscriptionAddons();
 	const basePlan = chosenBasePlan ?? currentSubscription?.planoSugerido ?? "CRM";
+	const selectedAddons = chosenAddons ?? currentSubscription?.adicionaisSugeridos ?? [];
 	// Um adicional sem preço no ciclo escolhido (a consultoria, no anual) sai da conta sem ser
 	// desmarcado: voltar para o mensal devolve a escolha.
-	const addons = chosenAddons.filter((addon) => isAddonAvailableInCycle(addon, cycle));
+	const addons = selectedAddons.filter((addon) => isAddonAvailableInCycle(addon, cycle));
 
 	const checkoutMutation = useMutation({
 		mutationFn: generateSubscriptionCheckout,
@@ -84,7 +86,8 @@ export default function PlanPicker({ acao = "ASSINAR", className }: PlanPickerPr
 	const total = getSubscriptionCycleTotal({ basePlan, addons, cycle });
 
 	function toggleAddon(addon: TSubscriptionAddonKey, checked: boolean) {
-		setChosenAddons((previous) => (checked ? [...previous.filter((key) => key !== addon), addon] : previous.filter((key) => key !== addon)));
+		const previous = selectedAddons.filter((key) => key !== addon);
+		setChosenAddons(checked ? [...previous, addon] : previous);
 	}
 
 	return (
@@ -129,6 +132,7 @@ export default function PlanPicker({ acao = "ASSINAR", className }: PlanPickerPr
 						planKey={key}
 						cycle={cycle}
 						selected={basePlan === key}
+						suggestionReason={key === currentSubscription?.planoSugerido ? (currentSubscription.planoSugeridoMotivo ?? null) : null}
 						disabled={isRedirecting}
 						onSelect={() => setChosenBasePlan(key)}
 					/>
@@ -143,6 +147,7 @@ export default function PlanPicker({ acao = "ASSINAR", className }: PlanPickerPr
 						addonKey={key}
 						cycle={cycle}
 						checked={addons.includes(key)}
+						suggestionReason={currentSubscription?.adicionais.find((addon) => addon.chave === key)?.motivoSugestao ?? null}
 						disabled={isRedirecting}
 						onCheckedChange={(checked) => toggleAddon(key, checked)}
 					/>
@@ -225,12 +230,15 @@ function BasePlanColumn({
 	planKey,
 	cycle,
 	selected,
+	suggestionReason,
 	disabled,
 	onSelect,
 }: {
 	planKey: TSubscriptionBasePlanKey;
 	cycle: TSubscriptionCycleEnum;
 	selected: boolean;
+	/** Por que este plano veio marcado, pelo uso no teste. Só no plano sugerido. */
+	suggestionReason: string | null;
 	disabled: boolean;
 	onSelect: () => void;
 }) {
@@ -270,6 +278,9 @@ function BasePlanColumn({
 			<span className="flex flex-col gap-1">
 				<span className="text-base leading-tight font-extrabold tracking-tight text-balance">{plan.name}</span>
 				<span className="text-[13px] leading-snug text-muted-foreground">{plan.description}</span>
+				{suggestionReason ? (
+					<span className="text-xs leading-snug font-semibold text-brand-secondary dark:text-foreground">{suggestionReason}</span>
+				) : null}
 			</span>
 
 			<span className="flex items-baseline gap-1.5">
@@ -293,12 +304,15 @@ function AddonRow({
 	addonKey,
 	cycle,
 	checked,
+	suggestionReason,
 	disabled,
 	onCheckedChange,
 }: {
 	addonKey: TSubscriptionAddonKey;
 	cycle: TSubscriptionCycleEnum;
 	checked: boolean;
+	/** Por que o adicional veio marcado: o uso dele no teste. */
+	suggestionReason: string | null;
 	disabled: boolean;
 	onCheckedChange: (checked: boolean) => void;
 }) {
@@ -325,6 +339,9 @@ function AddonRow({
 				<span className="text-[13px] leading-snug text-muted-foreground">
 					{available ? addon.description : `${addon.name} é cobrado mês a mês e não entra no plano anual. Para contratar, escolha o ciclo mensal.`}
 				</span>
+				{suggestionReason && available ? (
+					<span className="text-xs leading-snug font-semibold text-brand-secondary dark:text-foreground">{suggestionReason}</span>
+				) : null}
 			</label>
 		</li>
 	);

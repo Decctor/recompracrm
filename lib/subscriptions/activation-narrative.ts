@@ -1,4 +1,6 @@
 import type { TActivation } from "@/lib/onboarding/activation";
+import type { TErpChannel } from "@/lib/onboarding/erp-channels";
+import type { TSubscriptionAddonEnum } from "@/schemas/enums";
 
 /**
  * O que o selo de assinatura e o paywall dizem a uma loja em teste, decidido sem I/O.
@@ -68,6 +70,8 @@ export type TBuiltSummaryCounts = {
 	clientesComCashback: number;
 	vendasBalcao: number;
 	vendasErp: number;
+	/** Conversas do Hub de atendimentos em que a equipe ou o agente de IA respondeu, desde o início do teste. */
+	conversasHub: number;
 };
 
 export type TBuiltSummaryItem = { valor: string; rotulo: string };
@@ -97,6 +101,7 @@ export function resolveBuiltSummary({
 			: segmento === "CRM_BALCAO"
 				? [item(counts.vendasBalcao, "venda registrada no balcão", "vendas registradas no balcão")]
 				: [];
+	const hub = item(counts.conversasHub, "conversa respondida no Hub de atendimentos", "conversas respondidas no Hub de atendimentos");
 	const items = [
 		item(counts.clientes, "cliente na base", "clientes na base"),
 		item(counts.recomprasAtribuidas, "compra de quem recebeu campanha", "compras de quem recebeu campanha"),
@@ -105,5 +110,61 @@ export function resolveBuiltSummary({
 		item(counts.clientesComCashback, "cliente com cashback para usar", "clientes com cashback para usar"),
 		item(counts.campanhasAtivas, "campanha ligada", "campanhas ligadas"),
 	];
-	return items.filter((entry): entry is TBuiltSummaryItem => entry !== null).slice(0, maximo);
+	const present = items.filter((entry): entry is TBuiltSummaryItem => entry !== null);
+	// O Hub é um adicional: quem o usou precisa vê-lo aqui, porque o checkout já o traz marcado.
+	// Fica com o último lugar, sem tirar a base nem as compras atribuídas.
+	if (hub) return [...present.slice(0, Math.max(0, maximo - 1)), hub].slice(0, maximo);
+	return present.slice(0, maximo);
+}
+
+// ------------------------------------------------------------------ sugestão do checkout
+
+export type TPlanSuggestionInput = {
+	segmento: TActivation["segmento"];
+	/** Vendas feitas pelos canais do ERP desde o cadastro. */
+	vendasErp: Record<TErpChannel, number>;
+	conversasHub: number;
+};
+
+export type TPlanSuggestion = {
+	planoBase: "CRM" | "CRM_ERP";
+	/** Por que este plano vem marcado. Null quando é o CRM: não há o que explicar. */
+	motivo: string | null;
+	adicionais: { chave: TSubscriptionAddonEnum; motivo: string }[];
+};
+
+const ERP_CHANNEL_PHRASE: Record<TErpChannel, string> = {
+	BALCAO: "vende pelo PDV",
+	CATALOGO: "vende pelo catálogo digital",
+	MESAS: "atende por mesas e comandas",
+};
+
+/**
+ * O que o checkout traz marcado para quem ainda não assina, pelo que a loja de fato usou no teste
+ * — nunca pelo que o teste liberou, que é tudo. Usa o ERP quem está num segmento de ERP (escolheu
+ * a jornada ou vendeu por um canal do sistema, a mesma regra de "Primeiros passos"); usa o Hub quem
+ * respondeu conversas nele. É só o ponto de partida: o total aparece antes de pagar, e a pessoa
+ * desmarca o que não quiser.
+ */
+export function resolvePlanSuggestion({ segmento, vendasErp, conversasHub }: TPlanSuggestionInput): TPlanSuggestion {
+	const usesErp = segmento === "ERP" || segmento === "CRM_ERP";
+	const busiest = (Object.keys(vendasErp) as TErpChannel[]).filter((channel) => vendasErp[channel] > 0).sort((a, b) => vendasErp[b] - vendasErp[a])[0];
+	return {
+		planoBase: usesErp ? "CRM_ERP" : "CRM",
+		motivo: usesErp
+			? busiest
+				? `Sugerido porque sua loja ${ERP_CHANNEL_PHRASE[busiest]}.`
+				: "Sugerido porque você começou pelo ERP no cadastro."
+			: null,
+		adicionais:
+			conversasHub > 0
+				? [
+						{
+							chave: "HUB_ATENDIMENTOS",
+							// Sem "no teste": uma loja de contrato (deal) também chega aqui, e o número vale para as duas.
+							motivo: `Sua equipe já respondeu ${count(conversasHub)} ${conversasHub === 1 ? "conversa" : "conversas"} pelo Hub.`,
+						},
+					]
+				: [],
+	};
 }

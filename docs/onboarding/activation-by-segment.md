@@ -394,25 +394,36 @@ branch without conflicts; typecheck and every test suite pass on the result.
 | Trial message and `/subscription` summary (slice 6) | `/subscription` renders the new `PlanPicker`, same `acao` contract | The summary sits above the two base plans and the add-ons. |
 | Activation and Control | `assinaturaPlano` now holds `CRM` / `CRM_ERP` | The Control field `plano` receives the new keys. Check that no Control workflow filters on `CRESCIMENTO` or `ESCALA`. |
 
-### Gaps the merge exposes
+### Gaps the merge exposed, and how they were closed (22/11)
 
-1. **The suggested base plan follows the capability, not the use.** `planoSugerido` (add-ons route)
-   preselects `CRM + ERP` whenever `erp.acesso` is on. On production, three lapsed integration stores
-   (#8, #9, #18) have ERP access from an old plan, sell only through their integration, and would
-   be shown R$ 599,90 preselected instead of R$ 399,90. The activation segment already knows who uses
-   the ERP; the suggestion should read it (`ERP` / `CRM_ERP` segment → `CRM_ERP`, otherwise `CRM`).
-2. **The Hub is in every trial, and off at checkout.** `FREE_TRIAL_ADDONS` gives the Hub (inbox + AI)
-   to all trials, and the picker starts with no add-on. A store that used the inbox during the trial
-   loses it silently when it subscribes to the base plan alone. Two options: list the Hub's use in
-   "O que sua loja já construiu" (conversations handled), and/or preselect the Hub for stores that used
-   it. Preselecting a paid add-on is a commercial call.
-3. **Trial stores read as paying in the sidebar.** The trial now stores `assinaturaPlano = "CRM"`, and
-   `SubscriptionBadge` treats any stored plan as paying, so a trial store sees "PLANO CRM" in the paid
-   style while the header pill says "Teste encerrado" or shows its next step. Telling trial from paid
-   by the Stripe subscription (or the trial date) would keep the two consistent.
-4. **ERP-only stores have no ERP-only plan.** The `ERP` segment's only plan is `CRM + ERP`; its ladder
-   leaves the CRM bridge until after the ERP habit. Nothing to change now. It is the context for the
-   "ERP price review" left open in the pricing plan.
+1. **The suggested base plan follows use, not capability.** Every trial has the ERP unlocked, so
+   `erp.acesso` says nothing. For an organization with no live subscription, the add-ons route now
+   asks `getSubscriptionPlanSuggestion` (`lib/onboarding/activation-status.ts`). That function reads
+   the activation segment, and `resolvePlanSuggestion` (`lib/subscriptions/activation-narrative.ts`)
+   turns it into a plan: `ERP` or `CRM_ERP` → `CRM_ERP`, anything else → `CRM`. The picker shows the
+   reason under the plan ("Sugerido porque sua loja vende pelo PDV", from the channel with the most
+   sales, or "você começou pelo ERP no cadastro"). A subscriber keeps their own plan. If reading the
+   use fails, the old `erp.acesso` rule applies, so the plans screen never breaks.
+2. **Hub use is shown and preselected.** "Use" means conversations where someone from the store or the
+   AI agent replied, counted from the start of the trial (`countHubRepliedChats` in `activity.ts`).
+   Incoming customer messages and automated sends don't count. Above zero:
+   - it becomes the last of the three items in "O que sua loja já construiu";
+   - the route returns it in `adicionaisSugeridos`, with a reason per add-on;
+   - `PlanPicker` starts with the Hub checked, with the reason under it and the price in the total.
+   The first time the user touches an add-on, their choice wins and the suggestion never overrides
+   it. The wording is "Sua equipe já respondeu N conversas pelo Hub", not "no teste", because deal
+   stores reach this screen too. On production (read-only), three non-subscribers have replies:
+   two deal stores and one trial.
+3. **The badge tells trial from paid by where access comes from.** The session's `organizacao` now
+   carries `assinaturaEmTeste`, from `isTrialSubscriptionAccess(resolveSubscriptionAccess(...))`
+   (`TRIAL` or `TRIAL_GRACE`), the same verdict the subscription banner uses. On production, no
+   organization without a Stripe subscription has access other than through a trial, so a stored plan
+   on its own never means paying. The admin trial block used the same shortcut ("Organização com
+   plano pago — período de teste não se aplica" for every trial). It now reads the Stripe status, so
+   the team can see and extend a trial again (decision 4: trial stays manual).
+4. **ERP-only stores have no ERP-only plan.** Unchanged and deliberate: the `ERP` segment's only plan
+   is `CRM + ERP`, and now the checkout says why it is suggested. This is the context for the "ERP
+   price review" left open in the pricing plan.
 
 Fixed in the merge: the deal notice on the company stage printed the raw key (`plano CRM_ERP`); it
 now prints the plan name.

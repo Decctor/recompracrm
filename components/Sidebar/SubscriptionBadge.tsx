@@ -21,12 +21,13 @@ export default function SubscriptionBadge({ organization }: TSubscriptionBadgePr
 	const [showPlansMenu, setShowPlansMenu] = useState(false);
 	const [showManagementMenu, setShowManagementMenu] = useState(false);
 
-	const isPaying = organization.assinaturaAtiva && !!organization.assinaturaPlano;
-	const isOnTrial = organization.assinaturaAtiva && !organization.assinaturaPlano;
+	// Quem testa também tem `assinaturaPlano` (o plano do teste): o que separa teste de pagamento é a
+	// origem do acesso, decidida em resolveSubscriptionAccess — a mesma regra do aviso de assinatura.
+	const isOnTrial = organization.assinaturaAtiva && organization.assinaturaEmTeste;
+	const isPaying = organization.assinaturaAtiva && !organization.assinaturaEmTeste && !!organization.assinaturaPlano;
 
-	// Com plano gravado → clicar abre o menu da assinatura: o plano, os adicionais que dá para
-	// incluir e o atalho para o portal do Stripe. O menu decide o que mostrar pela assinatura real
-	// (quem está em teste também tem `assinaturaPlano`, e lá vê as opções de contratação).
+	// Pagando → clicar abre o menu da assinatura: o plano, os adicionais que dá para incluir e o
+	// atalho para o portal do Stripe.
 	if (isPaying) {
 		const planKey = organization.assinaturaPlano as TAppSubscriptionPlanKey;
 		const plan = AppSubscriptionPlans[planKey] ?? null;

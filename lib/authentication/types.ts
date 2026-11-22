@@ -46,6 +46,8 @@ export type TAuthUserSession = {
 			cnpj: TOrganizationEntity["cnpj"];
 			logoUrl: TOrganizationEntity["logoUrl"];
 			assinaturaAtiva: boolean;
+			/** Acesso pelo teste ou pela carência dele: tem plano gravado, mas ainda não paga. */
+			assinaturaEmTeste: boolean;
 			assinaturaPlano: TOrganizationEntity["assinaturaPlano"];
 			corPrimaria: TOrganizationEntity["corPrimaria"];
 			corPrimariaForeground: TOrganizationEntity["corPrimariaForeground"];

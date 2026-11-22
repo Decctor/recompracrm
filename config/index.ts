@@ -1252,6 +1252,15 @@ export function resolveSubscriptionAccess({
 	return resolveTrialAccess({ trialStart, trialEnd, now }) ?? { active: false, mode: "fail", reason: "BLOQUEADO", daysRemaining: null };
 }
 
+/**
+ * O acesso vem do teste (ou da carência dele), não de uma cobrança. Quem testa tem `assinaturaPlano`
+ * gravado (o plano do teste), então o plano sozinho não separa teste de pagamento — o selo da
+ * barra lateral usa isto.
+ */
+export function isTrialSubscriptionAccess(access: Pick<TSubscriptionAccess, "reason">) {
+	return access.reason === "TRIAL" || access.reason === "TRIAL_GRACE";
+}
+
 function resolveTrialAccess({
 	trialStart,
 	trialEnd,

@@ -1,9 +1,9 @@
-import type { TBuiltSummaryCounts } from "@/lib/subscriptions/activation-narrative";
+import { resolvePlanSuggestion, type TBuiltSummaryCounts, type TPlanSuggestion } from "@/lib/subscriptions/activation-narrative";
 import type { DB, DBTransaction } from "@/services/drizzle";
 import { campaignConversions, cashbackProgramBalances, interactions, organizations } from "@/services/drizzle/schema";
 import { and, count, eq, gt, inArray, isNotNull } from "drizzle-orm";
 import { resolveActivation, type TActivation, type TActivationFacts } from "./activation";
-import { DELIVERED_CAMPAIGN_STATUSES, loadOrganizationActivity } from "./activity";
+import { countHubRepliedChats, DELIVERED_CAMPAIGN_STATUSES, loadOrganizationActivity } from "./activity";
 import { getOnboardingReadiness, type TOnboardingReadiness } from "./readiness";
 
 const IMPORT_RUNNING_STATES = new Set(["AGUARDANDO", "EM_ANDAMENTO", "PAUSADO_LIMITE"]);
@@ -70,7 +70,7 @@ function composeActivationFacts({
 async function loadActivationContext({ executor, organizationId, now }: { executor: DB | DBTransaction; organizationId: string; now: Date }) {
 	const organization = await executor.query.organizations.findFirst({
 		where: eq(organizations.id, organizationId),
-		columns: { id: true, dataInsercao: true, slug: true, periodoTesteFim: true, stripeSubscriptionId: true },
+		columns: { id: true, dataInsercao: true, slug: true, periodoTesteInicio: true, periodoTesteFim: true, stripeSubscriptionId: true },
 	});
 	if (!organization) throw new Error("Organização não encontrada.");
 	const [readiness, activity] = await Promise.all([
@@ -78,7 +78,9 @@ async function loadActivationContext({ executor, organizationId, now }: { execut
 		loadOrganizationActivity({ executor, organizationId, criadaEm: organization.dataInsercao, now }),
 	]);
 	const activation = resolveActivation(composeActivationFacts({ readiness, activity, organization, now }));
-	return { readiness, activity, activation };
+	// O uso do teste conta do início dele; sem a data (organização antiga), do cadastro.
+	const usageSince = organization.periodoTesteInicio ?? organization.dataInsercao;
+	return { readiness, activity, activation, usageSince };
 }
 
 export async function getOrganizationActivation({
@@ -106,8 +108,8 @@ export async function getSubscriptionActivationContext({
 	organizationId: string;
 	now?: Date;
 }): Promise<{ activation: TActivation; counts: TBuiltSummaryCounts }> {
-	const { readiness, activity, activation } = await loadActivationContext({ executor, organizationId, now });
-	const [[delivered], [conversions], [withCashback]] = await Promise.all([
+	const { readiness, activity, activation, usageSince } = await loadActivationContext({ executor, organizationId, now });
+	const [[delivered], [conversions], [withCashback], hubChats] = await Promise.all([
 		executor
 			.select({ total: count() })
 			.from(interactions)
@@ -123,6 +125,7 @@ export async function getSubscriptionActivationContext({
 			.select({ total: count() })
 			.from(cashbackProgramBalances)
 			.where(and(eq(cashbackProgramBalances.organizacaoId, organizationId), gt(cashbackProgramBalances.saldoValorDisponivel, 0))),
+		countHubRepliedChats({ executor, organizationId, since: usageSince }),
 	]);
 	return {
 		activation,
@@ -134,6 +137,30 @@ export async function getSubscriptionActivationContext({
 			clientesComCashback: withCashback?.total ?? 0,
 			vendasBalcao: activity.vendas.balcao.total,
 			vendasErp: activity.vendas.erp.BALCAO.total + activity.vendas.erp.CATALOGO.total + activity.vendas.erp.MESAS.total,
+			conversasHub: hubChats,
 		},
 	};
+}
+
+/**
+ * O que o checkout traz marcado para quem ainda não assina: o plano-base pelo uso do ERP e os
+ * adicionais pelo uso no teste (lib/subscriptions/activation-narrative.ts). Só para quem não tem
+ * assinatura viva — quem assina já tem o plano dele.
+ */
+export async function getSubscriptionPlanSuggestion({
+	executor,
+	organizationId,
+	now = new Date(),
+}: {
+	executor: DB | DBTransaction;
+	organizationId: string;
+	now?: Date;
+}): Promise<TPlanSuggestion> {
+	const { activity, activation, usageSince } = await loadActivationContext({ executor, organizationId, now });
+	const hubChats = await countHubRepliedChats({ executor, organizationId, since: usageSince });
+	return resolvePlanSuggestion({
+		segmento: activation.segmento,
+		vendasErp: { BALCAO: activity.vendas.erp.BALCAO.total, CATALOGO: activity.vendas.erp.CATALOGO.total, MESAS: activity.vendas.erp.MESAS.total },
+		conversasHub: hubChats,
+	});
 }
