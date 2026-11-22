@@ -377,3 +377,42 @@ All nine slices are on branch `claude/cool-lovelace-8ncxdp`, in one PR as decide
 | 9 | Shorter company stage | Logo, slug and e-mail out of the CRM journey; CNPJ required. |
 
 Not done, by decision: session recording (6), the ERP stall event to Control (7), any change to the trial rule (4) or to CNPJ (5).
+
+## 10. Pricing model and activation (merged 22/11/2026)
+
+The pricing branch (`docs/dev-planning/pricing-model-redesign-plan.md`) replaces tiers with two base
+plans (`CRM`, `CRM_ERP`) and two add-ons (`HUB_ATENDIMENTOS`, `CONSULTORIA`). It was merged into this
+branch without conflicts; typecheck and every test suite pass on the result.
+
+### Where the two meet, and they agree
+
+| Activation | Pricing | Fit |
+| --- | --- | --- |
+| Journey picker: CRM or ERP | `FREE-TRIAL` → `CRM`, `FREE-TRIAL-ERP` → `CRM_ERP`, both with `FREE_TRIAL_ADDONS` (the Hub) | The onboarding still sends the same two values; the trial now opens the matching base plan. |
+| Second product during the trial (`enableErpTrial`) | Switches the trial to `CRM_ERP` through the resolver | Same entry point; readiness' `erp.testeDisponivel` is unchanged. |
+| Segments read `erp.acesso` only together with real ERP use (journey or channel sales) | `erp.acesso` comes from the base plan | A legacy `ESCALA` store that never used the PDV stays in its CRM segment. |
+| Trial message and `/subscription` summary (slice 6) | `/subscription` renders the new `PlanPicker`, same `acao` contract | The summary sits above the two base plans and the add-ons. |
+| Activation and Control | `assinaturaPlano` now holds `CRM` / `CRM_ERP` | The Control field `plano` receives the new keys. Check that no Control workflow filters on `CRESCIMENTO` or `ESCALA`. |
+
+### Gaps the merge exposes
+
+1. **The suggested base plan follows the capability, not the use.** `planoSugerido` (add-ons route)
+   preselects `CRM + ERP` whenever `erp.acesso` is on. On production, three lapsed integration stores
+   (#8, #9, #18) have ERP access from an old plan, sell only through their integration, and would
+   be shown R$ 599,90 preselected instead of R$ 399,90. The activation segment already knows who uses
+   the ERP; the suggestion should read it (`ERP` / `CRM_ERP` segment → `CRM_ERP`, otherwise `CRM`).
+2. **The Hub is in every trial, and off at checkout.** `FREE_TRIAL_ADDONS` gives the Hub (inbox + AI)
+   to all trials, and the picker starts with no add-on. A store that used the inbox during the trial
+   loses it silently when it subscribes to the base plan alone. Two options: list the Hub's use in
+   "O que sua loja já construiu" (conversations handled), and/or preselect the Hub for stores that used
+   it. Preselecting a paid add-on is a commercial call.
+3. **Trial stores read as paying in the sidebar.** The trial now stores `assinaturaPlano = "CRM"`, and
+   `SubscriptionBadge` treats any stored plan as paying, so a trial store sees "PLANO CRM" in the paid
+   style while the header pill says "Teste encerrado" or shows its next step. Telling trial from paid
+   by the Stripe subscription (or the trial date) would keep the two consistent.
+4. **ERP-only stores have no ERP-only plan.** The `ERP` segment's only plan is `CRM + ERP`; its ladder
+   leaves the CRM bridge until after the ERP habit. Nothing to change now. It is the context for the
+   "ERP price review" left open in the pricing plan.
+
+Fixed in the merge: the deal notice on the company stage printed the raw key (`plano CRM_ERP`); it
+now prints the plan name.
