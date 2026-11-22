@@ -28,7 +28,7 @@ export function WhatsappChannelNotice({ enabled }: { enabled: boolean }) {
 				{step.tom === "falhou" ? "O WhatsApp oficial parou num passo" : "Falta um passo para o WhatsApp oficial mandar campanhas"}
 			</Callout.Title>
 			<Callout.Description>
-				{step.titulo}: {step.situacao.toLowerCase()} ({blocked.numero}). {blocked.canal.concluidos} de {blocked.canal.total} passos concluídos.
+				{step.titulo}: {step.situacao.toLowerCase()}. Número {blocked.numero}, {blocked.canal.concluidos} de {blocked.canal.total} passos concluídos.
 			</Callout.Description>
 			<Callout.Actions>
 				<Button asChild size="sm" variant="outline">

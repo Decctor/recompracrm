@@ -9,7 +9,7 @@ import type { TOnboardingReadiness } from "@/lib/onboarding/readiness";
 import { useWhatsappChannelStatus } from "@/lib/queries/whatsapp-connections";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Plus } from "lucide-react";
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { ReadinessPill } from "../shared/ReadinessPill";
 
 /*
@@ -43,9 +43,11 @@ function SectionLabel({ children }: { children: string }) {
 }
 
 function OfficialHeader({ pill }: { pill?: ReactNode }) {
+	// O selo fica na linha do título e o texto ocupa a largura toda: no celular, dividir a linha com
+	// o selo espremia a descrição numa coluna de duas palavras.
 	return (
-		<div className="flex items-start justify-between gap-4">
-			<div className="flex items-start gap-3">
+		<div className="flex flex-col gap-2">
+			<div className="flex items-center gap-3">
 				<span className="flex shrink-0 items-center">
 					<span className="z-10 flex size-9 items-center justify-center rounded-full border border-border bg-background">
 						<MetaIcon className="size-4 text-[#0869E1]" />
@@ -54,14 +56,12 @@ function OfficialHeader({ pill }: { pill?: ReactNode }) {
 						<WhatsappIcon className="size-4 text-whatsapp" />
 					</span>
 				</span>
-				<div className="flex flex-col gap-0.5">
-					<p className="text-sm font-bold">WhatsApp oficial da Meta</p>
-					<p className="text-sm text-muted-foreground">
-						O número do app WhatsApp Business continua no celular e passa a mandar campanhas pela Meta. Leva uns 5 minutos.
-					</p>
-				</div>
+				<p className="min-w-0 flex-1 text-sm font-bold">WhatsApp oficial da Meta</p>
+				{pill}
 			</div>
-			{pill}
+			<p className="text-sm text-muted-foreground">
+				O número do app WhatsApp Business continua no celular e passa a mandar campanhas pela Meta. Leva uns 5 minutos.
+			</p>
 		</div>
 	);
 }
@@ -73,9 +73,14 @@ export function WhatsappStage({ whatsapp, onConnectionChanged, onConfirmPayment,
 
 	// O readiness é a fonte do pagamento confirmado e do estado do número; quando muda, os passos também.
 	const paymentKey = whatsapp?.telefones.map((phone) => `${phone.id}:${phone.pagamento}`).join("|") ?? "";
+	// Só nas mudanças: na montagem a consulta já busca sozinha, e invalidar ali duplicaria a requisição.
+	const readinessKey = `${paymentKey}|${whatsapp?.numero ?? ""}`;
+	const previousReadinessKey = useRef(readinessKey);
 	useEffect(() => {
+		if (previousReadinessKey.current === readinessKey) return;
+		previousReadinessKey.current = readinessKey;
 		if (hasOfficial) void queryClient.invalidateQueries({ queryKey: ["whatsapp-channel-status"] });
-	}, [paymentKey, whatsapp?.numero, hasOfficial, queryClient]);
+	}, [readinessKey, hasOfficial, queryClient]);
 
 	const gatewayConnected = whatsapp?.tipoConexao === "INTERNAL_GATEWAY" && whatsapp.numero === "CONECTADO";
 

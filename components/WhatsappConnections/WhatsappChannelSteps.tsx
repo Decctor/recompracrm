@@ -275,7 +275,7 @@ function ConnectionTestForm({ phone, destinoSugerido, onCancel }: { phone: TChan
 				</Callout.Root>
 			) : (
 				<p className="text-xs text-muted-foreground">
-					Uma mensagem curta sai do número da empresa. A Meta cobra como uma mensagem de campanha, centavos.
+					Uma mensagem curta sai do número da empresa. A Meta cobra alguns centavos por ela, como cobra cada campanha.
 				</p>
 			)}
 		</form>
