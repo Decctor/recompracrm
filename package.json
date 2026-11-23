@@ -150,6 +150,12 @@
 		"test:chats-inbox": "node --import tsx --test lib/chats/inbox-filters.test.ts lib/chats/burst-coalescer.test.ts",
 		"test:ai-agent": "node --import tsx --test lib/chats/attendance-policy.test.ts lib/ai/providers/warnings.test.ts lib/ai/providers/model-selection.test.ts lib/ai/triage/message-triage.test.ts lib/ai/agent/follow-up-schedule.test.ts lib/chats/ai-presence.test.ts lib/chats/ai-pre-run-failure.test.ts lib/chats/ai-response-validity.test.ts lib/ai/providers/pricing.test.ts lib/ai/agent/spend.test.ts lib/ai/agent/attachment.test.ts lib/ai/agent/turn-validation.test.ts lib/ai/agent/run-memory.test.ts lib/ai/agent/context.test.ts lib/ai/agent/provisioning.test.ts",
 		"test:control-lifecycle": "node --import tsx --test lib/control/lifecycle.test.ts",
+		"local:setup": "tsx --conditions=react-server ./scripts/local/setup.ts",
+		"local:reset": "tsx ./scripts/local/reset.ts",
+		"local:dev": "tsx ./scripts/local/dev.ts",
+		"local:login": "tsx --conditions=react-server ./scripts/local/login.ts",
+		"test:local-db-objects": "node --import tsx --test scripts/local/db-objects.test.ts lib/local-dev/guard.test.ts",
+		"test:e2e": "playwright test --config e2e/playwright.config.ts",
 		"test:campaign-events": "node --conditions=react-server --import tsx --import ./lib/campaigns/events/test-env.ts --test lib/campaigns/events/events.test.ts lib/campaigns/engine/triggers.test.ts"
 	},
 	"dependencies": {

@@ -66,3 +66,8 @@ output/
 /.cursor/debug.log
 /.impeccable/critique/
 /.fmtcheck/
+
+# Local development environment (docs/dev/local-environment.md)
+/.local-dev/
+/.next-localdb/
+/e2e/.results/
