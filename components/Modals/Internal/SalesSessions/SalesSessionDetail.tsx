@@ -1,6 +1,10 @@
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import { formatSessionDifference, sessionDifferenceClass } from "@/components/Modals/Internal/SalesSessions/Blocks/session-difference";
-import { SessionDrawerComposition } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionDrawerComposition";
+import {
+	SessionDifferenceRow,
+	SessionDrawerLedger,
+	SessionMissingAccountNotice,
+} from "@/components/Modals/Internal/SalesSessions/Blocks/SessionDrawerLedger";
 import { SessionFiscalPendingAlert } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionFiscalPendingAlert";
 import { SessionTerminalPendingAlert } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionTerminalPendingAlert";
 import { SessionMetaRow } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionMetaRow";
@@ -83,7 +87,7 @@ export default function SalesSessionDetail({ sessionId, closeModal, canReview = 
 	return (
 		<ResponsiveMenu
 			menuTitle="DETALHES DO CAIXA"
-			menuDescription="Resumo do turno, composição da gaveta e conferência por método de pagamento."
+			menuDescription="Resumo do turno, extrato da gaveta e recebíveis por método de pagamento."
 			menuActionButtonText={canReviewThisSession ? "CONFERIR CAIXA" : "FECHAR"}
 			menuCancelButtonText="VOLTAR"
 			actionFunction={canReviewThisSession ? () => review({ sessaoVendaId: sessionId }) : closeModal}
@@ -175,16 +179,28 @@ export default function SalesSessionDetail({ sessionId, closeModal, canReview = 
 					{gavetaLinhas.length > 0 ? (
 						<section className="flex flex-col gap-2">
 							<SessionSectionLabel>{isOpen ? "GAVETA DO TURNO" : "CONFERÊNCIA DA GAVETA"}</SessionSectionLabel>
-							<div className="flex flex-col overflow-hidden rounded-xl bg-muted/50">
-								{gavetaLinhas.map((linha, index) => (
-									<div key={linha.metodo} className={cn("flex flex-col gap-1 px-3 py-3", index < gavetaLinhas.length - 1 && "border-b border-border/60")}>
+							{gavetaLinhas.map((linha) =>
+								linha.composicao ? (
+									<SessionDrawerLedger
+										key={linha.metodo}
+										composicao={linha.composicao}
+										movimentos={session.movimentos}
+										recebimentos={session.recebimentosDinheiro}
+										mode={isOpen ? "aberto" : "detalhe"}
+										fechamento={session.dataFechamento}
+										contado={linha.valorInformado}
+										diferenca={linha.diferenca}
+									/>
+								) : (
+									// O ledger atual não soma o esperado congelado no fechamento: o snapshot manda e o
+									// extrato fica de fora, para não mostrar uma conta que não fecha.
+									<div key={linha.metodo} className="flex flex-col gap-1 rounded-xl bg-muted/50 px-3 py-3">
 										<div className="flex items-center justify-between gap-2">
 											<span className="font-bold text-sm">{paymentLabel(linha.metodo)}</span>
 											<span className="text-[11px] text-muted-foreground">
 												ESPERADO <span className="font-semibold tabular-nums">{formatToMoney(linha.valorEsperado)}</span>
 											</span>
 										</div>
-										{linha.composicao ? <SessionDrawerComposition composicao={linha.composicao} metodo={linha.metodo} movimentos={session.movimentos} /> : null}
 										{linha.valorInformado === null ? (
 											<span className="text-xs text-muted-foreground">Contagem física registrada apenas no fechamento do caixa.</span>
 										) : (
@@ -193,19 +209,13 @@ export default function SalesSessionDetail({ sessionId, closeModal, canReview = 
 													<span className="text-muted-foreground">CONTADO</span>
 													<span className="font-semibold tabular-nums">{formatToMoney(linha.valorInformado)}</span>
 												</div>
-												{linha.diferenca !== null ? (
-													<div className="flex items-center justify-between text-sm">
-														<span className="font-bold">DIFERENÇA</span>
-														<span className={cn("font-black tabular-nums", sessionDifferenceClass(linha.diferenca))}>
-															{formatSessionDifference(linha.diferenca)}
-														</span>
-													</div>
-												) : null}
+												{linha.diferenca !== null ? <SessionDifferenceRow diferenca={linha.diferenca} /> : null}
 											</div>
 										)}
 									</div>
-								))}
-							</div>
+								),
+							)}
+							<SessionMissingAccountNotice movimentos={session.movimentos} />
 						</section>
 					) : null}
 

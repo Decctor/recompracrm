@@ -722,7 +722,7 @@ export const SalesSessionPolicyEnum = z.enum(["VENDEDOR_UNICO", "VENDEDORES_MULT
 export type TSalesSessionPolicyEnum = z.infer<typeof SalesSessionPolicyEnum>;
 
 // Movimento manual de caixa dentro de uma sessão.
-export const SalesSessionMovementTypeEnum = z.enum(["SANGRIA", "SUPRIMENTO"]);
+export const SalesSessionMovementTypeEnum = z.enum(["SANGRIA", "SUPRIMENTO", "DESPESA"]);
 export type TSalesSessionMovementTypeEnum = z.infer<typeof SalesSessionMovementTypeEnum>;
 
 // Fundação de integrations. Espelha os enums Drizzle integrationTypeEnum/integrationStatusEnum.

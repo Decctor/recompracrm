@@ -76,7 +76,12 @@ export function OperationalResultsView({ hasResultsScope, canViewSensitive }: Op
 				<>
 					<SummaryBlock resumo={data.resumo} canViewSensitive={canViewSensitive} historyFilters={historyFilters} />
 					<div className="grid w-full grid-cols-1 gap-4 xl:grid-cols-2">
-						<PaymentMethodsBlock porMetodo={data.porMetodo} faturamento={data.resumo.faturamento.atual ?? 0} historyFilters={historyFilters} />
+						<PaymentMethodsBlock
+							porMetodo={data.porMetodo}
+							faturamento={data.resumo.faturamento.atual ?? 0}
+							historyFilters={historyFilters}
+							gaveta={data.gaveta}
+						/>
 						<FiscalHealthBlock fiscal={data.fiscal} qtdeVendas={data.resumo.qtdeVendas.atual ?? 0} historyFilters={historyFilters} />
 					</div>
 					<DeliveryModesBlock porModalidade={data.porModalidade} canViewSensitive={canViewSensitive} historyFilters={historyFilters} />

@@ -75,17 +75,22 @@ export type TSalesSessionReconciliation = z.infer<typeof SalesSessionReconciliat
 // ============================================================================
 
 // Abertura de sessão.
-export const OpenSalesSessionInputSchema = z.object({
-	contaFinanceiraId: z.string({ invalid_type_error: "Tipo nao valido para o ID da conta financeira." }).optional().nullable(),
-	politica: SalesSessionPolicyEnum,
-	vendedorPadraoId: z.string({ invalid_type_error: "Tipo nao valido para o ID do vendedor padrao." }).optional().nullable(),
-	saldoInicial: z.number({ invalid_type_error: "Tipo nao valido para o saldo inicial." }).min(0, { message: "Saldo inicial nao pode ser negativo." }).default(0),
-	observacoesAbertura: z.string({ invalid_type_error: "Tipo nao valido para as observacoes de abertura." }).optional().nullable(),
-}).superRefine((input, ctx) => {
-	if (input.politica === "VENDEDOR_UNICO" && !input.vendedorPadraoId) {
-		ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["vendedorPadraoId"], message: "Vendedor padrao nao informado." });
-	}
-});
+export const OpenSalesSessionInputSchema = z
+	.object({
+		contaFinanceiraId: z.string({ invalid_type_error: "Tipo nao valido para o ID da conta financeira." }).optional().nullable(),
+		politica: SalesSessionPolicyEnum,
+		vendedorPadraoId: z.string({ invalid_type_error: "Tipo nao valido para o ID do vendedor padrao." }).optional().nullable(),
+		saldoInicial: z
+			.number({ invalid_type_error: "Tipo nao valido para o saldo inicial." })
+			.min(0, { message: "Saldo inicial nao pode ser negativo." })
+			.default(0),
+		observacoesAbertura: z.string({ invalid_type_error: "Tipo nao valido para as observacoes de abertura." }).optional().nullable(),
+	})
+	.superRefine((input, ctx) => {
+		if (input.politica === "VENDEDOR_UNICO" && !input.vendedorPadraoId) {
+			ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["vendedorPadraoId"], message: "Vendedor padrao nao informado." });
+		}
+	});
 export type TOpenSalesSessionInput = z.infer<typeof OpenSalesSessionInputSchema>;
 
 // Conferência informada no fechamento (uma linha por método contado).
@@ -118,17 +123,29 @@ export const ReviewSalesSessionInputSchema = z.object({
 });
 export type TReviewSalesSessionInput = z.infer<typeof ReviewSalesSessionInputSchema>;
 
-// Movimento manual de caixa (sangria/suprimento).
-export const RegisterSalesSessionMovementInputSchema = z.object({
-	sessaoVendaId: z.string({
-		required_error: "ID da sessao de venda nao informado.",
-		invalid_type_error: "Tipo nao valido para o ID da sessao de venda.",
-	}),
-	tipo: SalesSessionMovementTypeEnum,
-	valor: z.number({
-		required_error: "Valor do movimento nao informado.",
-		invalid_type_error: "Tipo nao valido para o valor do movimento.",
-	}).positive({ message: "Valor do movimento deve ser positivo." }),
-	observacoes: z.string({ invalid_type_error: "Tipo nao valido para as observacoes do movimento." }).optional().nullable(),
-});
+// Movimento manual de caixa. Sangria leva o dinheiro para outra conta (cofre, banco); suprimento traz
+// troco de uma conta. Nos dois a conta é opcional — a organização pode não ter outra conta além do
+// caixa —, e o modal a pede sempre que houver uma. Despesa exige a categoria.
+export const RegisterSalesSessionMovementInputSchema = z
+	.object({
+		sessaoVendaId: z.string({
+			required_error: "ID da sessao de venda nao informado.",
+			invalid_type_error: "Tipo nao valido para o ID da sessao de venda.",
+		}),
+		tipo: SalesSessionMovementTypeEnum,
+		valor: z
+			.number({
+				required_error: "Valor do movimento nao informado.",
+				invalid_type_error: "Tipo nao valido para o valor do movimento.",
+			})
+			.positive({ message: "Valor do movimento deve ser positivo." }),
+		observacoes: z.string({ invalid_type_error: "Tipo nao valido para as observacoes do movimento." }).optional().nullable(),
+		contaFinanceiraId: z.string({ invalid_type_error: "Tipo nao valido para a conta financeira do movimento." }).optional().nullable(),
+		categoriaContaId: z.string({ invalid_type_error: "Tipo nao valido para a categoria da despesa." }).optional().nullable(),
+	})
+	.superRefine((input, ctx) => {
+		if (input.tipo === "DESPESA" && !input.categoriaContaId) {
+			ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["categoriaContaId"], message: "Informe a categoria da despesa." });
+		}
+	});
 export type TRegisterSalesSessionMovementInput = z.infer<typeof RegisterSalesSessionMovementInputSchema>;

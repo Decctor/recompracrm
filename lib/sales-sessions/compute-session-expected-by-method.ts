@@ -1,5 +1,5 @@
 import { db, type DBTransaction } from "@/services/drizzle";
-import { financialTransactions } from "@/services/drizzle/schema";
+import { accountingEntries, financialTransactions } from "@/services/drizzle/schema";
 import { summarizeSessionTransactions, type TSessionExpectedByMethod } from "./summarize-session-transactions";
 import { and, eq } from "drizzle-orm";
 
@@ -32,8 +32,11 @@ export async function computeSessionExpectedByMethod({
 			valor: financialTransactions.valor,
 			modificadoresMetadata: financialTransactions.modificadoresMetadata,
 			dataEfetivacao: financialTransactions.dataEfetivacao,
+			// Separa venda, sangria/suprimento (TRANSFERENCIA), despesa (MANUAL) e estorno no detalhamento.
+			origemTipo: accountingEntries.origemTipo,
 		})
 		.from(financialTransactions)
+		.leftJoin(accountingEntries, eq(financialTransactions.lancamentoContabilId, accountingEntries.id))
 		.where(and(eq(financialTransactions.organizacaoId, orgId), eq(financialTransactions.sessaoVendaId, sessaoVendaId)));
 
 	return summarizeSessionTransactions(rows, saldoInicial);

@@ -1,5 +1,6 @@
 "use client";
 
+import SalesSessionDetail from "@/components/Modals/Internal/SalesSessions/SalesSessionDetail";
 import type { TSalesResults } from "@/lib/sales/results";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { formatDecimalPlaces, formatToMoney } from "@/lib/formatting";
@@ -9,18 +10,23 @@ import { buildSalesHistoryHref, type TSalesHistoryUrlState } from "@/lib/sales/h
 import { cn } from "@/lib/utils";
 import IfoodLogo from "@/utils/images/integrations/ifood-logo.png";
 import { FinancialAccountTypeOptions } from "@/utils/select-options";
-import { ArrowDownLeft, ArrowUpRight, Equal, Info, Landmark, Wallet } from "lucide-react";
+import dayjs from "dayjs";
+import { ArrowDownLeft, ArrowRight, ArrowUpRight, Equal, Info, Landmark, Wallet } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
 
 type PaymentMethodsBlockProps = {
 	porMetodo: TSalesResults["porMetodo"];
 	faturamento: number;
 	/** Recorte do relatório (período, vendedores, status) que cada linha carrega para o histórico. */
 	historyFilters: Partial<TSalesHistoryUrlState>;
+	/** Movimentos da gaveta fora das vendas nos caixas do período (null com filtro de vendedor/canal). */
+	gaveta: TSalesResults["gaveta"];
 };
 
-export function PaymentMethodsBlock({ porMetodo, faturamento, historyFilters }: PaymentMethodsBlockProps) {
+export function PaymentMethodsBlock({ porMetodo, faturamento, historyFilters, gaveta }: PaymentMethodsBlockProps) {
+	const [openSessionId, setOpenSessionId] = useState<string | null>(null);
 	const { linhas, totalRecebido, totalBruto, ajustes, cobertura } = porMetodo;
 	const totalPendente = linhas.reduce((acc, linha) => acc + linha.valorPendente, 0);
 	const adjustmentParts = [
@@ -46,7 +52,13 @@ export function PaymentMethodsBlock({ porMetodo, faturamento, historyFilters }: 
 			) : (
 				<div className="flex flex-col gap-2">
 					{linhas.map((linha) => (
-						<PaymentMethodRow key={linha.metodo} linha={linha} historyFilters={historyFilters} />
+						<PaymentMethodRow
+							key={linha.metodo}
+							linha={linha}
+							historyFilters={historyFilters}
+							gaveta={linha.metodo === "DINHEIRO" ? gaveta : null}
+							onOpenSession={setOpenSessionId}
+						/>
 					))}
 				</div>
 			)}
@@ -65,16 +77,82 @@ export function PaymentMethodsBlock({ porMetodo, faturamento, historyFilters }: 
 					</span>
 				) : null}
 			</div>
+			{openSessionId ? <SalesSessionDetail sessionId={openSessionId} closeModal={() => setOpenSessionId(null)} /> : null}
 		</section>
 	);
+}
+
+const MAX_LISTED_SESSIONS = 3;
+
+/**
+ * Rodapé do popover do Dinheiro: o "Ficou" acima é só de vendas, e a gaveta do fechamento soma fundo,
+ * suprimentos, sangrias e despesas. Sem esta ponte, os dois números parecem não bater.
+ */
+function CashDrawerBridge({ gaveta, onOpenSession }: { gaveta: NonNullable<TSalesResults["gaveta"]>; onOpenSession: (sessionId: string) => void }) {
+	const parts = [
+		gaveta.fundoTroco > 0 ? `fundo de troco (${formatToMoney(gaveta.fundoTroco)})` : null,
+		gaveta.suprimentos > 0 ? `suprimentos (${formatToMoney(gaveta.suprimentos)})` : null,
+		gaveta.sangrias > 0 ? `sangrias (${formatToMoney(gaveta.sangrias)})` : null,
+		gaveta.despesas > 0 ? `despesas pagas com o caixa (${formatToMoney(gaveta.despesas)})` : null,
+		gaveta.estornos > 0 ? `estornos (${formatToMoney(gaveta.estornos)})` : null,
+	].filter((part): part is string => part !== null);
+	const listed = gaveta.sessoes.slice(0, MAX_LISTED_SESSIONS);
+	const singleDay = new Set(gaveta.sessoes.map((sessao) => dayjs(sessao.dataAbertura).format("DD/MM"))).size === gaveta.sessoes.length;
+
+	return (
+		<div className="flex flex-col gap-1.5 rounded-lg bg-muted/60 p-2.5 text-[11px]">
+			<span className="font-semibold text-foreground">Na gaveta, o período teve mais movimentos</span>
+			<span className="text-muted-foreground">
+				Esta conta é só de vendas.{" "}
+				{parts.length > 0
+					? `${capitalizeFirst(joinList(parts))} ficam no fechamento do caixa.`
+					: "O fundo de troco e as sangrias ficam no fechamento do caixa."}
+			</span>
+			<div className="flex flex-col gap-0.5">
+				{listed.map((sessao) => (
+					<button
+						key={sessao.id}
+						type="button"
+						onClick={() => onOpenSession(sessao.id)}
+						className="flex w-fit items-center gap-1 text-left font-semibold text-primary hover:underline"
+					>
+						Ver caixa de {dayjs(sessao.dataAbertura).format(singleDay ? "DD/MM" : "DD/MM HH:mm")}
+						{sessao.diferencaTotal !== null && sessao.diferencaTotal !== 0
+							? ` · ${sessao.diferencaTotal > 0 ? "sobra" : "falta"} de ${formatToMoney(Math.abs(sessao.diferencaTotal))}`
+							: sessao.status === "ABERTA"
+								? " · aberto"
+								: ""}
+						<ArrowRight className="h-3 w-3" aria-hidden />
+					</button>
+				))}
+				{gaveta.sessoes.length > listed.length ? (
+					<Link href="/dashboard/sales/cash-sessions" className="flex w-fit items-center gap-1 font-semibold text-primary hover:underline">
+						Ver os {gaveta.sessoes.length} caixas do período
+						<ArrowRight className="h-3 w-3" aria-hidden />
+					</Link>
+				) : null}
+			</div>
+		</div>
+	);
+}
+
+function joinList(parts: string[]) {
+	if (parts.length <= 1) return parts.join("");
+	return `${parts.slice(0, -1).join(", ")} e ${parts[parts.length - 1]}`;
+}
+
+function capitalizeFirst(value: string) {
+	return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 type PaymentMethodRowProps = {
 	linha: TSalesResults["porMetodo"]["linhas"][number];
 	historyFilters: Partial<TSalesHistoryUrlState>;
+	gaveta: TSalesResults["gaveta"];
+	onOpenSession: (sessionId: string) => void;
 };
 
-function PaymentMethodRow({ linha, historyFilters }: PaymentMethodRowProps) {
+function PaymentMethodRow({ linha, historyFilters, gaveta, onOpenSession }: PaymentMethodRowProps) {
 	const Icon = getPaymentMethodIcon(linha.metodo);
 	const hasOutflow = linha.saidas.total > 0;
 	const outflowParts = [
@@ -157,6 +235,8 @@ function PaymentMethodRow({ linha, historyFilters }: PaymentMethodRowProps) {
 							{hasOutflow ? <span>Saídas: {outflowParts.join(" + ")}.</span> : null}
 						</div>
 					) : null}
+
+					{gaveta ? <CashDrawerBridge gaveta={gaveta} onOpenSession={onOpenSession} /> : null}
 				</div>
 			</HoverCardContent>
 		</HoverCard>

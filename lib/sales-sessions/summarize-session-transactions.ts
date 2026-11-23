@@ -1,5 +1,5 @@
 import type { TPaymentMethodEnum } from "@/schemas/enums";
-import { isSaleChangeTransaction } from "@/lib/sales/sale-change";
+import { classifyDrawerMovement, DRAWER_BREAKDOWN_KEY, emptyDrawerBreakdown, type TDrawerBreakdown } from "./drawer-movements";
 
 export type TSessionExpectedByMethod = {
 	metodo: TPaymentMethodEnum;
@@ -13,6 +13,8 @@ export type TSessionExpectedByMethod = {
 	 * vendido), mas a conferência precisa saber quanto desse valor ainda não entrou de fato.
 	 */
 	pendenteEfetivacao: number;
+	/** As mesmas entradas e saídas, separadas por natureza (vendas, suprimentos, sangrias...). */
+	detalhamento: TDrawerBreakdown;
 };
 
 type TSessionTransaction = {
@@ -21,20 +23,26 @@ type TSessionTransaction = {
 	valor: number;
 	modificadoresMetadata?: { origem?: string | null } | null;
 	dataEfetivacao?: Date | string | null;
+	/** Origem do lançamento contábil: separa venda, sangria/suprimento, despesa e estorno. */
+	origemTipo?: string | null;
 };
 
 /** Ledger da sessão: preserva movimentos originais, pois estornos são saídas separadas. */
 export function summarizeSessionTransactions(rows: TSessionTransaction[], saldoInicial: number): TSessionExpectedByMethod[] {
-	const byMethod = new Map<TPaymentMethodEnum, { entradas: number; troco: number; outrasSaidas: number; pendenteEfetivacao: number }>();
+	type TTotals = { entradas: number; troco: number; outrasSaidas: number; pendenteEfetivacao: number; detalhamento: TDrawerBreakdown };
+	const emptyTotals = (): TTotals => ({ entradas: 0, troco: 0, outrasSaidas: 0, pendenteEfetivacao: 0, detalhamento: emptyDrawerBreakdown() });
+	const byMethod = new Map<TPaymentMethodEnum, TTotals>();
 	// Mesmo sem movimento ou fundo inicial, a gaveta precisa ser contada.
-	byMethod.set("DINHEIRO", { entradas: 0, troco: 0, outrasSaidas: 0, pendenteEfetivacao: 0 });
+	byMethod.set("DINHEIRO", emptyTotals());
 	for (const row of rows) {
-		const totals = byMethod.get(row.metodo) ?? { entradas: 0, troco: 0, outrasSaidas: 0, pendenteEfetivacao: 0 };
+		const totals = byMethod.get(row.metodo) ?? emptyTotals();
 		const cents = Math.round(row.valor * 100);
+		const kind = classifyDrawerMovement(row);
+		totals.detalhamento[DRAWER_BREAKDOWN_KEY[kind]] += cents;
 		if (row.tipo === "ENTRADA") {
 			totals.entradas += cents;
 			if (row.dataEfetivacao === null) totals.pendenteEfetivacao += cents;
-		} else if (isSaleChangeTransaction(row)) totals.troco += cents;
+		} else if (kind === "TROCO") totals.troco += cents;
 		else totals.outrasSaidas += cents;
 		byMethod.set(row.metodo, totals);
 	}
@@ -45,5 +53,6 @@ export function summarizeSessionTransactions(rows: TSessionTransaction[], saldoI
 		troco: totals.troco / 100,
 		outrasSaidas: totals.outrasSaidas / 100,
 		pendenteEfetivacao: totals.pendenteEfetivacao / 100,
+		detalhamento: Object.fromEntries(Object.entries(totals.detalhamento).map(([key, value]) => [key, value / 100])) as TDrawerBreakdown,
 	}));
 }

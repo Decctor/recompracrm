@@ -1,4 +1,5 @@
 import type { TPaymentMethodEnum } from "@/schemas/enums";
+import type { TDrawerBreakdown, TDrawerMovementKind } from "./drawer-movements";
 import type { TSessionExpectedByMethod } from "./summarize-session-transactions";
 
 /**
@@ -21,6 +22,8 @@ export type TSessionMethodComposition = {
 	entradas: number;
 	troco: number;
 	outrasSaidas: number;
+	/** As entradas e saídas acima por natureza: é o que o extrato da gaveta lista linha a linha. */
+	detalhamento: TDrawerBreakdown;
 };
 
 /**
@@ -37,6 +40,25 @@ export type TSessionMovement = {
 	/** Observação do operador (sangria/suprimento) ou motivo do estorno. */
 	observacoes: string | null;
 	autorNome: string | null;
+	/** Natureza do movimento na gaveta (suprimento, sangria, despesa, estorno...). */
+	natureza: TDrawerMovementKind;
+	/** Conta financeira da própria transação da gaveta. Null = movimento fora do Financeiro (registro antigo). */
+	contaFinanceiraId: string | null;
+	/**
+	 * Para onde o dinheiro foi (sangria: conta de destino; despesa: categoria) ou de onde veio
+	 * (suprimento: conta de origem). Null quando o movimento não registrou a contrapartida.
+	 */
+	contrapartida: { tipo: "CONTA" | "CATEGORIA"; nome: string } | null;
+};
+
+/** Recebimento em dinheiro de uma venda no turno, com o troco que saiu dele. */
+export type TSessionCashSaleReceipt = {
+	vendaId: string;
+	clienteNome: string | null;
+	data: string | Date | null;
+	valorVenda: number;
+	recebido: number;
+	troco: number;
 };
 
 export type TSessionMethodLine = {
@@ -84,6 +106,7 @@ function toComposition(linha: TSessionExpectedByMethod, saldoInicial: number): T
 		entradas: linha.entradas,
 		troco: linha.troco,
 		outrasSaidas: linha.outrasSaidas,
+		detalhamento: linha.detalhamento,
 	};
 }
 

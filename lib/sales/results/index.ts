@@ -2,6 +2,7 @@ import { db } from "@/services/drizzle";
 import { accountingEntries, financialAccounts, financialTransactions, sales } from "@/services/drizzle/schema";
 import { and, asc, eq, isNotNull } from "drizzle-orm";
 import { getSalesResultsByDeliveryMode } from "./by-delivery-mode";
+import { getSalesResultsCashDrawer } from "./cash-drawer";
 import { getSalesResultsByPaymentMethod } from "./by-payment-method";
 import { getSalesResultsBySeller } from "./by-seller";
 import { getSalesResultsFiscalHealth } from "./fiscal-health";
@@ -46,7 +47,7 @@ async function getFinancialAccountOptions(organizacaoId: string) {
  * relatório recorrente possam devolver os mesmos números.
  */
 export async function getSalesResults({ filters, includeSensitive }: { filters: TSalesResultsFilters; includeSensitive: boolean }) {
-	const [resumo, porMetodo, porVendedor, porModalidade, fiscal, canais, contasFinanceiras] = await Promise.all([
+	const [resumo, porMetodo, porVendedor, porModalidade, fiscal, canais, contasFinanceiras, gaveta] = await Promise.all([
 		getSalesResultsSummary({ filters, includeSensitive }),
 		getSalesResultsByPaymentMethod({ filters }),
 		getSalesResultsBySeller({ filters, includeSensitive }),
@@ -54,6 +55,7 @@ export async function getSalesResults({ filters, includeSensitive }: { filters: 
 		getSalesResultsFiscalHealth({ filters }),
 		getChannelOptions(filters.organizacaoId),
 		getFinancialAccountOptions(filters.organizacaoId),
+		getSalesResultsCashDrawer({ filters }),
 	]);
 
 	return {
@@ -63,6 +65,7 @@ export async function getSalesResults({ filters, includeSensitive }: { filters: 
 		porVendedor,
 		porModalidade,
 		fiscal,
+		gaveta,
 		filterOptions: { canais, contasFinanceiras },
 	};
 }

@@ -1,20 +1,10 @@
 import { appApiHandler } from "@/lib/app-api";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import type { TAuthUserSession } from "@/lib/authentication/types";
-import { computeSessionExpectedByMethod, listSessionPaymentTerminalPendencies } from "@/lib/sales-sessions";
-import { SALE_CHANGE_TRANSACTION_ORIGIN } from "@/lib/sales/sale-change";
-import { TAB_PARTIAL_PAYMENT_TRANSACTION_ORIGIN } from "@/lib/tabs/partial-payments";
+import { getSalesSessionDetail } from "@/lib/sales-sessions/get-session-detail";
 import { db } from "@/services/drizzle";
-import {
-	accountingEntries,
-	financialTransactions,
-	fiscalOutboundDocuments,
-	sales,
-	salesSessions,
-	tabPayments,
-	users,
-} from "@/services/drizzle/schema";
-import { and, asc, count, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { salesSessions } from "@/services/drizzle/schema";
+import { and, count, desc, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -37,119 +27,10 @@ async function getSalesSessions({ input, session }: { input: TGetSalesSessionsIn
 	if (!orgId) throw new createHttpError.Unauthorized("Voce precisa estar vinculado a uma organizacao.");
 
 	if (input.id) {
-		const found = await db.query.salesSessions.findFirst({
-			where: and(eq(salesSessions.id, input.id), eq(salesSessions.organizacaoId, orgId)),
-			with: {
-				vendedorPadrao: { columns: { id: true, nome: true } },
-				abertaPorUsuario: { columns: { id: true, nome: true } },
-				fechadaPorUsuario: { columns: { id: true, nome: true } },
-				conferidaPorUsuario: { columns: { id: true, nome: true } },
-				conferencias: true,
-				vendas: {
-					columns: { id: true, valorTotal: true, dataVenda: true, vendedorId: true, vendedorNome: true },
-					with: { cliente: { columns: { id: true, nome: true } } },
-				},
-			},
-		});
-		if (!found) throw new createHttpError.NotFound("Sessão de venda não encontrada.");
-
-		// O ledger da sessão é a única fonte que explica o esperado (fundo, entradas, troco, sangrias
-		// e estornos). Numa sessão aberta ele ainda é a própria verdade; depois do fechamento vira a
-		// composição do que `conferencias` congelou — nenhum movimento novo é carimbado numa sessão
-		// fechada, então recalcular aqui devolve os mesmos valores e serve o detalhe histórico.
-		// As pendências fiscais seguem junto: quem confere o caixa precisa vê-las tanto quanto quem fecha.
-		//
-		// Lado oposto do parcial: a venda de uma conta fechada neste caixa pode ter sido recebida em
-		// parte noutro caixa (ou sem caixa). A lista de vendas mostra o total da venda, mas a gaveta
-		// daqui só recebeu o restante — o resumo precisa do valor líquido para bater com o esperado.
-		// Só depende das vendas já carregadas com a sessão, então sai na mesma ida das demais leituras.
-		const saleIds = found.vendas.map((venda) => venda.id);
-		const [resumoEsperado, pendenciasFiscais, movimentosRows, pendenciasMaquininha, partialsElsewhere] = await Promise.all([
-			computeSessionExpectedByMethod({ orgId, sessaoVendaId: found.id, saldoInicial: found.saldoInicial }),
-			db
-				.select({
-					id: fiscalOutboundDocuments.id,
-					referencia: fiscalOutboundDocuments.referencia,
-					statusInterno: fiscalOutboundDocuments.statusInterno,
-				})
-				.from(fiscalOutboundDocuments)
-				.innerJoin(sales, eq(fiscalOutboundDocuments.vendaId, sales.id))
-				.where(
-					and(
-						eq(sales.sessaoVendaId, found.id),
-						eq(fiscalOutboundDocuments.organizacaoId, orgId),
-						ne(fiscalOutboundDocuments.statusInterno, "AUTORIZADO"),
-					),
-				),
-			// Os movimentos que a composição resume em uma linha só: sangrias, suprimentos e estornos.
-			// Ficam de fora o troco (já é linha própria) e o recebimento de venda (já é a lista de vendas
-			// do turno) — sem isso, um turno movimentado despejaria centenas de linhas dentro do modal.
-			// Exceção: o recebimento parcial de uma conta que NÃO foi fechada neste caixa. A venda vai
-			// aparecer na lista do caixa que fechar; sem esta linha o dinheiro ficaria invisível aqui.
-			db
-				.select({
-					id: financialTransactions.id,
-					titulo: financialTransactions.titulo,
-					tipo: financialTransactions.tipo,
-					valor: financialTransactions.valor,
-					metodo: financialTransactions.metodo,
-					dataEfetivacao: financialTransactions.dataEfetivacao,
-					dataPrevisao: financialTransactions.dataPrevisao,
-					origemTipo: accountingEntries.origemTipo,
-					// A observação do operador (sangria/suprimento) e o motivo do estorno moram no
-					// lançamento contábil — o título da transação é sempre genérico.
-					observacoes: accountingEntries.anotacoes,
-					autorNome: users.nome,
-				})
-				.from(financialTransactions)
-				.innerJoin(accountingEntries, eq(financialTransactions.lancamentoContabilId, accountingEntries.id))
-				.leftJoin(sales, eq(accountingEntries.vendaId, sales.id))
-				.leftJoin(users, eq(financialTransactions.autorId, users.id))
-				.where(
-					and(
-						eq(financialTransactions.organizacaoId, orgId),
-						eq(financialTransactions.sessaoVendaId, found.id),
-						sql`coalesce(${financialTransactions.modificadoresMetadata} ->> 'origem', '') <> ${SALE_CHANGE_TRANSACTION_ORIGIN}`,
-						or(
-							ne(accountingEntries.origemTipo, "VENDA"),
-							ne(financialTransactions.tipo, "ENTRADA"),
-							and(
-								sql`coalesce(${financialTransactions.modificadoresMetadata} ->> 'origem', '') = ${TAB_PARTIAL_PAYMENT_TRANSACTION_ORIGIN}`,
-								or(isNull(sales.sessaoVendaId), ne(sales.sessaoVendaId, found.id)),
-							),
-						),
-					),
-				)
-				.orderBy(asc(financialTransactions.dataPrevisao)),
-			// Cobranças na maquininha do turno ainda sem desfecho: quem fecha ou confere o caixa precisa
-			// vê-las ao lado das pendências fiscais.
-			listSessionPaymentTerminalPendencies({ orgId, sessaoVendaId: found.id }),
-			saleIds.length > 0
-				? db
-						.select({ vendaId: tabPayments.vendaId, valor: sql<number>`coalesce(sum(${tabPayments.valor}), 0)` })
-						.from(tabPayments)
-						.where(
-							and(
-								eq(tabPayments.organizacaoId, orgId),
-								inArray(tabPayments.vendaId, saleIds),
-								eq(tabPayments.status, "ATIVO"),
-								or(isNull(tabPayments.sessaoVendaId), ne(tabPayments.sessaoVendaId, found.id)),
-							),
-						)
-						.groupBy(tabPayments.vendaId)
-				: [],
-		]);
-		const movimentos = movimentosRows.map(({ dataEfetivacao, dataPrevisao, ...movimento }) => ({ ...movimento, data: dataEfetivacao ?? dataPrevisao }));
-
-		const partialsBySale = new Map(partialsElsewhere.map((row) => [row.vendaId, Number(row.valor)]));
-		const vendas = found.vendas.map((venda) => {
-			const valorRecebidoOutroCaixa = Math.round((partialsBySale.get(venda.id) ?? 0) * 100) / 100;
-			return { ...venda, valorRecebidoOutroCaixa, valorNoCaixa: Math.round((venda.valorTotal - valorRecebidoOutroCaixa) * 100) / 100 };
-		});
-
+		const byId = await getSalesSessionDetail({ orgId, sessionId: input.id });
 		return {
 			data: {
-				byId: { ...found, vendas, resumoEsperado, pendenciasFiscais, pendenciasMaquininha, movimentos },
+				byId,
 				default: undefined,
 			},
 			message: "Sessao de venda encontrada com sucesso.",

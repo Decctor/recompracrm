@@ -5,7 +5,7 @@ import { SalePaymentMethodsOptions } from "@/utils/select-options";
 import TextareaInput from "@/components/Inputs/TextareaInput";
 import ErrorComponent from "@/components/Layouts/ErrorComponent";
 import { formatSessionDifference, sessionDifferenceClass } from "@/components/Modals/Internal/SalesSessions/Blocks/session-difference";
-import { SessionDrawerComposition } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionDrawerComposition";
+import { SessionDifferenceRow, SessionDrawerLedger } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionDrawerLedger";
 import { SessionFiscalPendingAlert } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionFiscalPendingAlert";
 import { SessionTerminalPendingAlert } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionTerminalPendingAlert";
 import { SessionMetaRow } from "@/components/Modals/Internal/SalesSessions/Blocks/SessionMetaRow";
@@ -78,7 +78,11 @@ export default function CloseSalesSession({ sessionId, closeModal, blindCount, c
 	return (
 		<ResponsiveMenu
 			menuTitle="FECHAR CAIXA"
-			menuDescription="Conte as notas e moedas da gaveta, incluindo o fundo de troco."
+			menuDescription={
+				blindCount
+					? "Conte as notas e moedas da gaveta, incluindo o fundo de troco."
+					: "Confira o extrato e conte as notas e moedas da gaveta, incluindo o fundo de troco."
+			}
 			menuActionButtonDisabled={!hasCount || !session || session.status !== "ABERTA" || hasBlockingTerminalCharge}
 			menuActionButtonText={actionButtonText}
 			menuActionButtonClassName={confirmarDiferenca && hasDrawerDifference ? "bg-warning text-warning-foreground hover:bg-warning/90" : undefined}
@@ -124,7 +128,9 @@ export default function CloseSalesSession({ sessionId, closeModal, blindCount, c
 							<p className="text-xs leading-relaxed text-muted-foreground">
 								A contagem da gaveta difere do esperado em{" "}
 								<span className={cn("font-bold tabular-nums", sessionDifferenceClass(drawerDifference))}>{formatSessionDifference(drawerDifference)}</span>.
-								Confirme para registrar o fechamento com essa diferença ou ajuste a contagem.
+								{blindCount
+									? " Confirme para registrar o fechamento com essa diferença ou ajuste a contagem."
+									: " Confira as linhas do extrato abaixo: uma sangria ou despesa que não foi registrada costuma explicar a diferença. Confirme para fechar assim mesmo ou ajuste a contagem."}
 							</p>
 						</div>
 					) : null}
@@ -132,87 +138,62 @@ export default function CloseSalesSession({ sessionId, closeModal, blindCount, c
 						{drawerLines.length > 0 ? (
 							<section className="flex flex-col gap-2">
 								<SessionSectionLabel>CONTAGEM FÍSICA DA GAVETA</SessionSectionLabel>
-								<div className="flex flex-col overflow-hidden rounded-xl bg-muted/50">
-									{drawerLines.map((line, index) => {
-										const counted = valorInformado;
-										const difference = drawerDifference;
-										const showExpected = !blindCount;
+								{drawerLines.map((line) => {
+									const countField = (
+										<Field data-invalid={valorInformado !== null && valorInformado < 0}>
+											<FieldLabel htmlFor="session-cash-count">Dinheiro contado na gaveta (R$)</FieldLabel>
+											<Input
+												id="session-cash-count"
+												inputMode="decimal"
+												autoComplete="off"
+												value={state.contagem}
+												onChange={(event) => updateCount(event.target.value)}
+												placeholder="Informe o valor contado"
+												disabled={isPending}
+												aria-invalid={valorInformado !== null && valorInformado < 0}
+												aria-describedby="session-cash-count-help"
+											/>
+											<FieldDescription id="session-cash-count-help">
+												{valorInformado !== null && valorInformado < 0
+													? "O valor contado não pode ser negativo."
+													: "Inclua todas as notas e moedas, com o fundo de troco. Se a gaveta estiver vazia, informe 0."}
+											</FieldDescription>
+										</Field>
+									);
+									// Contagem cega: o operador não vê o esperado, então o extrato (que termina nele) fica de fora.
+									if (blindCount) {
 										return (
-											<div key={line.metodo} className={cn("flex flex-col gap-2 px-3 py-3", index < drawerLines.length - 1 && "border-b border-border/60")}>
+											<div key={line.metodo} className="flex flex-col gap-2 rounded-xl bg-muted/50 px-3 py-3">
 												<div className="flex items-center justify-between gap-2">
 													<span className="font-bold text-sm">{paymentLabels.get(line.metodo) ?? line.metodo.replaceAll("_", " ")}</span>
-													{showExpected ? (
-														<span className="text-[11px] text-muted-foreground">
-															ESPERADO <span className="font-semibold tabular-nums">{formatToMoney(line.valorEsperado)}</span>
-														</span>
-													) : (
-														<span className="text-[11px] text-muted-foreground/70">CONTAGEM CEGA</span>
-													)}
+													<span className="text-[11px] text-muted-foreground/70">CONTAGEM CEGA</span>
 												</div>
-												{showExpected ? (
-													<SessionDrawerComposition
-														composicao={{
-															saldoInicial: session.saldoInicial,
-															entradas: line.entradas,
-															troco: line.troco,
-															outrasSaidas: line.outrasSaidas,
-														}}
-														metodo={line.metodo}
-														movimentos={session.movimentos}
-													/>
-												) : null}
-												<Field data-invalid={counted !== null && counted < 0}>
-													<FieldLabel htmlFor="session-cash-count">Dinheiro contado (R$)</FieldLabel>
-													<Input
-														id="session-cash-count"
-														inputMode="decimal"
-														autoComplete="off"
-														value={state.contagem}
-														onChange={(event) => updateCount(event.target.value)}
-														placeholder="Informe o valor contado"
-														disabled={isPending}
-														aria-invalid={counted !== null && counted < 0}
-														aria-describedby="session-cash-count-help"
-													/>
-													<FieldDescription id="session-cash-count-help">
-														{counted !== null && counted < 0
-															? "O valor contado não pode ser negativo."
-															: "Inclua todas as notas e moedas. Se a gaveta estiver vazia, informe 0."}
-													</FieldDescription>
-												</Field>
-												{showExpected && hasCount ? (
-													<span className={cn("text-xs font-semibold", sessionDifferenceClass(difference))}>
-														{difference === 0
-															? "Sem diferença"
-															: difference > 0
-																? `Sobra ${formatToMoney(difference)}`
-																: `Falta ${formatToMoney(Math.abs(difference))}`}
-													</span>
-												) : null}
+												{countField}
 											</div>
 										);
-									})}
-									<div className="flex flex-col gap-1 border-t border-border/60 bg-muted/80 px-3 py-3">
-										{!blindCount ? (
-											<div className="flex items-center justify-between text-xs">
-												<span className="text-muted-foreground">ESPERADO EM GAVETA</span>
-												<span className="font-semibold tabular-nums">{formatToMoney(drawerExpectedTotal)}</span>
-											</div>
-										) : null}
-										<div className="flex items-center justify-between text-xs">
-											<span className="text-muted-foreground">CONTADO</span>
-											<span className="font-semibold tabular-nums">{hasCount ? formatToMoney(drawerCountedTotal) : "Aguardando contagem"}</span>
-										</div>
-										{!blindCount && hasCount ? (
-											<div className="flex items-center justify-between pt-1 text-sm" aria-live="polite">
-												<span className="font-bold">DIFERENÇA</span>
-												<span className={cn("font-black tabular-nums", sessionDifferenceClass(drawerDifference))}>
-													{formatSessionDifference(drawerDifference)}
-												</span>
-											</div>
-										) : null}
-									</div>
-								</div>
+									}
+									return (
+										<SessionDrawerLedger
+											key={line.metodo}
+											composicao={{
+												saldoInicial: session.saldoInicial,
+												entradas: line.entradas,
+												troco: line.troco,
+												outrasSaidas: line.outrasSaidas,
+												detalhamento: line.detalhamento,
+											}}
+											movimentos={session.movimentos}
+											recebimentos={session.recebimentosDinheiro}
+											mode="fechamento"
+											countSlot={
+												<>
+													{countField}
+													{hasCount ? <SessionDifferenceRow diferenca={drawerDifference} /> : null}
+												</>
+											}
+										/>
+									);
+								})}
 							</section>
 						) : null}
 						{receivableLines.length > 0 ? (
@@ -246,7 +227,7 @@ export default function CloseSalesSession({ sessionId, closeModal, blindCount, c
 								<div className="flex flex-col gap-0.5">
 									<SessionSectionLabel>VENDAS DO TURNO</SessionSectionLabel>
 									<span className="text-xs text-muted-foreground">
-										{sales.length} {sales.length === 1 ? "venda" : "sales"} · {formatToMoney(salesTotal)}
+										{sales.length} {sales.length === 1 ? "venda" : "vendas"} · {formatToMoney(salesTotal)}
 									</span>
 								</div>
 								<ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />

@@ -1,3 +1,4 @@
+import type { TGetSalesSessionMovementOptionsOutput } from "@/app/api/pos/sales-sessions/movements/route";
 import type { TGetSalesSessionsInput, TGetSalesSessionsOutput, TGetSalesSessionsOutputById } from "@/app/api/pos/sales-sessions/route";
 import { useDebounceMemo } from "@/lib/hooks/use-debounce";
 import { useQuery } from "@tanstack/react-query";
@@ -14,6 +15,18 @@ async function fetchSalesSessionById(id: string): Promise<TGetSalesSessionsOutpu
 export function useSalesSessionById({ sessionId }: { sessionId: string }) {
 	const queryKey = ["sales-session-by-id", sessionId];
 	return { ...useQuery({ queryKey, queryFn: () => fetchSalesSessionById(sessionId), enabled: !!sessionId }), queryKey };
+}
+
+async function fetchSalesSessionMovementOptions(sessionId: string) {
+	const searchParams = new URLSearchParams({ sessaoVendaId: sessionId });
+	const { data } = await axios.get<TGetSalesSessionMovementOptionsOutput>(`/api/pos/sales-sessions/movements?${searchParams.toString()}`);
+	return data.data;
+}
+
+/** Contas e categorias que o modal de movimento de caixa oferece. */
+export function useSalesSessionMovementOptions({ sessionId }: { sessionId: string }) {
+	const queryKey = ["sales-session-movement-options", sessionId];
+	return { ...useQuery({ queryKey, queryFn: () => fetchSalesSessionMovementOptions(sessionId), enabled: !!sessionId }), queryKey };
 }
 
 async function fetchOpenSalesSessions() {
