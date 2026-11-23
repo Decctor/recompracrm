@@ -119,7 +119,10 @@ export async function createSeedStore({ store, owner, ownerSellerId, basePlan, s
 			atuacaoNicho: "Alimentação",
 			corPrimaria: "#15599a",
 			corPrimariaForeground: "#ffffff",
-			dataOnboardingConclusao: now,
+			// A paying store has been around: activity is counted from the store's creation, so the
+			// `sales-history` pack (90 days) only shows up if the store predates it.
+			dataInsercao: subscription === "PAGANTE" ? dayjs(now).subtract(120, "day").toDate() : now,
+			dataOnboardingConclusao: subscription === "PAGANTE" ? dayjs(now).subtract(119, "day").toDate() : now,
 			assinaturaPlano: basePlan,
 			assinaturaAdicionais: storeAddons,
 			...(subscription === "PAGANTE"

@@ -9,6 +9,13 @@ export const SEED_MANIFEST_FILE = path.join(LOCAL_STATE_DIR, "seed-manifest.json
 /** Order matters: every scenario pack builds on `base`. */
 const PACKS = {
 	base: { description: "Demo store that can sell immediately (always loaded).", load: async () => (await import("./packs/base")).seedBasePack },
+	coupons: { description: "One coupon of each benefit type in the demo store.", load: async () => (await import("./packs/coupons")).seedCouponsPack },
+	"sales-history": {
+		description: "About 90 days of confirmed sales in the demo store.",
+		load: async () => (await import("./packs/sales-history")).seedSalesHistoryPack,
+	},
+	"crm-only": { description: "A paying store without the ERP.", load: async () => (await import("./packs/crm-only")).seedCrmOnlyPack },
+	trial: { description: "A store in its free trial.", load: async () => (await import("./packs/trial")).seedTrialPack },
 } as const;
 export type TSeedPackName = keyof typeof PACKS;
 const PACK_NAMES = Object.keys(PACKS) as TSeedPackName[];
@@ -56,7 +63,16 @@ export async function runSeedPacks({ packs }: { packs: string[] | null }) {
 	for (const name of selection) {
 		const startedAt = Date.now();
 		const seed = await PACKS[name].load();
-		await seed();
+		// The app's services log every step; a few hundred seeded sales would bury the output.
+		const originalLog = console.log;
+		console.log = (...args: unknown[]) => {
+			if (typeof args[0] === "string" && args[0].startsWith("[local-dev]")) originalLog(...args);
+		};
+		try {
+			await seed();
+		} finally {
+			console.log = originalLog;
+		}
 		console.log(`[local-dev] Seed pack "${name}" loaded (${Date.now() - startedAt} ms).`);
 	}
 	writeSeedManifest(selection);

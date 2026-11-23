@@ -5,6 +5,9 @@ import { queryLocalDatabase } from "../support/database";
 test.describe("register (PDV)", () => {
 	test("adds a product and confirms a cash sale", async ({ page }) => {
 		const { water } = SEED_PRODUCTS;
+		const readStock = async () =>
+			(await queryLocalDatabase((sql) => sql`SELECT quantidade FROM ampmais_products WHERE id = ${water.id}`))[0].quantidade as number;
+		const stockBefore = await readStock();
 		await page.goto("/dashboard/sales/new");
 		await expect(page.getByRole("heading", { name: "Nova Venda", level: 1 })).toBeVisible();
 		// The seeded register is open, so the sale lands in it.
@@ -38,7 +41,6 @@ test.describe("register (PDV)", () => {
 			sessao_venda_id: SEED_SALES_SESSION.id,
 			organizacao_id: SEED_STORES.demo.id,
 		});
-		const [stock] = await queryLocalDatabase((sql) => sql`SELECT quantidade FROM ampmais_products WHERE id = ${water.id}`);
-		expect(stock.quantidade).toBe(498);
+		expect(await readStock()).toBe(stockBefore - 2);
 	});
 });

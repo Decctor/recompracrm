@@ -11,8 +11,9 @@ export async function register() {
 		if (process.env.LOCAL_DEV === "1") {
 			const { assertLocalDatabase } = await import("./lib/local-dev/guard");
 			const { installLocalNetworkGuard } = await import("./lib/local-dev/network-guard");
-			assertLocalDatabase();
+			const { database } = assertLocalDatabase();
 			installLocalNetworkGuard();
+			console.log(`[local-dev] Local mode: database "${database}", outbound connections restricted to this machine.`);
 		}
 		const { registerAiSdkWarningLogger } = await import("./lib/ai/providers/warnings");
 		registerAiSdkWarningLogger();
