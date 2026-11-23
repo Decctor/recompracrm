@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { formatToMoney } from "@/lib/formatting";
 import { getShopCartSubtotal } from "@/lib/shop/cart";
+import { readAppliedCouponWaivedDeliveryFee } from "@/lib/coupons/free-shipping";
 import { resolveShopDeliveryFee } from "@/lib/shop/config";
 import type { TShopPaymentMethod } from "@/schemas/shop";
 import { Banknote, CreditCard, QrCode } from "lucide-react";
@@ -35,11 +36,15 @@ export default function PaymentStep({ onNext }: { onNext: () => void }) {
 
 	const orderTotal = useMemo(() => {
 		const subtotal = getShopCartSubtotal(cart.items, catalog.products, coupon.resgate?.brinde);
-		const taxaEntrega = resolveShopDeliveryFee({
-			configuracoes: catalog.shopSettings.configuracoes,
-			modalidade: delivery.modalidade,
-			subtotalItens: subtotal,
-		});
+		// Cupom de frete grátis: o pedido não cobra a taxa (mesma regra do servidor).
+		const taxaEntrega =
+			readAppliedCouponWaivedDeliveryFee(coupon.resgate) > 0
+				? 0
+				: resolveShopDeliveryFee({
+						configuracoes: catalog.shopSettings.configuracoes,
+						modalidade: delivery.modalidade,
+						subtotalItens: subtotal,
+					});
 		return Math.max(0, subtotal - (coupon.resgate?.valorDesconto ?? 0) - cashback.resgateSolicitado) + taxaEntrega;
 	}, [cart.items, catalog.products, coupon.resgate, cashback.resgateSolicitado, catalog.shopSettings.configuracoes, delivery.modalidade]);
 

@@ -66,7 +66,7 @@ export default function CouponGeneralBlock({ coupon, updateCoupon, embedded }: C
 						resetOptionLabel="AUTOMÁTICA (SISTEMA CONFERE)"
 						handleChange={(value) => updateCoupon({ validacaoModo: value as TUseInternalCouponState["state"]["coupon"]["validacaoModo"] })}
 						options={
-							coupon.beneficioTipo === "BRINDE" ? CouponValidationModeOptions.filter((option) => option.value === "AUTOMATICA") : CouponValidationModeOptions
+							coupon.beneficioTipo === "BRINDE" || coupon.beneficioTipo === "FRETE_GRATIS" ? CouponValidationModeOptions.filter((option) => option.value === "AUTOMATICA") : CouponValidationModeOptions
 						}
 						onReset={() => updateCoupon({ validacaoModo: "AUTOMATICA" })}
 					/>

@@ -417,7 +417,7 @@ function PriceSummary({ order }: { order: PublicOrder }) {
 							<Ticket className="size-3.5 shrink-0" />
 							<span className="truncate">Cupom {order.coupon.code ?? ""}</span>
 						</span>
-						<span className="tabular-nums">- {formatToMoney(couponDiscount)}</span>
+						<span className="tabular-nums">{order.coupon.freeShipping ? "Entrega grátis" : `- ${formatToMoney(couponDiscount)}`}</span>
 					</div>
 				) : null}
 				{cashbackDiscount > 0 ? (

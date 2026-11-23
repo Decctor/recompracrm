@@ -30,12 +30,15 @@ export async function listCouponsForClientCart({
 	surface,
 	itens,
 	entregaModalidade,
+	taxaEntrega,
 }: {
 	organizacaoId: string;
 	clienteId: string;
 	surface: TCouponRedemptionSurface;
 	itens: TClientCartCouponItem[] | null | undefined;
 	entregaModalidade: TDeliveryModeEnum | null | undefined;
+	/** Taxa de entrega da venda sem cupom; omitida onde não há taxa (frete grátis fica inelegível). */
+	taxaEntrega?: number | null;
 }) {
 	const availableCoupons = await getAvailableCouponsForClient({ organizacaoId, clienteId, surface });
 	const [purchaseHistory] = await db
@@ -67,7 +70,7 @@ export async function listCouponsForClientCart({
 		);
 	}
 
-	const context = { entregaModalidade: entregaModalidade ?? null, comprasAnterioresConfirmadas };
+	const context = { entregaModalidade: entregaModalidade ?? null, comprasAnterioresConfirmadas, taxaEntrega: taxaEntrega ?? null };
 	return availableCoupons.map((coupon) => {
 		const conditionIssue = getCouponCheckoutConditionIssue(coupon, context);
 		const evaluation = conditionIssue

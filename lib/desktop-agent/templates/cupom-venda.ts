@@ -132,6 +132,8 @@ export const CupomVendaDadosSchema = z.object({
 				required_error: "Valor de desconto do cupom não informado.",
 				invalid_type_error: "Tipo não válido para o desconto do cupom.",
 			}),
+			// Cupom de frete grátis: a taxa de entrega que a venda deixou de cobrar.
+			taxaEntregaIsenta: z.number({ invalid_type_error: "Tipo não válido para a taxa de entrega isenta pelo cupom." }).optional().nullable(),
 		})
 		.optional()
 		.nullable(),
@@ -358,6 +360,7 @@ export function renderCupomVendaHtml(dados: TCupomVendaDados) {
 			.join("")}
 		${descontoGeral > 0 ? renderLinha("Desconto", formatToMoney(descontoGeral), { negativo: true }) : ""}
 		${taxaEntrega > 0 ? renderLinha("Taxa de entrega", formatToMoney(taxaEntrega)) : ""}
+		${cupom?.taxaEntregaIsenta ? renderLinha(`Entrega (cupom ${cupom.codigo ?? cupom.titulo ?? ""})`.replace(" )", ")"), "GRÁTIS") : ""}
 		${acrescimos > 0 ? renderLinha("Acréscimo", formatToMoney(acrescimos)) : ""}
 	</div>
 	<div class="sep fina"></div>

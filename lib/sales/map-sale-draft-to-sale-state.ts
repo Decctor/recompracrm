@@ -1,6 +1,7 @@
 import type { TAppliedCoupon } from "@/schemas/coupons";
 import type { TGetSaleDraftOutput } from "@/app/api/pos/sales/route";
 import { parseSaleRewardDraftSnapshots } from "@/lib/sales/sale-reward-snapshot";
+import { readAppliedCouponWaivedDeliveryFee } from "@/lib/coupons/free-shipping";
 import { readShopDeliveryFee } from "@/lib/shop/config";
 import type { TSaleState } from "@/state-hooks/use-sale-state";
 import { mapItemToCartItem } from "./map-sale-to-sale-state";
@@ -36,7 +37,11 @@ export function mapSaleDraftToSaleState(sale: TSaleDraft): Partial<TSaleState> {
 	// `descontosTotal` agrega desconto comercial e resgate de cashback; o metadado, quando existe,
 	// é a fonte precisa do que foi desconto de fato.
 	const descontoGeral = metadata?.descontoGeral ?? Math.max(0, (sale.descontosTotal ?? 0) - cashbackResgate);
-	const taxaEntrega = Math.min(metadata?.taxaEntrega ?? readShopDeliveryFee(sale.rascunhoMetadados), sale.acrescimosTotal ?? 0);
+	const taxaEntregaCobrada = Math.min(metadata?.taxaEntrega ?? readShopDeliveryFee(sale.rascunhoMetadados), sale.acrescimosTotal ?? 0);
+	// Frete grátis: o rascunho guarda a taxa cobrada (zero); a taxa do operador, que o estado do PDV
+	// mantém para derivar a isenção, volta do cupom aplicado.
+	const taxaEntregaIsenta = readAppliedCouponWaivedDeliveryFee(metadata?.cupom);
+	const taxaEntrega = taxaEntregaIsenta > 0 ? taxaEntregaIsenta : taxaEntregaCobrada;
 
 	return {
 		fiscalDestinacao: sale.fiscalDestinacao,
@@ -49,7 +54,7 @@ export function mapSaleDraftToSaleState(sale: TSaleDraft): Partial<TSaleState> {
 		vendedorNome: sale.vendedorNome ?? null,
 		itens,
 		descontoGeral,
-		acrescimoGeral: Math.max(0, (sale.acrescimosTotal ?? 0) - taxaEntrega),
+		acrescimoGeral: Math.max(0, (sale.acrescimosTotal ?? 0) - taxaEntregaCobrada),
 		taxaEntrega,
 		observacoes: sale.observacoes ?? "",
 		entregaModalidade: (sale.entregaModalidade as TSaleState["entregaModalidade"] | null) ?? "PRESENCIAL",

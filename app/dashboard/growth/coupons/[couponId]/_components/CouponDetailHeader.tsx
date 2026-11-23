@@ -28,6 +28,7 @@ function formatCouponBenefit(coupon: TGetCouponsOutputById): string {
 		return `${coupon.beneficioValor ?? 0}% de desconto${coupon.beneficioDescontoMaximo ? ` (até ${formatToMoney(coupon.beneficioDescontoMaximo)})` : ""}`;
 	if (coupon.beneficioTipo === "PRECO_FIXO") return `Preço fixo de ${formatToMoney(coupon.beneficioValor ?? 0)}`;
 	if (coupon.beneficioTipo === "COMPRE_X_LEVE_Y") return `Leve ${coupon.beneficioLeveQuantidade ?? 0}, pague ${coupon.beneficioCompreQuantidade ?? 0}`;
+	if (coupon.beneficioTipo === "FRETE_GRATIS") return "Frete grátis";
 	return "Brinde";
 }
 

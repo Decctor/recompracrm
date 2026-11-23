@@ -36,8 +36,13 @@ export type TCouponEvaluationResult =
 	| {
 			elegivel: true;
 			valorDesconto: number;
-			aplicacao: "VENDA_TOTAL" | "ITENS_ELEGIVEIS";
-			/** Desconto por item (chave do carrinho) quando aplicacao = ITENS_ELEGIVEIS; vazio quando VENDA_TOTAL. */
+			/**
+			 * Onde o benefício incide. ENTREGA (cupom de frete grátis) não abate nada dos itens:
+			 * `valorDesconto` é a taxa de entrega isenta, e quem aplica o cupom zera a taxa em vez de
+			 * subtrair o valor do total.
+			 */
+			aplicacao: "VENDA_TOTAL" | "ITENS_ELEGIVEIS" | "ENTREGA";
+			/** Desconto por item (chave do carrinho) quando aplicacao = ITENS_ELEGIVEIS; vazio nos demais. */
 			descontosPorItem: Array<{ chave: string; valorDesconto: number }>;
 			brinde?: TCouponBenefitSnapshot["brinde"];
 	  };
@@ -45,6 +50,9 @@ export type TCouponEvaluationResult =
 function roundCurrency(value: number) {
 	return Math.round(value * 100) / 100;
 }
+
+export const FREE_SHIPPING_DELIVERY_ONLY_REASON = "O cupom de frete grátis vale apenas para pedidos com entrega.";
+export const FREE_SHIPPING_ALREADY_FREE_REASON = "A entrega já é grátis para este pedido.";
 
 /**
  * Verifica disponibilidade geral do cupom, independente do carrinho.
@@ -301,6 +309,16 @@ export function evaluateCouponAgainstCart({
 		const satisfiedTargets = eligibilityTargets.filter((target) => getTargetMatchedQuantity(conditionItems, target) >= (target.quantidadeMinima ?? 1));
 		const isSatisfied = coupon.condicaoAlvosOperador === "TODOS" ? satisfiedTargets.length === eligibilityTargets.length : satisfiedTargets.length > 0;
 		if (!isSatisfied) return { elegivel: false, motivo: "O carrinho não contém os produtos exigidos pelo cupom." };
+	}
+
+	// Frete grátis: o benefício é a taxa de entrega inteira. Sem taxa a isentar (retirada, taxa já
+	// zerada pelo "grátis acima de", superfície que não conhece a taxa) o cupom não é elegível —
+	// assim o cliente não gasta o resgate em uma entrega que já sairia de graça.
+	if (coupon.beneficioTipo === "FRETE_GRATIS") {
+		if (context.entregaModalidade !== "ENTREGA") return { elegivel: false, motivo: FREE_SHIPPING_DELIVERY_ONLY_REASON };
+		const deliveryFee = roundCurrency(context.taxaEntrega ?? 0);
+		if (!Number.isFinite(deliveryFee) || deliveryFee <= 0) return { elegivel: false, motivo: FREE_SHIPPING_ALREADY_FREE_REASON };
+		return { elegivel: true, valorDesconto: deliveryFee, aplicacao: "ENTREGA", descontosPorItem: [] };
 	}
 
 	// Itens beneficiados: alvos BENEFICIADO quando existem; senão, os elegíveis; sem alvos = carrinho todo.

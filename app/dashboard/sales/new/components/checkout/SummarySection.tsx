@@ -208,7 +208,14 @@ export default function SummarySection({ saleState, organizationCashbackProgram,
 						Cupom {saleState.state.cupomResgate.codigo ?? ""}
 						{editMode ? <span className="text-[11px] text-muted-foreground"> (aplicado na venda)</span> : null}
 					</span>
-					<span>-{formatToMoney(saleState.state.cupomResgate.valorDesconto)}</span>
+					{/* Frete grátis isenta a taxa em vez de abater do total: mostra o que deixou de ser cobrado. */}
+					{saleState.state.cupomResgate.taxaEntregaIsenta ? (
+						<span>
+							FRETE GRÁTIS <span className="text-muted-foreground line-through">{formatToMoney(saleState.state.cupomResgate.taxaEntregaIsenta)}</span>
+						</span>
+					) : (
+						<span>-{formatToMoney(saleState.state.cupomResgate.valorDesconto)}</span>
+					)}
 				</div>
 			) : null}
 			{saleState.state.cashbackResgate > 0 ? (

@@ -482,6 +482,7 @@ export const couponBenefitTypeEnum = pgEnum("coupon_benefit_type", [
 	"PRECO_FIXO",
 	"COMPRE_X_LEVE_Y",
 	"BRINDE",
+	"FRETE_GRATIS",
 ]);
 
 export const couponBenefitScopeEnum = pgEnum("coupon_benefit_scope", ["VENDA_TOTAL", "ITENS_ELEGIVEIS"]);

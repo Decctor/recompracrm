@@ -219,6 +219,8 @@ async function getPublicShopOrder({ input }: { input: TGetPublicShopOrderInput }
 					code: shopMetadata.cupom.codigo ?? null,
 					title: shopMetadata.cupom.titulo ?? null,
 					discount: shopMetadata.cupom.valorDesconto,
+					// Cupom de frete grátis: não abate dos itens, isenta a taxa de entrega.
+					freeShipping: (shopMetadata.cupom.taxaEntregaIsenta ?? 0) > 0,
 				}
 			: null,
 		rewards: (shopMetadata?.recompensas ?? (shopMetadata?.recompensa ? [shopMetadata.recompensa] : [])).map((reward) => ({

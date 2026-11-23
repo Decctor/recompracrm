@@ -11,6 +11,7 @@ import { sumActiveTabPayments } from "@/lib/tabs/partial-payments";
 import { and, count, eq } from "drizzle-orm";
 import createHttpError from "http-errors";
 import { fetchOrganizationLogoDataUrl } from "./organization-logo";
+import { readCouponRedemptionItemDiscount, readCouponRedemptionWaivedDeliveryFee } from "@/lib/coupons/free-shipping";
 import type { TCupomVendaDados } from "./templates/cupom-venda";
 
 // Builder único dos `dados` do CUPOM_VENDA — consumido pela impressão manual (rota de gestão) e
@@ -166,7 +167,7 @@ export async function buildCupomVendaDados({
 		fetchOrganizationLogoDataUrl(organization.logoUrl),
 		db.query.couponRedemptions.findFirst({
 			where: and(eq(couponRedemptions.vendaId, sale.id), eq(couponRedemptions.organizacaoId, organizacaoId), eq(couponRedemptions.status, "UTILIZADO")),
-			columns: { valorDesconto: true, cupomTitulo: true, cupomCodigo: true },
+			columns: { valorDesconto: true, cupomTitulo: true, cupomCodigo: true, beneficioSnapshot: true },
 		}),
 		db.query.cashbackPrograms.findFirst({
 			where: and(eq(cashbackPrograms.organizacaoId, organizacaoId), eq(cashbackPrograms.ativo, true)),
@@ -200,7 +201,9 @@ export async function buildCupomVendaDados({
 		.reduce((sum, transaction) => sum + Math.abs(transaction.valor), 0);
 	const temRecompensaResgatada = resgatesAtivos.some((transaction) => !!transaction.resgateRecompensaId);
 
-	const cupomDesconto = cupomResgatado?.valorDesconto ?? 0;
+	// Frete grátis: o valor do resgate é a taxa isenta (a venda nem a cobra), não um desconto dos itens.
+	const cupomDesconto = readCouponRedemptionItemDiscount(cupomResgatado);
+	const cupomTaxaEntregaIsenta = readCouponRedemptionWaivedDeliveryFee(cupomResgatado);
 	// Uma linha impressa por recompensa; o "Desconto" geral subtrai TODAS — subtrair só a primeira
 	// imprimiria o valor das demais como desconto do operador.
 	const rewardItems = temRecompensaResgatada
@@ -338,7 +341,12 @@ export async function buildCupomVendaDados({
 		},
 		cliente: sale.cliente ? { nome: sale.cliente.nome, telefone: sale.cliente.telefone, totalCompras } : null,
 		cupom: cupomResgatado
-			? { codigo: cupomResgatado.cupomCodigo, titulo: cupomResgatado.cupomTitulo, valorDesconto: cupomResgatado.valorDesconto }
+			? {
+					codigo: cupomResgatado.cupomCodigo,
+					titulo: cupomResgatado.cupomTitulo,
+					valorDesconto: cupomDesconto,
+					taxaEntregaIsenta: cupomTaxaEntregaIsenta > 0 ? cupomTaxaEntregaIsenta : null,
+				}
 			: null,
 		recompensas: rewardItems
 			.filter((item) => (item.valorTotalDesconto ?? 0) > 0)

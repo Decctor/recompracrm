@@ -445,9 +445,20 @@ export const AppliedCouponSchema = z.object({
 			required_error: "Valor de desconto do cupom aplicado não informado.",
 			invalid_type_error: "Tipo não válido para o valor de desconto do cupom aplicado.",
 		})
-		.min(0.01, "O valor de desconto do cupom aplicado deve ser maior que zero."),
+		.min(0, "O valor de desconto do cupom aplicado não pode ser negativo."),
+	// Cupom de frete grátis: a taxa de entrega que deixou de ser cobrada. Nesse caso `valorDesconto`
+	// é 0 — o cupom não abate nada dos itens, e quem soma `valorDesconto` segue correto sem saber
+	// do tipo. A venda nasce sem a taxa; este valor é o custo do cupom, gravado no resgate.
+	taxaEntregaIsenta: z
+		.number({ invalid_type_error: "Tipo não válido para a taxa de entrega isenta pelo cupom." })
+		.min(0.01, "A taxa de entrega isenta pelo cupom deve ser maior que zero.")
+		.optional()
+		.nullable(),
 	codigo: z.string({ invalid_type_error: "Tipo não válido para o código do cupom aplicado." }).optional().nullable(),
 	titulo: z.string({ invalid_type_error: "Tipo não válido para o título do cupom aplicado." }).optional().nullable(),
+}).refine((coupon) => coupon.valorDesconto > 0 || (coupon.taxaEntregaIsenta ?? 0) > 0, {
+	message: "O valor de desconto do cupom aplicado deve ser maior que zero.",
+	path: ["valorDesconto"],
 });
 export type TAppliedCoupon = z.infer<typeof AppliedCouponSchema>;
 
@@ -457,6 +468,8 @@ export type TAppliedCoupon = z.infer<typeof AppliedCouponSchema>;
  */
 export type TCouponBenefitSnapshot = {
 	brinde?: TCouponGiftSelection & { produtoId: string; produtoVarianteId: string | null; valorUnitarioBase: number; valorDesconto: number };
+	/** FRETE_GRATIS: taxa de entrega que deixou de ser cobrada (igual ao `valorDesconto` do resgate). */
+	taxaEntregaIsenta?: number;
 	beneficioTipo: TCoupon["beneficioTipo"];
 	beneficioValor: number | null;
 	beneficioDescontoMaximo: number | null;

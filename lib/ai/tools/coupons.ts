@@ -25,6 +25,8 @@ function describeBenefit(
 			return `compre ${coupon.beneficioCompreQuantidade ?? "?"} e leve ${coupon.beneficioLeveQuantidade ?? "?"}`;
 		case "BRINDE":
 			return "uma unidade grátis de um dos produtos permitidos, escolhida no checkout; adicionais e entrega são cobrados à parte";
+		case "FRETE_GRATIS":
+			return "frete grátis: a taxa de entrega não é cobrada, somente em pedidos com entrega feitos pela loja digital ou no balcão";
 		default:
 			return "benefício especial";
 	}

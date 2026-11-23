@@ -14,6 +14,9 @@ import { roundCents } from "./terminal-cart-item";
 
 export const TERMINAL_MANUAL_COUPON_REASON = "Cupom de validação manual: aplique pelo PDV.";
 export const TERMINAL_GIFT_COUPON_REASON = "Cupom de brinde: escolha o produto pelo PDV ou pela loja digital.";
+// A maquininha cobra a taxa da loja sem passar a taxa ao motor de cupons; até ela fazer isso, o
+// frete grátis fica para as telas que já isentam a taxa.
+export const TERMINAL_FREE_SHIPPING_COUPON_REASON = "Cupom de frete grátis: aplique pelo PDV ou pela loja digital.";
 
 /** Programa e saldo como o terminal precisa para decidir o cashback. */
 export type TTerminalCashbackView = {
@@ -100,6 +103,9 @@ export function buildTerminalCouponView(coupon: {
 }): TTerminalCouponView {
 	const base = { id: coupon.id, titulo: coupon.titulo, descricao: coupon.descricao, codigo: coupon.codigo, vigenciaFim: coupon.vigenciaFim };
 	if (coupon.beneficioTipo === "BRINDE") return { ...base, selecionavel: false, valorDesconto: null, motivo: TERMINAL_GIFT_COUPON_REASON };
+	if (coupon.beneficioTipo === "FRETE_GRATIS") {
+		return { ...base, selecionavel: false, valorDesconto: null, motivo: TERMINAL_FREE_SHIPPING_COUPON_REASON };
+	}
 	if (coupon.validacaoModo !== "AUTOMATICA") return { ...base, selecionavel: false, valorDesconto: null, motivo: TERMINAL_MANUAL_COUPON_REASON };
 	const evaluation = coupon.avaliacao;
 	if (!evaluation) return { ...base, selecionavel: false, valorDesconto: null, motivo: "Adicione itens para avaliar o cupom." };

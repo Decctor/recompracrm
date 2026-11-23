@@ -42,6 +42,11 @@ export default function StageBenefit() {
 					Uma unidade de um dos produtos escolhidos será grátis. Adicionais e entrega são cobrados à parte. O brinde não conta para atingir as condições de
 					compra.
 				</p>
+			) : coupon.beneficioTipo === "FRETE_GRATIS" ? (
+				<p className="text-sm text-muted-foreground">
+					A taxa de entrega do pedido não é cobrada. Vale em pedidos com entrega, no PDV e na loja digital. Quando a entrega já sairia grátis, o cupom não é
+					gasto.
+				</p>
 			) : coupon.beneficioTipo === "COMPRE_X_LEVE_Y" ? (
 				<div className="flex w-full flex-col gap-2 lg:flex-row">
 					<div className="w-full lg:w-1/2">

@@ -3,6 +3,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { getAvailableCouponsForClient } from "@/lib/coupons/availability";
 import { type TCouponCartItem, evaluateCouponAgainstCart } from "@/lib/coupons/engine";
 import { countPreviousConfirmedPurchases } from "@/lib/coupons/purchase-history";
+import { normalizeShopSettingsConfiguration, resolveShopDeliveryFee } from "@/lib/shop/config";
 import { db } from "@/services/drizzle";
 import createHttpError from "http-errors";
 import { type NextRequest, NextResponse } from "next/server";
@@ -70,23 +71,24 @@ async function getAvailableShopCoupons({ orgId, input }: { orgId: string; input:
 		valorVendaUnitario: item.valorVendaUnitario,
 	}));
 
+	// Taxa que o pedido pagaria sem cupom, pela mesma regra do checkout: é o que o frete grátis isenta.
+	const settings = await db.query.shopSettings.findFirst({
+		where: (fields, { eq }) => eq(fields.organizacaoId, orgId),
+		columns: { configuracoes: true },
+	});
+	const taxaEntrega = settings
+		? resolveShopDeliveryFee({
+				configuracoes: normalizeShopSettingsConfiguration(settings.configuracoes),
+				modalidade: input.entregaModalidade === "ENTREGA" ? "ENTREGA" : null,
+				subtotalItens: cartItems.reduce((sum, item) => sum + item.quantidade * item.valorVendaUnitario - (item.valorDesconto ?? 0), 0),
+			})
+		: 0;
+	const context = { entregaModalidade: input.entregaModalidade ?? null, comprasAnterioresConfirmadas: previousConfirmedPurchases, taxaEntrega };
+
 	const coupons = availableCoupons.map((coupon) => {
-		const evaluation =
-			coupon.validacaoModo === "AUTOMATICA"
-				? evaluateCouponAgainstCart({
-						coupon,
-						targets: coupon.alvos,
-						cartItems,
-						context: { entregaModalidade: input.entregaModalidade ?? null, comprasAnterioresConfirmadas: previousConfirmedPurchases },
-					})
-				: null;
+		const evaluation = coupon.validacaoModo === "AUTOMATICA" ? evaluateCouponAgainstCart({ coupon, targets: coupon.alvos, cartItems, context }) : null;
 		return {
-			brindes: buildCouponGiftOptions({
-				coupon,
-				targets: coupon.alvos,
-				cartItems,
-				context: { entregaModalidade: input.entregaModalidade ?? null, comprasAnterioresConfirmadas: previousConfirmedPurchases },
-			}),
+			brindes: buildCouponGiftOptions({ coupon, targets: coupon.alvos, cartItems, context }),
 			alvos: coupon.alvos.map(({ papel, produtoId, produtoVarianteId, grupo, quantidadeMinima }) => ({
 				papel,
 				produtoId,

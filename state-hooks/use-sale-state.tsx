@@ -1,5 +1,6 @@
 import { FiscalSaleChoicesSchema } from "@/schemas/fiscal";
 import { normalizeCouponGiftItem, roundCouponGiftCurrency } from "@/lib/coupons/gift-pricing";
+import { applyFreeShippingCoupon } from "@/lib/coupons/free-shipping";
 import { CouponGiftSelectionSchema } from "@/schemas/coupons";
 import { SaleFiscalDocumentSchema } from "@/schemas/fiscal";
 import { repriceSaleItem, type TSaleItemRepricing } from "@/lib/sales/sale-item-repricing";
@@ -111,6 +112,9 @@ export const SaleAppliedCouponSchema = z.object({
 		required_error: "Valor de desconto do cupom não informado.",
 		invalid_type_error: "Tipo não válido para valor de desconto do cupom.",
 	}),
+	// Cupom de frete grátis: presente (não nulo) marca o tipo. No `state` derivado vale a taxa de
+	// entrega que a venda deixou de cobrar, e `taxaEntrega` sai zerada (ver applyFreeShippingCoupon).
+	taxaEntregaIsenta: z.number({ invalid_type_error: "Tipo não válido para taxa de entrega isenta pelo cupom." }).optional().nullable(),
 	codigo: z.string({ invalid_type_error: "Tipo não válido para código do cupom." }).optional().nullable(),
 	titulo: z.string({ invalid_type_error: "Tipo não válido para título do cupom." }).optional().nullable(),
 	validacaoModo: z.enum(["AUTOMATICA", "MANUAL"], { invalid_type_error: "Tipo não válido para modo de validação do cupom." }).optional().nullable(),
@@ -292,7 +296,8 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 	// "Fechar em") já sai com os valores certos no mesmo render, sem efeito e sem precisar lembrar de
 	// recalcular nada. O estado cru fica restrito aos updaters; tudo que lê (UI, rascunho, payload)
 	// usa `state`.
-	const adjustedState = useMemo(() => applyPercentAdjustments(rawState, totalItens), [rawState, totalItens]);
+	// O frete grátis entra na mesma derivação: `state.taxaEntrega` é sempre a taxa COBRADA.
+	const adjustedState = useMemo(() => applyFreeShippingCoupon(applyPercentAdjustments(rawState, totalItens)), [rawState, totalItens]);
 	const subtotal = useMemo(
 		() => adjustedState.itens.reduce((sum, item) => sum + normalizeCouponGiftItem(item, giftSelection, item.tempId).valorTotalBruto, 0),
 		[adjustedState.itens, giftSelection],
@@ -810,6 +815,9 @@ export const useSaleState = ({ initialState, organizationConfig, contasFinanceir
 
 	return {
 		state,
+		// Taxa de entrega da venda sem cupom (a do operador). `state.taxaEntrega` é a cobrada, que o
+		// cupom de frete grátis zera; a avaliação de cupons precisa da original.
+		taxaEntregaBase: rawState.taxaEntrega,
 		setModoCliente,
 		setCliente,
 		clearCliente,

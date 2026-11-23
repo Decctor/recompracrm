@@ -103,6 +103,7 @@ function formatCouponBenefit(coupon: TGetCouponsOutputDefault["coupons"][number]
 		return `${coupon.beneficioValor ?? 0}% DE DESCONTO${coupon.beneficioDescontoMaximo ? ` (MÁX ${formatToMoney(coupon.beneficioDescontoMaximo)})` : ""}`;
 	if (coupon.beneficioTipo === "PRECO_FIXO") return `PREÇO FIXO DE ${formatToMoney(coupon.beneficioValor ?? 0)}`;
 	if (coupon.beneficioTipo === "COMPRE_X_LEVE_Y") return `LEVE ${coupon.beneficioLeveQuantidade ?? 0} PAGUE ${coupon.beneficioCompreQuantidade ?? 0}`;
+	if (coupon.beneficioTipo === "FRETE_GRATIS") return "FRETE GRÁTIS";
 	return "BRINDE";
 }
 

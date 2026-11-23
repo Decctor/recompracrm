@@ -1,4 +1,5 @@
 import CouponRemovalAction from "@/components/Coupons/CouponRemovalAction";
+import { readAppliedCouponWaivedDeliveryFee, resolveAppliedCouponValues } from "@/lib/coupons/free-shipping";
 import { resolveAppliedCouponEvaluation, type TCouponGiftOption } from "@/lib/coupons/gifts";
 import { usePosCouponGiftProducts } from "@/lib/queries/coupons";
 import ProductBuilderModal from "../ProductBuilderModal";
@@ -17,6 +18,7 @@ function formatCouponBenefit(coupon: TPosAvailableCoupon) {
 		return `${coupon.beneficioValor ?? 0}% DE DESCONTO${coupon.beneficioDescontoMaximo ? ` (MÁX ${formatToMoney(coupon.beneficioDescontoMaximo)})` : ""}`;
 	if (coupon.beneficioTipo === "PRECO_FIXO") return `PREÇO FIXO DE ${formatToMoney(coupon.beneficioValor ?? 0)}`;
 	if (coupon.beneficioTipo === "COMPRE_X_LEVE_Y") return `LEVE ${coupon.beneficioLeveQuantidade ?? 0} PAGUE ${coupon.beneficioCompreQuantidade ?? 0}`;
+	if (coupon.beneficioTipo === "FRETE_GRATIS") return "FRETE GRÁTIS";
 	return "PRODUTO GRÁTIS";
 }
 
@@ -50,6 +52,8 @@ export default function CouponRedemptionSection({ saleState, clientId }: CouponR
 		clienteId: clientId,
 		itens: cartItemsForEvaluation,
 		entregaModalidade: saleState.state.entregaModalidade,
+		// A taxa sem cupom: com o frete grátis aplicado, `state.taxaEntrega` já está zerada.
+		taxaEntrega: saleState.taxaEntregaBase,
 	});
 
 	const appliedCoupon = saleState.state.cupomResgate;
@@ -102,6 +106,8 @@ export default function CouponRedemptionSection({ saleState, clientId }: CouponR
 			toast.warning("O cupom aplicado deixou de ser elegível para o carrinho atual e foi removido.");
 			return;
 		}
+		// Frete grátis não sincroniza valor: a taxa isenta é derivada da taxa do carrinho no estado.
+		if (evaluation?.elegivel && evaluation.aplicacao === "ENTREGA") return;
 		if (evaluation?.elegivel && Math.abs(evaluation.valorDesconto - appliedCoupon.valorDesconto) > (appliedCoupon.brinde ? 0.000001 : 0.01)) {
 			saleState.setCupomResgate({ ...appliedCoupon, valorDesconto: evaluation.valorDesconto });
 		}
@@ -109,6 +115,8 @@ export default function CouponRedemptionSection({ saleState, clientId }: CouponR
 
 	if (appliedCoupon) {
 		const giftItem = appliedCoupon.brinde ? saleState.state.itens.find((item) => item.tempId === appliedCoupon.brinde?.itemChave) : null;
+		const waivedDeliveryFee = readAppliedCouponWaivedDeliveryFee(appliedCoupon);
+		const isFreeShipping = appliedCoupon.taxaEntregaIsenta !== null && appliedCoupon.taxaEntregaIsenta !== undefined;
 		return (
 			<div className="w-full flex flex-col gap-1.5 rounded-lg border border-primary/35 bg-primary/10 px-2 py-2">
 				<div className="flex items-center justify-between">
@@ -116,8 +124,13 @@ export default function CouponRedemptionSection({ saleState, clientId }: CouponR
 						<Ticket className="w-3 h-3 text-primary" />
 						<span className="text-xs font-semibold text-primary">CUPOM {appliedCoupon.titulo ?? appliedCoupon.codigo ?? "APLICADO"}</span>
 					</div>
-					<span className="text-xs font-bold text-primary">-{formatToMoney(appliedCoupon.valorDesconto)}</span>
+					<span className="text-xs font-bold text-primary">{isFreeShipping ? "FRETE GRÁTIS" : `-${formatToMoney(appliedCoupon.valorDesconto)}`}</span>
 				</div>
+				{isFreeShipping ? (
+					<p className="text-xs text-muted-foreground">
+						{waivedDeliveryFee > 0 ? `Taxa de entrega de ${formatToMoney(waivedDeliveryFee)} não será cobrada.` : "Sem taxa de entrega nesta venda."}
+					</p>
+				) : null}
 				{appliedCoupon.brinde ? (
 					<p className="text-xs text-muted-foreground">
 						{giftItem?.nome ?? "Produto selecionado"} sai grátis (1 unidade). Adicionais são cobrados à parte.
@@ -195,7 +208,7 @@ function AvailableCouponCard({ coupon, saleState, onApplied, onApplyGift, pendin
 			if (!evaluation?.elegivel) return;
 			saleState.setCupomResgate({
 				cupomId: coupon.id,
-				valorDesconto: evaluation.valorDesconto,
+				...resolveAppliedCouponValues(evaluation),
 				codigo: coupon.codigo,
 				titulo: coupon.titulo,
 				validacaoModo: "AUTOMATICA",

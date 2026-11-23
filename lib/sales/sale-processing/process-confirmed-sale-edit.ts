@@ -6,6 +6,7 @@ import { resolveSaleFiscalDocumentPreference, type TSaleFiscalDocument } from "@
 import { assertPOSFiscalEmissionReady } from "@/lib/fiscal/document-preview";
 import { resyncSaleCashbackAccumulation } from "@/lib/cashback/resync-sale-accumulation";
 import { type TCouponCartItem, evaluateCouponAgainstCart } from "@/lib/coupons/engine";
+import { isFreeShippingRedemption, readCouponRedemptionItemDiscount, readCouponRedemptionWaivedDeliveryFee } from "@/lib/coupons/free-shipping";
 import { readCouponItemIdentity } from "@/lib/coupons/gifts";
 import type { TCouponBenefitSnapshot } from "@/schemas/coupons";
 import { cancelCouponRedemption } from "@/lib/coupons/redemption";
@@ -368,6 +369,9 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 	});
 	let cupomDesconto = 0;
 	let cupomRemovido = false;
+	// Frete grátis mantido: a venda segue sem taxa de entrega e não pode sair da modalidade ENTREGA
+	// (a condição do cupom barra a troca logo abaixo). Só remover o cupom libera a cobrança.
+	let freeShippingKept = false;
 	let giftAllocation: { itemId: string; valorDesconto: number } | null = null;
 	if (couponRedemption) {
 		if (input.removerCupom) {
@@ -380,6 +384,10 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 			});
 			const redeemedGift = (couponRedemption.beneficioSnapshot as TCouponBenefitSnapshot | null)?.brinde;
 			if (redeemedGift && coupon?.beneficioTipo !== "BRINDE")
+				throw new createHttpError.BadRequest("O benefício do cupom foi alterado. Remova o cupom para salvar.");
+			// O resgate guarda o que o cupom ERA: uma taxa isenta não pode virar desconto de itens (nem
+			// o contrário) porque o cadastro do cupom mudou de tipo depois da venda.
+			if (coupon && isFreeShippingRedemption(couponRedemption) !== (coupon.beneficioTipo === "FRETE_GRATIS"))
 				throw new createHttpError.BadRequest("O benefício do cupom foi alterado. Remova o cupom para salvar.");
 			const checkoutConditions = readCouponCheckoutConditions(couponRedemption.beneficioSnapshot);
 			const conditionIssue = getCouponCheckoutConditionIssue(checkoutConditions, {
@@ -420,6 +428,8 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 						// O resgate desta própria venda já provou a condição; uma edição não deve
 						// transformar a primeira compra em uma compra anterior a si mesma.
 						comprasAnterioresConfirmadas: 0,
+						// A taxa isenta no resgate é a referência: a venda editada já não a carrega.
+						taxaEntrega: readCouponRedemptionWaivedDeliveryFee(couponRedemption) || null,
 					},
 				});
 				if (!evaluation.elegivel) {
@@ -442,14 +452,16 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 					if (!giftedItem) throw new createHttpError.BadRequest("O item do brinde foi removido. Remova o cupom para salvar.");
 					giftAllocation = { itemId: giftedItem.id, valorDesconto: evaluation.valorDesconto };
 				}
-				cupomDesconto = couponRedemption.valorDesconto;
+				freeShippingKept = evaluation.aplicacao === "ENTREGA";
+				cupomDesconto = freeShippingKept ? 0 : couponRedemption.valorDesconto;
 			} else {
 				// MANUAL (ou cupom removido do catálogo): mantém o valor resgatado, limitado ao bruto novo.
 				const grossItemsTotal = activeItems.reduce((sum, item) => sum + item.valorTotalBruto, 0);
 				if (couponRedemption.valorDesconto > grossItemsTotal + SALE_PRICING_CENT_TOLERANCE) {
 					throw new createHttpError.BadRequest("O desconto do cupom aplicado supera o valor bruto do carrinho editado. Remova o cupom para salvar.");
 				}
-				cupomDesconto = couponRedemption.valorDesconto;
+				freeShippingKept = isFreeShippingRedemption(couponRedemption);
+				cupomDesconto = readCouponRedemptionItemDiscount(couponRedemption);
 			}
 		}
 	}
@@ -708,7 +720,11 @@ export async function processConfirmedSaleEditInTransaction({ tx, input }: { tx:
 	const resolvedDeliveryMode = input.entregaModalidade ?? sale.entregaModalidade;
 	const previousDeliveryFee =
 		typeof previousDraftMetadata.taxaEntrega === "number" ? previousDraftMetadata.taxaEntrega : readShopDeliveryFee(sale.rascunhoMetadados);
-	const deliveryFee = resolvedDeliveryMode === "ENTREGA" ? Math.min(input.taxaEntrega ?? previousDeliveryFee, input.acrescimosTotal ?? 0) : 0;
+	if (freeShippingKept && (input.taxaEntrega ?? 0) > 0) {
+		throw new createHttpError.BadRequest("Esta venda usou um cupom de frete grátis: a taxa de entrega não pode ser cobrada. Remova o cupom para salvar.");
+	}
+	const deliveryFee =
+		resolvedDeliveryMode === "ENTREGA" && !freeShippingKept ? Math.min(input.taxaEntrega ?? previousDeliveryFee, input.acrescimosTotal ?? 0) : 0;
 	const editionLogEntry = {
 		data: new Date().toISOString(),
 		autorId: input.saleAuthorId,

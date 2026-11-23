@@ -16,6 +16,8 @@ export function buildBenefitLabel(coupon: TState["coupon"]): string {
 			return `preço fixo de ${formatToMoney(coupon.beneficioValor ?? 0)} por unidade`;
 		case "COMPRE_X_LEVE_Y":
 			return `leve ${coupon.beneficioLeveQuantidade ?? 0}, pague ${coupon.beneficioCompreQuantidade ?? 0}`;
+		case "FRETE_GRATIS":
+			return "frete grátis";
 		default:
 			return "uma unidade grátis, escolhida entre os brindes permitidos";
 	}
@@ -29,13 +31,15 @@ export function buildCouponSummary(state: TState): string {
 	const { coupon, couponTargets, couponAudiences } = state;
 	const parts: string[] = [`Cliente ganha ${buildBenefitLabel(coupon)}`];
 
-	if (coupon.beneficioAplicacao === "ITENS_ELEGIVEIS") parts.push("nos produtos selecionados");
+	const isFreeShipping = coupon.beneficioTipo === "FRETE_GRATIS";
+	if (isFreeShipping) parts.push("em pedidos com entrega");
+	else if (coupon.beneficioAplicacao === "ITENS_ELEGIVEIS") parts.push("nos produtos selecionados");
 	else parts.push("na compra");
 
 	if (coupon.condicaoValorMinimoVenda) parts.push(`em compras a partir de ${formatToMoney(coupon.condicaoValorMinimoVenda)}`);
 	if (coupon.condicaoQuantidadeMinimaItens) parts.push(`com pelo menos ${coupon.condicaoQuantidadeMinimaItens} itens`);
 	if (coupon.condicaoPrimeiraCompra) parts.push("somente na primeira compra");
-	if (coupon.condicaoModalidadesEntrega?.length) {
+	if (coupon.condicaoModalidadesEntrega?.length && !isFreeShipping) {
 		const labels = { PRESENCIAL: "presencial", RETIRADA: "retirada", ENTREGA: "entrega", COMANDA: "comanda" } as const;
 		parts.push(`nas modalidades ${coupon.condicaoModalidadesEntrega.map((mode) => labels[mode]).join(", ")}`);
 	}
@@ -56,6 +60,7 @@ export function buildCouponSummary(state: TState): string {
 
 	let sentence = `${parts.join(" ")}.`;
 	if (coupon.beneficioTipo === "BRINDE") sentence += " Adicionais são cobrados à parte. O brinde não conta para atingir as condições de compra.";
+	if (isFreeShipping) sentence += " A taxa de entrega não é cobrada; o cupom não é gasto quando a entrega já sairia grátis.";
 	if (coupon.validacaoModo === "MANUAL") sentence += " O operador confere as condições no balcão.";
 
 	const activeTargets = couponTargets.filter((target) => !target.deletar);
