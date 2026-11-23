@@ -386,6 +386,7 @@ export async function persistSaleCreation({
 			saleCouponId: input.cupomResgate?.cupomId ?? null,
 			storeCreditApprovalId: input.fiadoAprovacaoId ?? null,
 			saleCouponDeclaredDiscountValue: input.cupomResgate?.valorDesconto ?? null,
+			saleCouponWaivedDeliveryFee: input.cupomResgate?.taxaEntregaIsenta ?? null,
 			accountingEntryDebitAccountId: prepared.accountingEntryDebitAccountId,
 			accountingEntryCreditAccountId: prepared.accountingEntryCreditAccountId,
 			sessaoVendaId: prepared.sessaoVendaId,

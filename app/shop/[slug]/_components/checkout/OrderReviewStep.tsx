@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { formatCashbackValue, formatToMoney, formatToPhone } from "@/lib/formatting";
 import { buildShopCartLines } from "@/lib/shop/cart";
+import { readAppliedCouponWaivedDeliveryFee } from "@/lib/coupons/free-shipping";
 import { resolveShopDeliveryFee } from "@/lib/shop/config";
 import type { TShopPaymentMethod } from "@/schemas/shop";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
@@ -102,11 +103,16 @@ export default function OrderReviewStep({ onSubmit, isSubmitting }: OrderReviewS
   const couponDiscount = coupon.resgate?.valorDesconto ?? 0;
   const cashbackDiscount = cashback.resgateSolicitado;
   const discount = couponDiscount + cashbackDiscount;
-  const deliveryFee = resolveShopDeliveryFee({
-    configuracoes: config,
-    modalidade: delivery.modalidade,
-    subtotalItens: subtotal,
-  });
+  // Cupom de frete grátis: o pedido não cobra a taxa (mesma regra do servidor).
+  const waivedDeliveryFee = readAppliedCouponWaivedDeliveryFee(coupon.resgate);
+  const deliveryFee =
+    waivedDeliveryFee > 0
+      ? 0
+      : resolveShopDeliveryFee({
+          configuracoes: config,
+          modalidade: delivery.modalidade,
+          subtotalItens: subtotal,
+        });
   const total = Math.max(0, subtotal - discount) + deliveryFee;
   const itemCount = cartLines.reduce((sum, line) => sum + line.quantidade, 0);
 
@@ -353,7 +359,7 @@ export default function OrderReviewStep({ onSubmit, isSubmitting }: OrderReviewS
 
           {discount > 0 ? (
             <div className="flex flex-col gap-2">
-              {coupon.resgate ? (
+              {coupon.resgate && couponDiscount > 0 ? (
                 <div className="flex items-center justify-between gap-3 text-primary">
                   <span className="inline-flex min-w-0 items-center gap-1.5 text-sm">
                     <Ticket className="size-3.5 shrink-0" />
@@ -381,6 +387,7 @@ export default function OrderReviewStep({ onSubmit, isSubmitting }: OrderReviewS
             <div className="flex items-center justify-between gap-3">
               <span className="text-sm text-muted-foreground">
                 Taxa de entrega
+                {waivedDeliveryFee > 0 ? ` (cupom ${coupon.resgate?.codigo ?? ""})` : ""}
               </span>
               <span
                 className={`text-sm font-semibold tabular-nums ${deliveryFee === 0 ? "text-primary" : ""}`}

@@ -74,6 +74,10 @@ export async function processCouponRedemption({
 		throw new createHttpError.BadRequest("O brinde exige a seleção de um produto em um checkout com carrinho.");
 	}
 
+	if (coupon.beneficioTipo === "FRETE_GRATIS" && (!vendaId || surface === "PONTO_INTERACAO" || entregaModalidade !== "ENTREGA")) {
+		throw new createHttpError.BadRequest("O cupom de frete grátis exige uma venda com entrega.");
+	}
+
 	// Cliente e cupom já estão serializados antes da leitura de limites e atribuições.
 	const previousConfirmedPurchases = await countPreviousConfirmedPurchases({ trx, organizacaoId, clienteId, vendaId });
 	const conditionIssue = getCouponCheckoutConditionIssue(coupon, {
@@ -125,6 +129,8 @@ export async function processCouponRedemption({
 
 	const benefitSnapshot: TCouponBenefitSnapshot = {
 		...(brinde ? { brinde } : {}),
+		// Frete grátis: o valor do resgate é a taxa isenta, não um desconto sobre os itens.
+		...(coupon.beneficioTipo === "FRETE_GRATIS" ? { taxaEntregaIsenta: valorDesconto } : {}),
 		beneficioTipo: coupon.beneficioTipo,
 		beneficioValor: coupon.beneficioValor,
 		beneficioDescontoMaximo: coupon.beneficioDescontoMaximo,

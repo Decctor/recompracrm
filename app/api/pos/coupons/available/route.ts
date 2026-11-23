@@ -25,6 +25,8 @@ const GetAvailableCouponsInputSchema = z.object({
 	// Carrinho atual (opcional): quando presente, cupons AUTOMATICA são avaliados e retornam o desconto computado.
 	itens: z.array(CartItemInputSchema).optional().nullable(),
 	entregaModalidade: DeliveryModeEnum.optional().nullable(),
+	// Taxa de entrega da venda sem cupom (a do operador): é o que o cupom de frete grátis isenta.
+	taxaEntrega: z.number({ invalid_type_error: "Tipo não válido para taxa de entrega." }).nonnegative().optional().nullable(),
 });
 export type TGetAvailablePosCouponsInput = z.infer<typeof GetAvailableCouponsInputSchema>;
 
@@ -38,6 +40,7 @@ async function getAvailablePosCoupons({ input, session }: { input: TGetAvailable
 		surface: "POS",
 		itens: input.itens,
 		entregaModalidade: input.entregaModalidade,
+		taxaEntrega: input.taxaEntrega,
 	});
 
 	return {

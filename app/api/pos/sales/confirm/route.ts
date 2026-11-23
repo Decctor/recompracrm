@@ -249,6 +249,7 @@ async function confirmSale({ input, session }: { input: TConfirmSaleInput; sessi
 		saleCouponGift: effectiveAppliedCoupon?.brinde ?? null,
 		saleCouponId: effectiveAppliedCoupon?.cupomId ?? null,
 		saleCouponDeclaredDiscountValue: effectiveAppliedCoupon?.valorDesconto ?? null,
+		saleCouponWaivedDeliveryFee: effectiveAppliedCoupon?.taxaEntregaIsenta ?? null,
 		saleCouponRedemptionSurface: !input.cupomResgate && shopAppliedCoupon ? "LOJA_DIGITAL" : undefined,
 		saleRewardRedemptions: toSaleRewardRedemptionInputs(admittedRewards),
 		accountingEntryDebitAccountId,

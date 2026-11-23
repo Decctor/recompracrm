@@ -8,6 +8,11 @@ export type TCouponCheckoutConditions = {
 export type TCouponEvaluationContext = {
 	entregaModalidade: TDeliveryModeEnum | null;
 	comprasAnterioresConfirmadas: number;
+	/**
+	 * Taxa de entrega que a venda cobraria sem o cupom. Só o cupom de frete grátis a lê; quem não
+	 * conhece a taxa (ponto de interação, maquininha) omite, e esse cupom fica inelegível ali.
+	 */
+	taxaEntrega?: number | null;
 };
 
 /** Regras estruturadas comuns aos descontos automáticos e manuais. */

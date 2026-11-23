@@ -9,6 +9,7 @@ function formatCouponBenefit(coupon: TPoiAvailableCoupon) {
 	if (coupon.beneficioTipo === "DESCONTO_FIXO") return `${formatToMoney(coupon.beneficioValor ?? 0)} de desconto`;
 	if (coupon.beneficioTipo === "DESCONTO_PERCENTUAL")
 		return `${coupon.beneficioValor ?? 0}% de desconto${coupon.beneficioDescontoMaximo ? ` (máx ${formatToMoney(coupon.beneficioDescontoMaximo)})` : ""}`;
+	if (coupon.beneficioTipo === "FRETE_GRATIS") return "Frete grátis";
 	return "Benefício especial";
 }
 

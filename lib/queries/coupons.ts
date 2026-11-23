@@ -186,12 +186,14 @@ export function usePosAvailableCoupons({
 	clienteId,
 	itens,
 	entregaModalidade,
+	taxaEntrega,
 }: {
 	clienteId: string | null;
 	itens: TGetAvailablePosCouponsInput["itens"];
 	entregaModalidade?: TGetAvailablePosCouponsInput["entregaModalidade"];
+	taxaEntrega?: TGetAvailablePosCouponsInput["taxaEntrega"];
 }) {
-	const debouncedInput = useDebounceMemo({ clienteId, itens, entregaModalidade }, 500);
+	const debouncedInput = useDebounceMemo({ clienteId, itens, entregaModalidade, taxaEntrega }, 500);
 	const queryKey = ["pos-available-coupons", debouncedInput];
 	return {
 		...useQuery({
@@ -201,6 +203,7 @@ export function usePosAvailableCoupons({
 					clienteId: debouncedInput.clienteId as string,
 					itens: debouncedInput.itens,
 					entregaModalidade: debouncedInput.entregaModalidade,
+					taxaEntrega: debouncedInput.taxaEntrega,
 				}),
 			enabled: !!debouncedInput.clienteId,
 			// Cada mudança no carrinho muda a chave; sem isso a lista some e reaparece a cada item,

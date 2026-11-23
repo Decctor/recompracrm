@@ -14,6 +14,7 @@ export default function StageRules() {
 	const { state, updateCoupon, addCouponTarget, updateCouponTarget, removeCouponTarget } = useBuilderCoupon();
 	const { coupon, couponTargets } = state;
 	const itemScoped = benefitIsItemScoped(coupon.beneficioTipo);
+	const isFreeShipping = coupon.beneficioTipo === "FRETE_GRATIS";
 
 	// Quando o benefício exige produtos específicos (preço fixo, leve-x-pague-y) ou o
 	// desconto foi restrito a "itens elegíveis", selecionar produtos é obrigatório e a
@@ -27,7 +28,7 @@ export default function StageRules() {
 	const hasConditions =
 		coupon.condicaoValorMinimoVenda != null ||
 		coupon.condicaoQuantidadeMinimaItens != null ||
-		(coupon.condicaoModalidadesEntrega?.length ?? 0) > 0 ||
+		(!isFreeShipping && (coupon.condicaoModalidadesEntrega?.length ?? 0) > 0) ||
 		coupon.condicaoPrimeiraCompra ||
 		coupon.condicaoAlvosOperador !== "QUALQUER" ||
 		hasActiveTargets;
@@ -55,6 +56,10 @@ export default function StageRules() {
 		<div className="flex w-full flex-col gap-5">
 			{coupon.beneficioTipo === "BRINDE" ? (
 				<p className="text-sm text-muted-foreground">O sistema valida o produto escolhido como brinde no checkout.</p>
+			) : isFreeShipping ? (
+				<p className="text-sm text-muted-foreground">
+					O sistema confere as regras e isenta a taxa de entrega no checkout. Abaixo, exija um valor mínimo ou produtos na compra, se quiser.
+				</p>
 			) : (
 			<ChoiceCards<TCouponValidationModeEnum>
 				label="Como o resgate é validado?"
@@ -81,7 +86,7 @@ export default function StageRules() {
 				<>
 					{itemScoped ? (
 						<p className="text-xs font-medium text-muted-foreground">Este benefício vale sobre os produtos que você escolher abaixo.</p>
-					) : (
+					) : isFreeShipping ? null : (
 						<ChoiceCards<TCouponBenefitScopeEnum>
 							label="Onde o desconto vale?"
 							value={coupon.beneficioAplicacao}

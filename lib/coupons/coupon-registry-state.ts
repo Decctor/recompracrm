@@ -111,6 +111,15 @@ export function buildCouponSectionUpdateInput({
 								condicaoPrimeiraCompra: draft.condicaoPrimeiraCompra,
 							}
 						: {}),
+					// Frete grátis fixa modo, modalidade e superfície junto com o tipo: sem isto, trocar o
+					// benefício nesta seção enviaria as condições antigas e o servidor recusaria.
+					...(draft.beneficioTipo === "FRETE_GRATIS"
+						? {
+								validacaoModo: draft.validacaoModo,
+								resgatePermitirViaPontoInteracao: false,
+								condicaoModalidadesEntrega: draft.condicaoModalidadesEntrega,
+							}
+						: {}),
 					beneficioTipo: draft.beneficioTipo,
 					beneficioValor: draft.beneficioValor,
 					beneficioDescontoMaximo: draft.beneficioDescontoMaximo,

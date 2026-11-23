@@ -12,6 +12,7 @@ import CouponRemovalAction from "@/components/Coupons/CouponRemovalAction";
 import CouponGiftChoices from "@/components/Coupons/CouponGiftChoices";
 import { filterCouponGiftProducts, type TCouponGiftOption } from "@/lib/coupons/gifts";
 import { resolveAppliedCouponEvaluation } from "@/lib/coupons/gifts";
+import { readAppliedCouponWaivedDeliveryFee, resolveAppliedCouponValues } from "@/lib/coupons/free-shipping";
 import { buildShopCartLines } from "@/lib/shop/cart";
 import { HAPTICS, triggerHaptic } from "@/lib/shop/haptics";
 import { ArrowRight, BadgePercent, Gift, Info, Loader2, Minus, Plus, Ticket } from "lucide-react";
@@ -30,6 +31,7 @@ function formatCouponBenefit(coupon: TShopAvailableCoupon) {
 		return `${coupon.beneficioValor ?? 0}% de desconto${coupon.beneficioDescontoMaximo ? `, máximo ${formatToMoney(coupon.beneficioDescontoMaximo)}` : ""}`;
 	if (coupon.beneficioTipo === "PRECO_FIXO") return `Preço fixo de ${formatToMoney(coupon.beneficioValor ?? 0)}`;
 	if (coupon.beneficioTipo === "COMPRE_X_LEVE_Y") return `Leve ${coupon.beneficioLeveQuantidade ?? 0}, pague ${coupon.beneficioCompreQuantidade ?? 0}`;
+	if (coupon.beneficioTipo === "FRETE_GRATIS") return "Entrega grátis";
 	return "Brinde";
 }
 
@@ -78,6 +80,8 @@ export default function CashbackStep({ onNext }: CashbackStepProps) {
 	const balance = lookupData?.client?.saldos?.[0]?.saldoValorDisponivel ?? 0;
 	const appliedCoupon = coupon.resgate;
 	const couponDiscount = appliedCoupon?.valorDesconto ?? 0;
+	// Frete grátis não abate dos itens: isenta a taxa de entrega, somada só na revisão do pedido.
+	const waivedDeliveryFee = readAppliedCouponWaivedDeliveryFee(appliedCoupon);
 	const valueBeforeCashback = Math.max(0, subtotal - couponDiscount);
 
 	const maxRedemption = useMemo(() => {
@@ -143,8 +147,12 @@ export default function CashbackStep({ onNext }: CashbackStepProps) {
 			toast.warning("O cupom aplicado deixou de valer para o carrinho atual e foi removido.");
 			return;
 		}
-		if (Math.abs(evaluation.valorDesconto - appliedCoupon.valorDesconto) > (appliedCoupon.brinde ? 0.000001 : 0.01)) {
-			orderState.updateCoupon({ ...appliedCoupon, valorDesconto: evaluation.valorDesconto });
+		const couponValues = resolveAppliedCouponValues(evaluation);
+		if (
+			Math.abs(couponValues.valorDesconto - appliedCoupon.valorDesconto) > (appliedCoupon.brinde ? 0.000001 : 0.01) ||
+			Math.abs((couponValues.taxaEntregaIsenta ?? 0) - readAppliedCouponWaivedDeliveryFee(appliedCoupon)) > 0.01
+		) {
+			orderState.updateCoupon({ ...appliedCoupon, ...couponValues });
 		}
 	}, [appliedCoupon, availableCoupons, orderState.updateCoupon]);
 
@@ -320,8 +328,13 @@ export default function CashbackStep({ onNext }: CashbackStepProps) {
 										<p className="mt-0.5 text-sm font-semibold">{appliedCoupon.titulo ?? "Desconto aplicado"}</p>
 									</div>
 								</div>
-								<p className="shrink-0 text-sm font-black tabular-nums text-primary">-{formatToMoney(appliedCoupon.valorDesconto)}</p>
+								<p className="shrink-0 text-sm font-black tabular-nums text-primary">
+									{waivedDeliveryFee > 0 ? "Entrega grátis" : `-${formatToMoney(appliedCoupon.valorDesconto)}`}
+								</p>
 							</div>
+							{waivedDeliveryFee > 0 ? (
+								<p className="mt-2 text-xs text-muted-foreground">A taxa de entrega de {formatToMoney(waivedDeliveryFee)} não será cobrada.</p>
+							) : null}
 							{appliedCoupon.brinde ? (
 								<p className="mt-2 text-xs text-muted-foreground">
 									Brinde: {cartLines.find((line) => line.tempId === appliedCoupon.brinde?.itemChave)?.displayName ?? "Produto selecionado"}. Uma unidade
@@ -348,14 +361,15 @@ export default function CashbackStep({ onNext }: CashbackStepProps) {
 									onApply={(giftOption) => {
 										triggerHaptic(HAPTICS.tap);
 										notifyRewardReplaced();
+										const evaluation = giftOption?.avaliacao.elegivel
+											? giftOption.avaliacao
+											: availableCoupon.avaliacao?.elegivel
+												? availableCoupon.avaliacao
+												: null;
 										orderState.updateCoupon({
 											brinde: giftOption ? { itemChave: giftOption.itemChave, quantidade: 1 } : null,
 											cupomId: availableCoupon.id,
-											valorDesconto: giftOption?.avaliacao.elegivel
-												? giftOption.avaliacao.valorDesconto
-												: availableCoupon.avaliacao?.elegivel
-													? availableCoupon.avaliacao.valorDesconto
-													: 0,
+											...(evaluation ? resolveAppliedCouponValues(evaluation) : { valorDesconto: 0 }),
 											codigo: availableCoupon.codigo,
 											titulo: availableCoupon.titulo,
 										});
@@ -422,6 +436,12 @@ export default function CashbackStep({ onNext }: CashbackStepProps) {
 								<span className="text-sm font-semibold tabular-nums">-{formatToMoney(couponDiscount)}</span>
 							</div>
 						) : null}
+						{waivedDeliveryFee > 0 ? (
+							<div className="flex items-center justify-between gap-3 text-primary">
+								<span className="text-sm">Cupom: taxa de entrega</span>
+								<span className="text-sm font-semibold">Grátis</span>
+							</div>
+						) : null}
 						{cashback.resgateSolicitado > 0 ? (
 							<div className="flex items-center justify-between gap-3 text-primary">
 								<span className="text-sm">Cashback</span>
@@ -485,7 +505,9 @@ function AvailableCouponCard({ coupon, onApply }: { coupon: TShopAvailableCoupon
 					</div>
 				</div>
 				{evaluation?.elegivel ? (
-					<span className="shrink-0 text-sm font-black tabular-nums text-primary">-{formatToMoney(evaluation.valorDesconto)}</span>
+					<span className="shrink-0 text-sm font-black tabular-nums text-primary">
+						{evaluation.aplicacao === "ENTREGA" ? "Grátis" : `-${formatToMoney(evaluation.valorDesconto)}`}
+					</span>
 				) : null}
 			</div>
 

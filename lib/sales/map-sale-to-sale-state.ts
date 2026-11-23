@@ -1,6 +1,7 @@
 import type { TCouponBenefitSnapshot } from "@/schemas/coupons";
 import type { TGetSaleForEditOutput } from "@/app/api/pos/sales/edit/route";
 import { POS_REWARD_SALE_ITEM_ORIGIN, parseSaleRewardDraftSnapshots } from "@/lib/sales/sale-reward-snapshot";
+import { readCouponRedemptionItemDiscount, readCouponRedemptionWaivedDeliveryFee } from "@/lib/coupons/free-shipping";
 import { readShopDeliveryFee } from "@/lib/shop/config";
 import type { TCartItem, TCartItemModifier, TSalePaymentSplit, TSaleState } from "@/state-hooks/use-sale-state";
 import type { TOrganizationConfiguration } from "@/schemas/organizations";
@@ -164,7 +165,9 @@ export function mapSaleForEditToSaleState(
 
 	// Já exclui o resgate de recompensa (que está em moeda cashback, não em R$).
 	const cashbackResgate = data.cashbackResgate;
-	const cupomDesconto = data.cupomResgatado?.valorDesconto ?? 0;
+	// Frete grátis: o valor do resgate é a taxa isenta, não um desconto sobre os itens.
+	const cupomDesconto = readCouponRedemptionItemDiscount(data.cupomResgatado);
+	const taxaEntregaIsenta = readCouponRedemptionWaivedDeliveryFee(data.cupomResgatado);
 	const itens = venda.itens.map(mapItemToCartItem);
 	// Recompensas resgatadas: cada item dá o valor comercial e a identidade visual; o débito de
 	// saldo vem do ledger (`recompensasResgatadas`), nunca do snapshot do rascunho, que pode estar
@@ -175,7 +178,9 @@ export function mapSaleForEditToSaleState(
 	const descontoRecompensas = rewardItems.reduce((sum, item) => sum + item.valorDesconto, 0);
 	const descontoGeral =
 		draftMetadata?.descontoGeral ?? Math.max(0, (venda.descontosTotal ?? 0) - cupomDesconto - cashbackResgate - descontoRecompensas);
-	const taxaEntrega = Math.min(draftMetadata?.taxaEntrega ?? readShopDeliveryFee(venda.rascunhoMetadados), venda.acrescimosTotal ?? 0);
+	const taxaEntregaCobrada = Math.min(draftMetadata?.taxaEntrega ?? readShopDeliveryFee(venda.rascunhoMetadados), venda.acrescimosTotal ?? 0);
+	// O estado do PDV guarda a taxa sem cupom e deriva a cobrada (zero com frete grátis).
+	const taxaEntrega = taxaEntregaIsenta > 0 ? taxaEntregaIsenta : taxaEntregaCobrada;
 
 	return {
 		modoCliente: venda.cliente ? "VINCULADO" : "CONSUMIDOR",
@@ -184,7 +189,7 @@ export function mapSaleForEditToSaleState(
 		vendedorNome: venda.vendedorNome ?? null,
 		itens,
 		descontoGeral,
-		acrescimoGeral: Math.max(0, (venda.acrescimosTotal ?? 0) - taxaEntrega),
+		acrescimoGeral: Math.max(0, (venda.acrescimosTotal ?? 0) - taxaEntregaCobrada),
 		taxaEntrega,
 		observacoes: venda.observacoes ?? "",
 		entregaModalidade: (venda.entregaModalidade as TSaleState["entregaModalidade"] | null) ?? "PRESENCIAL",
@@ -197,7 +202,8 @@ export function mapSaleForEditToSaleState(
 			? {
 					brinde: (data.cupomResgatado.beneficioSnapshot as TCouponBenefitSnapshot | null)?.brinde,
 					cupomId: data.cupomResgatado.cupomId,
-					valorDesconto: data.cupomResgatado.valorDesconto,
+					valorDesconto: cupomDesconto,
+					taxaEntregaIsenta: taxaEntregaIsenta > 0 ? taxaEntregaIsenta : null,
 					codigo: data.cupomResgatado.cupomCodigo,
 					titulo: data.cupomResgatado.cupomTitulo,
 				}

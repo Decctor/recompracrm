@@ -4,6 +4,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { recomputeClientDuplicatesSafely } from "@/lib/clients/duplicates";
 import { getAvailableCouponsForClient } from "@/lib/coupons/availability";
 import { type TCouponCartItem, evaluateCouponAgainstCart } from "@/lib/coupons/engine";
+import { readAppliedCouponWaivedDeliveryFee, resolveAppliedCouponValues } from "@/lib/coupons/free-shipping";
 import { formatPhoneAsBase } from "@/lib/formatting";
 import { resolvePaymentFinancialAccounts } from "@/lib/payments";
 import { resolveCatalogOrderItem, type TResolvedCatalogOrderItem } from "@/lib/products/resolve-catalog-order-item";
@@ -243,6 +244,7 @@ async function validateCouponRequest({
   calculatedItems,
   entregaModalidade,
   comprasAnterioresConfirmadas,
+  taxaEntrega,
 }: {
   orgId: string;
   clientId: string;
@@ -250,6 +252,8 @@ async function validateCouponRequest({
   calculatedItems: CalculatedItem[];
   entregaModalidade: "RETIRADA" | "ENTREGA";
   comprasAnterioresConfirmadas: number;
+  // Taxa que o pedido pagaria sem cupom, resolvida pelo servidor: é ela que o frete grátis isenta.
+  taxaEntrega: number;
 }): Promise<TAppliedCoupon | null> {
   if (!appliedCoupon) return null;
 
@@ -277,17 +281,22 @@ async function validateCouponRequest({
     coupon,
     targets: coupon.alvos,
     cartItems,
-    context: { entregaModalidade, comprasAnterioresConfirmadas },
+    context: { entregaModalidade, comprasAnterioresConfirmadas, taxaEntrega },
   });
   if (!evaluation.elegivel) throw new createHttpError.BadRequest(`Cupom não elegível para este pedido: ${evaluation.motivo}`);
-  if (Math.abs(evaluation.valorDesconto - appliedCoupon.valorDesconto) > 0.01) {
+  // O motor é o autoritativo; o que o cliente declarou só serve para detectar carrinho desatualizado.
+  const couponValues = resolveAppliedCouponValues(evaluation);
+  if (
+    Math.abs(couponValues.valorDesconto - appliedCoupon.valorDesconto) > 0.01 ||
+    Math.abs((couponValues.taxaEntregaIsenta ?? 0) - readAppliedCouponWaivedDeliveryFee(appliedCoupon)) > 0.01
+  ) {
     throw new createHttpError.BadRequest("O desconto do cupom está desatualizado. Reaplique o cupom e tente novamente.");
   }
 
   return {
     brinde: appliedCoupon.brinde,
     cupomId: coupon.id,
-    valorDesconto: evaluation.valorDesconto,
+    ...couponValues,
     codigo: coupon.codigo,
     titulo: coupon.titulo,
   };
@@ -437,6 +446,13 @@ async function createShopOrder(request: NextRequest) {
     .from(sales)
     .where(and(eq(sales.clienteId, client.id), eq(sales.organizacaoId, orgId), eq(sales.statusVenda, "CONFIRMADA")));
 
+  // Taxa que o pedido pagaria sem cupom. Cupom e cashback incidem apenas sobre os itens, nunca
+  // sobre a entrega; a exceção é o cupom de frete grátis, que isenta a taxa inteira.
+  const baseDeliveryFee = resolveShopDeliveryFee({
+    configuracoes,
+    modalidade: input.entrega.modalidade,
+    subtotalItens: subtotal,
+  });
   const appliedCoupon = await validateCouponRequest({
     orgId,
     clientId: client.id,
@@ -444,6 +460,7 @@ async function createShopOrder(request: NextRequest) {
     calculatedItems,
     entregaModalidade: input.entrega.modalidade,
     comprasAnterioresConfirmadas: purchaseHistory?.total ?? 0,
+    taxaEntrega: baseDeliveryFee,
   });
   const couponDiscount = appliedCoupon?.valorDesconto ?? 0;
   const saleValueBeforeCashback = Math.max(0, subtotal - couponDiscount);
@@ -467,12 +484,10 @@ async function createShopOrder(request: NextRequest) {
   });
   const rewardDiscount = sumAdmittedRewardsSaleValue(admittedRewards);
   const discountsTotal = couponDiscount + requestedCashback + rewardDiscount;
-  // Taxa somada após os descontos: cupom e cashback incidem apenas sobre os itens, nunca sobre a entrega.
-  const deliveryFee = resolveShopDeliveryFee({
-    configuracoes,
-    modalidade: input.entrega.modalidade,
-    subtotalItens: subtotal,
-  });
+  // Taxa somada após os descontos. Com frete grátis o pedido nasce sem a taxa (nada de desconto
+  // compensando uma cobrança): o valor isentado segue em `appliedCoupon.taxaEntregaIsenta`.
+  const waivedDeliveryFee = readAppliedCouponWaivedDeliveryFee(appliedCoupon);
+  const deliveryFee = waivedDeliveryFee > 0 ? 0 : baseDeliveryFee;
   const computedTotal = Math.max(0, subtotal - couponDiscount - requestedCashback) + deliveryFee;
   const totalToPay = input.cupomResgate?.brinde ? roundCouponGiftCurrency(computedTotal) : computedTotal;
 
@@ -672,6 +687,7 @@ async function createShopOrder(request: NextRequest) {
       saleCouponGift: appliedCoupon?.brinde ?? null,
       saleCouponId: appliedCoupon?.cupomId ?? null,
       saleCouponDeclaredDiscountValue: appliedCoupon?.valorDesconto ?? null,
+      saleCouponWaivedDeliveryFee: waivedDeliveryFee > 0 ? waivedDeliveryFee : null,
       saleCouponRedemptionSurface: appliedCoupon ? "LOJA_DIGITAL" : undefined,
       accountingEntryDebitAccountId: organizationSaleDefaults.debitoContaId,
       accountingEntryCreditAccountId: organizationSaleDefaults.creditoContaId,

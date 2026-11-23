@@ -1,5 +1,5 @@
 import type { TCouponBenefitTypeEnum } from "@/schemas/enums";
-import { BadgePercent, Coins, Layers, Tag, Gift } from "lucide-react";
+import { BadgePercent, Coins, Layers, Tag, Gift, Truck } from "lucide-react";
 import type { ComponentType } from "react";
 
 /**
@@ -40,6 +40,14 @@ export const BENEFIT_CARDS: TBenefitCard[] = [
 		description: "Abate um valor fixo em reais da compra.",
 		example: "Ex: R$ 25 de desconto",
 		icon: Coins,
+	},
+	{
+		id: "FRETE_GRATIS",
+		label: "Frete grátis",
+		tagline: "A entrega sai de graça",
+		description: "A taxa de entrega do pedido não é cobrada. Vale no PDV e na loja digital, em pedidos com entrega.",
+		example: "Ex: frete grátis em compras acima de R$ 80",
+		icon: Truck,
 	},
 	{
 		id: "PRECO_FIXO",

@@ -15,7 +15,9 @@ type TCouponCoherenceInput = Pick<
 	| "beneficioAplicacao"
 	| "beneficioCompreQuantidade"
 	| "beneficioLeveQuantidade"
->;
+> &
+	// Lidos apenas pelo cupom de frete grátis.
+	Partial<Pick<z.infer<typeof CouponSchema>, "condicaoModalidadesEntrega" | "resgatePermitirViaPontoInteracao">>;
 
 type TCouponTargetRow = z.infer<typeof CouponTargetSchema> & { deletar?: boolean | null };
 type TCouponAudienceRow = z.infer<typeof CouponAudienceSchema> & { deletar?: boolean | null };
@@ -48,6 +50,24 @@ export function assertCouponCoherence({
 		}
 	}
 
+	if (coupon.beneficioTipo === "FRETE_GRATIS") {
+		// O benefício é a taxa de entrega que o checkout conhece: não há valor a digitar, nem item a
+		// descontar, nem como validar onde a taxa não existe (ponto de interação).
+		if (coupon.validacaoModo !== "AUTOMATICA") {
+			throw new createHttpError.BadRequest("Cupons de frete grátis exigem validação automática.");
+		}
+		const modes = coupon.condicaoModalidadesEntrega ?? [];
+		if (modes.length !== 1 || modes[0] !== "ENTREGA") {
+			throw new createHttpError.BadRequest("Cupons de frete grátis valem apenas para a modalidade de entrega.");
+		}
+		if (activeTargets.some((target) => target.papel === "BENEFICIADO")) {
+			throw new createHttpError.BadRequest("Cupons de frete grátis não descontam produtos: use os produtos apenas como condição de compra.");
+		}
+		if (coupon.resgatePermitirViaPontoInteracao !== false) {
+			throw new createHttpError.BadRequest("Cupons de frete grátis não podem ser resgatados no ponto de interação, que não tem taxa de entrega.");
+		}
+	}
+
 	if (coupon.validacaoModo === "MANUAL" && !coupon.condicoesTexto?.trim()) {
 		throw new createHttpError.BadRequest("Cupons de validação manual exigem o texto de condições para orientar cliente e operador.");
 	}
@@ -73,7 +93,12 @@ export function assertCouponCoherence({
 		throw new createHttpError.BadRequest("Cupons de preço fixo devem ser aplicados aos itens elegíveis.");
 	}
 
-	if (coupon.beneficioAplicacao === "ITENS_ELEGIVEIS" && coupon.validacaoModo === "AUTOMATICA" && activeTargets.length === 0) {
+	if (
+		coupon.beneficioTipo !== "FRETE_GRATIS" &&
+		coupon.beneficioAplicacao === "ITENS_ELEGIVEIS" &&
+		coupon.validacaoModo === "AUTOMATICA" &&
+		activeTargets.length === 0
+	) {
 		throw new createHttpError.BadRequest("Cupons aplicados a itens elegíveis exigem pelo menos um alvo de produto.");
 	}
 

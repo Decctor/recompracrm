@@ -78,6 +78,20 @@ export function useInternalCouponState({ initialState }: TUseInternalCouponState
 					beneficioLeveQuantidade: null,
 					resgatePermitirViaPontoInteracao: false,
 				});
+			// Frete grátis: o benefício é a taxa de entrega do checkout. Não há valor a digitar, só vale
+			// na modalidade ENTREGA e não existe onde não há taxa (ponto de interação). Espelha
+			// assertCouponCoherence no servidor.
+			if (next.beneficioTipo === "FRETE_GRATIS")
+				Object.assign(next, {
+					validacaoModo: "AUTOMATICA",
+					beneficioAplicacao: "VENDA_TOTAL",
+					beneficioValor: null,
+					beneficioDescontoMaximo: null,
+					beneficioCompreQuantidade: null,
+					beneficioLeveQuantidade: null,
+					condicaoModalidadesEntrega: ["ENTREGA"],
+					resgatePermitirViaPontoInteracao: false,
+				});
 			return { ...prev, coupon: next };
 		});
 	}, []);

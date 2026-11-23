@@ -55,7 +55,9 @@ export default function CouponTargetsBlock({
 				<p className="text-sm font-medium text-muted-foreground">
 					{coupon.beneficioTipo === "BRINDE"
 						? "Produtos que ganham o desconto são alternativas de brinde: o cliente escolhe uma unidade. Produtos que ativam o cupom são exigências adicionais da compra; o brinde não conta para cumpri-las."
-						: "Sem produtos, o cupom vale para qualquer compra. Marque um produto como ativa o cupom para exigir sua compra, ou ganha o desconto para receber o benefício."}
+						: coupon.beneficioTipo === "FRETE_GRATIS"
+							? "Sem produtos, o frete grátis vale para qualquer pedido com entrega. Adicione produtos para exigir que estejam na compra."
+							: "Sem produtos, o cupom vale para qualquer compra. Marque um produto como ativa o cupom para exigir sua compra, ou ganha o desconto para receber o benefício."}
 				</p>
 			</div>
 			<div className="w-full flex items-center gap-2 flex-col lg:flex-row">
@@ -111,7 +113,10 @@ export default function CouponTargetsBlock({
 									showLabel={false}
 									resetOptionLabel="ATIVA O CUPOM"
 									handleChange={(value) => updateCouponTarget(index, { papel: value as TUseInternalCouponState["state"]["couponTargets"][number]["papel"] })}
-									options={CouponTargetRoleOptions}
+									// Frete grátis não desconta produtos: eles só entram como condição de compra.
+									options={
+										coupon.beneficioTipo === "FRETE_GRATIS" ? CouponTargetRoleOptions.filter((option) => option.value === "ELEGIVEL") : CouponTargetRoleOptions
+									}
 									onReset={() => updateCouponTarget(index, { papel: "ELEGIVEL" })}
 								/>
 								<Button variant="ghost" size="icon" onClick={() => removeCouponTarget(index)}>

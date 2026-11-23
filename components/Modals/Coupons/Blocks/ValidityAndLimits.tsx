@@ -61,6 +61,8 @@ export default function CouponValidityAndLimitsBlock({ coupon, updateCoupon, emb
 				<div className="w-full flex items-center justify-center lg:w-1/3">
 					{coupon.beneficioTipo === "BRINDE" ? (
 						<p className="text-xs text-muted-foreground">Brindes exigem carrinho e não podem ser resgatados pelo ponto de interação.</p>
+					) : coupon.beneficioTipo === "FRETE_GRATIS" ? (
+						<p className="text-xs text-muted-foreground">Frete grátis exige um pedido com entrega e não pode ser resgatado pelo ponto de interação.</p>
 					) : (
 					<CheckboxInput
 						checked={coupon.resgatePermitirViaPontoInteracao}

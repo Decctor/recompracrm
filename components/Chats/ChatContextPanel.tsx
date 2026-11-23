@@ -139,6 +139,7 @@ function CouponBenefit({ beneficioTipo, beneficioValor }: { beneficioTipo: strin
 	if (beneficioTipo === "DESCONTO_FIXO") return <>{formatToMoney(beneficioValor ?? 0)} de desconto</>;
 	if (beneficioTipo === "PRECO_FIXO") return <>Preço especial de {formatToMoney(beneficioValor ?? 0)}</>;
 	if (beneficioTipo === "BRINDE") return <>Brinde disponível</>;
+	if (beneficioTipo === "FRETE_GRATIS") return <>Frete grátis</>;
 	return <>Oferta especial</>;
 }
 

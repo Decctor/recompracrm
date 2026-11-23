@@ -18,6 +18,7 @@ function activeTargetsCount(targets: TTargets): number {
 function validateBenefitStage(coupon: TCoupon): TStageValidationResult {
 	switch (coupon.beneficioTipo) {
 		case "BRINDE":
+		case "FRETE_GRATIS":
 			return { valid: true };
 		case "DESCONTO_PERCENTUAL":
 			if (!coupon.beneficioValor || coupon.beneficioValor <= 0) return { valid: false, reason: "Informe a porcentagem de desconto." };

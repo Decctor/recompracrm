@@ -693,7 +693,7 @@ export type TCouponScopeEnum = z.infer<typeof CouponScopeEnum>;
 export const CouponValidationModeEnum = z.enum(["AUTOMATICA", "MANUAL"]);
 export type TCouponValidationModeEnum = z.infer<typeof CouponValidationModeEnum>;
 
-export const CouponBenefitTypeEnum = z.enum(["DESCONTO_FIXO", "DESCONTO_PERCENTUAL", "PRECO_FIXO", "COMPRE_X_LEVE_Y", "BRINDE"]);
+export const CouponBenefitTypeEnum = z.enum(["DESCONTO_FIXO", "DESCONTO_PERCENTUAL", "PRECO_FIXO", "COMPRE_X_LEVE_Y", "BRINDE", "FRETE_GRATIS"]);
 export type TCouponBenefitTypeEnum = z.infer<typeof CouponBenefitTypeEnum>;
 
 export const CouponBenefitScopeEnum = z.enum(["VENDA_TOTAL", "ITENS_ELEGIVEIS"]);

@@ -15,6 +15,7 @@ import type { TCouponGiftSelection, TCouponBenefitSnapshot } from "@/schemas/cou
 import { readCouponItemIdentity, readCouponItemBasePrice } from "@/lib/coupons/gifts";
 import type { TBenefitRedemptionSurface } from "@/schemas/enums";
 import { processCouponRedemption } from "@/lib/coupons/redemption";
+import { readShopDeliveryFee } from "@/lib/shop/config";
 import { processSaleCupomAutoPrintIfEligible, processSalePreparationTicketAutoPrintIfEligible } from "@/lib/desktop-agent/auto-print";
 import { createAssignedPaymentAttempt, normalizePaymentsForTerminal, resolvePaymentTerminalAssignments } from "@/lib/payment-attempts";
 import { type TResolvedPaymentSplit, getPaymentProvider } from "@/lib/payments";
@@ -80,6 +81,9 @@ export type TProcessSaleConfirmationInput = {
 	saleCouponId?: string | null;
 	saleCouponGift?: TCouponGiftSelection | null;
 	saleCouponDeclaredDiscountValue?: number | null;
+	// Cupom de frete grátis: taxa de entrega que a venda deixou de cobrar. A venda já chega aqui SEM
+	// a taxa nos totais; este valor é o custo do cupom, gravado no resgate. Ignorado nos demais tipos.
+	saleCouponWaivedDeliveryFee?: number | null;
 	saleCouponRedemptionSurface?: TCouponRedemptionSurface;
 
 	accountingEntryDebitAccountId: string;
@@ -637,10 +641,17 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 					context: {
 						entregaModalidade: sale.entregaModalidade,
 						comprasAnterioresConfirmadas: previousConfirmedPurchases,
+						taxaEntrega: coupon.beneficioTipo === "FRETE_GRATIS" ? (input.saleCouponWaivedDeliveryFee ?? 0) : null,
 					},
 				});
 				if (!evaluation.elegivel) throw new createHttpError.BadRequest(`Cupom nao elegivel para essa venda: ${evaluation.motivo}`);
-				if (
+				if (evaluation.aplicacao === "ENTREGA") {
+					// Frete grátis isenta a taxa em vez de descontar: a venda não pode chegar aqui cobrando
+					// entrega nem carregando um desconto de itens em nome deste cupom.
+					if (declaredDiscountValue > 0.01 || readShopDeliveryFee(sale.rascunhoMetadados) > 0) {
+						throw new createHttpError.BadRequest("O cupom de frete gratis esta desatualizado para esta venda. Reaplique o cupom e tente novamente.");
+					}
+				} else if (
 					(evaluation.brinde || declaredDiscountValue > 0) &&
 					(!Number.isFinite(declaredDiscountValue) || Math.abs(evaluation.valorDesconto - declaredDiscountValue) > (evaluation.brinde ? 0.000001 : 0.01))
 				) {
@@ -684,6 +695,7 @@ export async function processSaleConfirmationInTransaction({ tx, input }: { tx: 
 				giftSnapshot = evaluation.brinde;
 			} else {
 				// MANUAL: o operador valida as condicoes e informa/confirma o valor do desconto.
+				if (coupon.beneficioTipo === "FRETE_GRATIS") throw new createHttpError.BadRequest("Cupons de frete gratis exigem validacao automatica.");
 				if (discountValue <= 0) throw new createHttpError.BadRequest("Informe o valor do desconto do cupom de validacao manual.");
 				const saleGrossItemsTotal = sale.itens.reduce((sum, item) => sum + item.valorVendaTotalBruto, 0);
 				if (discountValue > saleGrossItemsTotal) {
