@@ -26,7 +26,8 @@ const STUB = "local-stub";
 
 /**
  * Keys that need a value. Everything else is defined as an empty string, which is what turns a
- * presence-gated integration off (PostHog, Control, the AI gateway, Meta, iFood, ...).
+ * presence-gated integration off (PostHog, Control, the AI gateway, Meta, iFood, ...) — or as the
+ * code's own `?? "literal"` fallback when it has one (see `scanCodeEnv`).
  *
  * A non-empty stub exists only where a constructor refuses to build without a key or where a URL
  * must parse. None of them reaches a real service: lib/local-dev/network-guard.ts blocks every
@@ -81,16 +82,38 @@ function walkSourceFiles(directory: string, files: string[] = []) {
 	return files;
 }
 
-/** Every `process.env.X` / `process.env["X"]` in the code. Works on a machine with no `.env`. */
-export function scanCodeEnvKeys(): string[] {
+type TCodeEnvScan = { keys: string[]; nullishDefaults: Record<string, string> };
+let cachedScan: TCodeEnvScan | null = null;
+
+/**
+ * Every `process.env.X` / `process.env["X"]` in the code — works on a machine with no `.env` —
+ * plus the literal fallback of each `process.env.X ?? "literal"`.
+ *
+ * The fallbacks matter because local mode DEFINES every key: an empty string is not nullish, so
+ * `process.env.DATA_COLLECTING_TIMEZONE ?? "America/Sao_Paulo"` would yield "" and break. Those
+ * keys get their own code default as the stub, which is exactly what an unset key behaves like.
+ */
+export function scanCodeEnv(): TCodeEnvScan {
+	if (cachedScan) return cachedScan;
 	const keys = new Set<string>();
-	const pattern = /process\.env(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*["'`]([A-Za-z_][A-Za-z0-9_]*)["'`]\s*\])/g;
+	const nullishDefaults: Record<string, string> = {};
+	const pattern = /process\.env(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*["'`]([A-Za-z_][A-Za-z0-9_]*)["'`]\s*\])(?:\s*\?\?\s*(?:"([^"\n]*)"|'([^'\n]*)'))?/g;
 	for (const file of walkSourceFiles(REPO_ROOT)) {
 		const content = readFileSync(file, "utf8");
 		if (!content.includes("process.env")) continue;
-		for (const match of content.matchAll(pattern)) keys.add(match[1] ?? match[2]);
+		for (const match of content.matchAll(pattern)) {
+			const key = match[1] ?? match[2];
+			keys.add(key);
+			const fallback = match[3] ?? match[4];
+			if (fallback && !(key in nullishDefaults)) nullishDefaults[key] = fallback;
+		}
 	}
-	return [...keys].filter((key) => !SYSTEM_KEYS.has(key)).sort();
+	cachedScan = { keys: [...keys].filter((key) => !SYSTEM_KEYS.has(key)).sort(), nullishDefaults };
+	return cachedScan;
+}
+
+export function scanCodeEnvKeys(): string[] {
+	return scanCodeEnv().keys;
 }
 
 /** The env files Next.js (and `dotenv/config`) would load. `.env.localdb` is ours. */
@@ -141,11 +164,12 @@ export function buildLocalEnv({ adminUrl, suffix, port }: TBuildLocalEnvInput): 
 	const { database } = resolveDatabaseNames(suffix);
 	const appUrl = `http://localhost:${port}`;
 	const stubs = resolveStubValues({ appUrl });
+	const { nullishDefaults } = scanCodeEnv();
 
 	const env: Record<string, string> = {};
 	for (const key of new Set([...scanCodeEnvKeys(), ...readForeignEnvKeyNames(), ...Object.keys(stubs)])) {
 		if (key.startsWith("NEXT_PUBLIC_STRIPE_") && key.endsWith("_PRICE_ID")) env[key] = `price_local_${key.slice(19, -9).toLowerCase()}`;
-		else env[key] = stubs[key] ?? "";
+		else env[key] = stubs[key] ?? nullishDefaults[key] ?? "";
 	}
 	for (const key of PASSTHROUGH_KEYS) {
 		if (process.env[key] !== undefined) env[key] = process.env[key] as string;

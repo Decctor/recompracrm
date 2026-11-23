@@ -1,5 +1,5 @@
 /**
- * npm run local:login [-- <user>] [--next=/dashboard/sales/new]
+ * npm run local:login [-- <user> | --all] [--next=/dashboard/sales/new]
  *
  * <user> is a key of SEED_USERS (admin, operator, crmOwner, trialOwner) or a seeded e-mail.
  * Creates a session row for that user, writes a Playwright `storageState` file and prints a
@@ -72,10 +72,19 @@ export async function createLocalLogin({ user, next = "/dashboard" }: { user: st
 if (require.main === module) {
 	runScript(async () => {
 		const { options, positionals } = parseArgs();
-		const login = await createLocalLogin({ user: positionals[0] ?? "admin", next: options.next });
+		// `--all` logs every seeded user that exists in this database (used by the e2e global setup).
+		const requested = options.all ? (Object.keys(SEED_USERS) as string[]) : [positionals[0] ?? "admin"];
+		for (const user of requested) {
+			try {
+				const login = await createLocalLogin({ user, next: options.next });
+				console.log(`[local-dev] Session created for ${login.user.nome} <${login.user.email}>.`);
+				console.log(`[local-dev] Playwright storageState: ${path.relative(process.cwd(), login.storageStatePath)}`);
+				console.log(`[local-dev] Open to log in: ${login.loginUrl}`);
+			} catch (error) {
+				// A user from a scenario pack that was not loaded is not an error for `--all`.
+				if (!options.all) throw error;
+			}
+		}
 		await connection.end();
-		console.log(`[local-dev] Session created for ${login.user.nome} <${login.user.email}>.`);
-		console.log(`[local-dev] Playwright storageState: ${path.relative(process.cwd(), login.storageStatePath)}`);
-		console.log(`[local-dev] Open to log in: ${login.loginUrl}`);
 	});
 }

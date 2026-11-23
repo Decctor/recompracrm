@@ -20,13 +20,30 @@ function main() {
 
 	// The Next.js binary is run by this Node directly: no shell, so it behaves the same on Windows.
 	const nextBin = path.join(REPO_ROOT, "node_modules", "next", "dist", "bin", "next");
-	const child = spawn(process.execPath, [nextBin, "dev", "--port", String(port)], {
-		cwd: REPO_ROOT,
-		stdio: "inherit",
-		env: { ...process.env, ...env, PORT: String(port) },
-	});
-	for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => child.kill(signal));
-	child.on("exit", (code) => process.exit(code ?? 0));
+	const start = (attempt: number) => {
+		const startedAt = Date.now();
+		const child = spawn(process.execPath, [nextBin, "dev", "--port", String(port)], {
+			cwd: REPO_ROOT,
+			stdio: "inherit",
+			env: { ...process.env, ...env, PORT: String(port) },
+		});
+		const forward = (signal: NodeJS.Signals) => child.kill(signal);
+		process.on("SIGINT", forward);
+		process.on("SIGTERM", forward);
+		child.on("exit", (code, signal) => {
+			process.off("SIGINT", forward);
+			process.off("SIGTERM", forward);
+			// `next dev` sometimes prints a one-time notice and exits before serving, asking for the
+			// same command again. An unattended start (Playwright's webServer) cannot do that by hand.
+			if (attempt === 1 && !signal && Date.now() - startedAt < 20_000) {
+				console.log("[local-dev] Next.js exited before serving; starting it once more.");
+				start(2);
+				return;
+			}
+			process.exit(code ?? 0);
+		});
+	};
+	start(1);
 }
 
 try {

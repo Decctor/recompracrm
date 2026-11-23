@@ -1,4 +1,5 @@
 import { formatPhoneAsBase } from "@/lib/formatting";
+import { ShopWeekdayEnum } from "@/schemas/enums";
 import { DEFAULT_SHOP_SETTINGS_CONFIGURATION } from "@/schemas/shop";
 import { db } from "@/services/drizzle";
 import {
@@ -128,17 +129,15 @@ async function seedCatalog() {
 		.insert(productOptions)
 		.values({ id: sizeOptionId, organizacaoId: STORE_ID, produtoId: p.shirt.id, nome: "Tamanho", tipo: "TEXTO", ordem: 0 });
 	const variants = Object.values(SEED_VARIANTS);
-	await db
-		.insert(productOptionValues)
-		.values(
-			variants.map((variant, index) => ({
-				id: `seed-option-value-${variant.nome.toLowerCase()}`,
-				organizacaoId: STORE_ID,
-				opcaoId: sizeOptionId,
-				nome: variant.nome,
-				ordem: index,
-			})),
-		);
+	await db.insert(productOptionValues).values(
+		variants.map((variant, index) => ({
+			id: `seed-option-value-${variant.nome.toLowerCase()}`,
+			organizacaoId: STORE_ID,
+			opcaoId: sizeOptionId,
+			nome: variant.nome,
+			ordem: index,
+		})),
+	);
 	await db.insert(productVariants).values(
 		variants.map((variant) => ({
 			id: variant.id,
@@ -168,24 +167,22 @@ async function seedCatalog() {
 		{ id: toppings.id, organizacaoId: STORE_ID, nome: toppings.nome, minOpcoes: 0, maxOpcoes: 3, regraPreco: "SOMA", ativo: true },
 		{ id: doneness.id, organizacaoId: STORE_ID, nome: doneness.nome, minOpcoes: 1, maxOpcoes: 1, regraPreco: "SOMA", ativo: true },
 	]);
-	await db
-		.insert(productAddOnOptions)
-		.values([
-			...Object.values(toppings.options).map((option) => ({
-				...option,
-				organizacaoId: STORE_ID,
-				produtoAddOnId: toppings.id,
-				maxQtdePorItem: 1,
-				ativo: true,
-			})),
-			...Object.values(doneness.options).map((option) => ({
-				...option,
-				organizacaoId: STORE_ID,
-				produtoAddOnId: doneness.id,
-				maxQtdePorItem: 1,
-				ativo: true,
-			})),
-		]);
+	await db.insert(productAddOnOptions).values([
+		...Object.values(toppings.options).map((option) => ({
+			...option,
+			organizacaoId: STORE_ID,
+			produtoAddOnId: toppings.id,
+			maxQtdePorItem: 1,
+			ativo: true,
+		})),
+		...Object.values(doneness.options).map((option) => ({
+			...option,
+			organizacaoId: STORE_ID,
+			produtoAddOnId: doneness.id,
+			maxQtdePorItem: 1,
+			ativo: true,
+		})),
+	]);
 	await db.insert(productAddOnReferences).values([
 		{ produtoId: p.acai.id, produtoAddOnId: toppings.id, ordem: 0 },
 		{ produtoId: p.burger.id, produtoAddOnId: doneness.id, ordem: 0 },
@@ -414,6 +411,11 @@ export async function seedBasePack() {
 				entrega: { ativo: true, pedidoMinimo: 0, prazoMinutos: 45, taxa: SEED_SHOP_DELIVERY.taxa, gratisAcima: SEED_SHOP_DELIVERY.gratisAcima },
 			},
 			pagamento: { metodosAceitos: ["DINHEIRO", "PIX", "CARTAO_CREDITO"] },
+			// Open all day, every day: a spec must not depend on the hour it runs at.
+			operacao: {
+				...DEFAULT_SHOP_SETTINGS_CONFIGURATION.operacao,
+				horarios: ShopWeekdayEnum.options.map((dia) => ({ dia, periodos: [{ inicio: "00:00", fim: "23:59" }] })),
+			},
 		},
 	});
 

@@ -5,7 +5,7 @@
 -- of that schema, so they are recreated from this file. Each object names the migration that holds
 -- its latest definition; when a migration changes one, copy the new definition here.
 --
--- `npm run test:local-db-objects` fails when a migration introduces a function, trigger,
+-- `npm run test:local-dev` fails when a migration introduces a function, trigger,
 -- extension, view or policy this file does not know about.
 --
 -- Two sections, split by the `@section` markers: the first runs before the tables exist (indexes

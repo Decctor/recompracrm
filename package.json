@@ -154,7 +154,7 @@
 		"local:reset": "tsx ./scripts/local/reset.ts",
 		"local:dev": "tsx ./scripts/local/dev.ts",
 		"local:login": "tsx --conditions=react-server ./scripts/local/login.ts",
-		"test:local-db-objects": "node --import tsx --test scripts/local/db-objects.test.ts lib/local-dev/guard.test.ts",
+		"test:local-dev": "node --import tsx --test scripts/local/db-objects.test.ts lib/local-dev/guard.test.ts lib/local-dev/network-guard.test.ts",
 		"test:e2e": "playwright test --config e2e/playwright.config.ts",
 		"test:campaign-events": "node --conditions=react-server --import tsx --import ./lib/campaigns/events/test-env.ts --test lib/campaigns/events/events.test.ts lib/campaigns/engine/triggers.test.ts"
 	},
