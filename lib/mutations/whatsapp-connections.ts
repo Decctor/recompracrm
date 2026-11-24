@@ -3,6 +3,12 @@ import type { TSyncWhatsappContactsOutput } from "@/app/api/whatsapp-connections
 import type { TClearPhoneSendBlockInput, TClearPhoneSendBlockOutput } from "@/app/api/whatsapp-connections/send-block/route";
 import type { TSyncWhatsappMessageHistoryOutput } from "@/app/api/whatsapp-connections/message-history-sync/route";
 import type {
+	TDeactivateWhatsappPhoneInput,
+	TDeactivateWhatsappPhoneOutput,
+	TReactivateWhatsappPhoneInput,
+	TReactivateWhatsappPhoneOutput,
+} from "@/app/api/whatsapp-connections/phone-deactivation/route";
+import type {
 	TDeleteWhatsappConnectionOutput,
 	TUpdateConnectionPhoneAiServiceInput,
 	TUpdateConnectionPhoneAiServiceOutput,
@@ -30,6 +36,16 @@ export async function deleteWhatsappConnection(input: string) {
 }
 export async function updateConnectionPhoneAiService(input: TUpdateConnectionPhoneAiServiceInput) {
 	const { data } = await axios.patch<TUpdateConnectionPhoneAiServiceOutput>("/api/whatsapp-connections", input);
+	return data;
+}
+
+export async function deactivateWhatsappPhone(input: TDeactivateWhatsappPhoneInput) {
+	const { data } = await axios.post<TDeactivateWhatsappPhoneOutput>("/api/whatsapp-connections/phone-deactivation", input);
+	return data;
+}
+export async function reactivateWhatsappPhone(input: TReactivateWhatsappPhoneInput) {
+	const params = new URLSearchParams({ phoneId: input.phoneId });
+	const { data } = await axios.delete<TReactivateWhatsappPhoneOutput>(`/api/whatsapp-connections/phone-deactivation?${params.toString()}`);
 	return data;
 }
 

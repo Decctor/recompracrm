@@ -159,7 +159,15 @@ export function ChatSidebar({ organizationId, selectedChatId, onSelectChat, what
 	const [filtersLoaded, setFiltersLoaded] = useState(false);
 	const seededRef = useRef(false);
 
-	const phones = useMemo(() => whatsappConnections.flatMap((connection) => connection.telefones ?? []), [whatsappConnections]);
+	const phones = useMemo(
+		() =>
+			whatsappConnections.flatMap((connection) => [
+				...(connection.telefones ?? []),
+				// Desativados seguem no filtro: as conversas antigas continuam ligadas a eles.
+				...(connection.telefonesDesativados ?? []).map((phone) => ({ ...phone, nome: `${phone.nome} (desativado)` })),
+			]),
+		[whatsappConnections],
+	);
 	const storageKey = `${FILTERS_STORAGE_PREFIX}-${organizationId}`;
 
 	useEffect(() => {

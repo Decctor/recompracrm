@@ -14,7 +14,12 @@ export async function getWhatsappChannelStatus({ organizationId }: { organizatio
 		db.query.whatsappConnections.findMany({
 			where: and(eq(whatsappConnections.organizacaoId, organizationId), eq(whatsappConnections.tipoConexao, "META_CLOUD_API")),
 			columns: { id: true, dataExpiracao: true },
-			with: { telefones: { columns: { id: true, nome: true, numero: true, metadados: true } } },
+			with: {
+				telefones: {
+					columns: { id: true, nome: true, numero: true, metadados: true },
+					where: (phone, { isNull }) => isNull(phone.dataDesativacao),
+				},
+			},
 		}),
 		db.query.messageTemplates.findMany({
 			where: and(eq(messageTemplates.organizacaoId, organizationId), ne(messageTemplates.status, "ARQUIVADO")),

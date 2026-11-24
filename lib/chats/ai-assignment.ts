@@ -70,9 +70,9 @@ export async function resolveAiAssignmentAvailability(
 
 	const telefone = await db.query.whatsappConnectionPhones.findFirst({
 		where: eq(whatsappConnectionPhones.id, chat.whatsappConexaoTelefoneId),
-		columns: { permitirAtendimentoIa: true },
+		columns: { permitirAtendimentoIa: true, dataDesativacao: true },
 	});
-	if (!telefone?.permitirAtendimentoIa) return { disponivel: false, motivo: "TELEFONE_SEM_IA" };
+	if (!telefone?.permitirAtendimentoIa || telefone.dataDesativacao) return { disponivel: false, motivo: "TELEFONE_SEM_IA" };
 
 	// Só leitura: o provisionamento lazy (`ensureOrganizationAgent`) fica no caminho de
 	// escrita. Este resolvedor também alimenta o GET da thread, e criar o agente da

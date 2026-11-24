@@ -28,7 +28,7 @@ export async function reconcileOnboardingCampaigns({
 }) {
 	const connections = await executor.query.whatsappConnections.findMany({
 		where: eq(whatsappConnections.organizacaoId, organizationId),
-		with: { telefones: true },
+		with: { telefones: { where: (phone, { isNull }) => isNull(phone.dataDesativacao) } },
 	});
 	const now = new Date();
 	const phone = connections

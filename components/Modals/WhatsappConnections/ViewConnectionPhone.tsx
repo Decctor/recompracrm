@@ -8,7 +8,9 @@ import { getErrorMessage } from "@/lib/errors";
 import { formatDateAsLocale, formatToPhone } from "@/lib/formatting";
 import { disconnectInternalGateway } from "@/lib/mutations/internal-gateway";
 import {
+	deactivateWhatsappPhone,
 	deleteWhatsappConnection,
+	reactivateWhatsappPhone,
 	syncWhatsappContacts,
 	syncWhatsappMessageHistory,
 	updateConnectionPhoneAiService,
@@ -16,7 +18,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Bot, History, RefreshCw, UsersRound } from "lucide-react";
+import { AlertTriangle, Archive, ArchiveRestore, Bot, History, RefreshCw, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 
 type TWhatsappConnection = TGetWhatsappConnectionsOutput["data"][number];
@@ -44,6 +46,7 @@ export default function ViewConnectionPhone({ context, closeMenu }: ViewConnecti
 	const queryClient = useQueryClient();
 	const isMetaConnection = connection.tipoConexao === "META_CLOUD_API";
 	const isInternalGateway = connection.tipoConexao === "INTERNAL_GATEWAY";
+	const isDeactivated = !!phone.dataDesativacao;
 
 	const { mutate: handleDisconnect, isPending: isDisconnecting } = useMutation({
 		mutationKey: ["disconnect-whatsapp-connection-phone", connection.id, phone.id],
@@ -80,6 +83,20 @@ export default function ViewConnectionPhone({ context, closeMenu }: ViewConnecti
 			queryClient.invalidateQueries({ queryKey: ["whatsapp-connection"] });
 		},
 		onError: (error) => toast.error(getErrorMessage(error)),
+	});
+	const { mutate: handleDeactivationToggle, isPending: isTogglingDeactivation } = useMutation({
+		mutationKey: ["toggle-whatsapp-phone-deactivation", phone.id],
+		mutationFn: () => (isDeactivated ? reactivateWhatsappPhone({ phoneId: phone.id }) : deactivateWhatsappPhone({ phoneId: phone.id })),
+		onMutate: () => queryClient.cancelQueries({ queryKey: ["whatsapp-connection"] }),
+		onSuccess: (data) => {
+			toast.success(data.message);
+			closeMenu();
+		},
+		onError: (error) => toast.error(getErrorMessage(error)),
+		onSettled: () => {
+			queryClient.invalidateQueries({ queryKey: ["whatsapp-connection"] });
+			queryClient.invalidateQueries({ queryKey: ["whatsapp-channel-status"] });
+		},
 	});
 	const meta = getConnectionMeta(connection.tipoConexao);
 	const details = getPhoneDetails({ phone, connection });
@@ -125,29 +142,41 @@ export default function ViewConnectionPhone({ context, closeMenu }: ViewConnecti
 					))}
 				</div>
 
-				<div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-3">
-					<div className="flex items-start justify-between gap-3">
-						<div className="flex items-start gap-3">
-							<div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-								<Bot className="h-4 w-4" />
-							</div>
-							<div>
-								<p className="text-sm font-bold tracking-tight">Atendimento com IA</p>
-								<p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-									Quando ativo, o agente responde automaticamente às mensagens recebidas neste número — e recua assim que alguém da equipe assume a conversa.
-								</p>
-							</div>
-						</div>
-						<Switch
-							checked={phone.permitirAtendimentoIa}
-							disabled={isTogglingAiService}
-							onCheckedChange={(checked) => handleAiServiceToggle({ phoneId: phone.id, permitirAtendimentoIa: checked })}
-							aria-label="Atendimento com IA neste número"
-						/>
+				{isDeactivated ? (
+					<div className="flex items-start gap-3 rounded-xl border border-border bg-muted/40 p-3">
+						<Archive className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+						<p className="text-xs leading-relaxed text-muted-foreground">
+							Desativado em {phone.dataDesativacao ? formatDateAsLocale(new Date(phone.dataDesativacao), true) : ""}. As conversas continuam no hub, mas este
+							número não envia, não responde com IA e não gera alertas. Reconectar o número na Meta também o reativa.
+						</p>
 					</div>
-				</div>
+				) : null}
 
-				{isMetaConnection ? (
+				{!isDeactivated ? (
+					<div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-3">
+						<div className="flex items-start justify-between gap-3">
+							<div className="flex items-start gap-3">
+								<div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+									<Bot className="h-4 w-4" />
+								</div>
+								<div>
+									<p className="text-sm font-bold tracking-tight">Atendimento com IA</p>
+									<p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+										Quando ativo, o agente responde automaticamente às mensagens recebidas neste número — e recua assim que alguém da equipe assume a conversa.
+									</p>
+								</div>
+							</div>
+							<Switch
+								checked={phone.permitirAtendimentoIa}
+								disabled={isTogglingAiService}
+								onCheckedChange={(checked) => handleAiServiceToggle({ phoneId: phone.id, permitirAtendimentoIa: checked })}
+								aria-label="Atendimento com IA neste número"
+							/>
+						</div>
+					</div>
+				) : null}
+
+				{isMetaConnection && !isDeactivated ? (
 					<div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-3">
 						<div className="flex items-start gap-3">
 							<div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -171,7 +200,7 @@ export default function ViewConnectionPhone({ context, closeMenu }: ViewConnecti
 						</LoadingButton>
 					</div>
 				) : null}
-				{isMetaConnection ? (
+				{isMetaConnection && !isDeactivated ? (
 					<div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-3">
 						<div className="flex items-start gap-3">
 							<div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -194,6 +223,34 @@ export default function ViewConnectionPhone({ context, closeMenu }: ViewConnecti
 						>
 							<History className="h-4 w-4" />
 							SINCRONIZAR HISTÓRICO
+						</LoadingButton>
+					</div>
+				) : null}
+				{isMetaConnection ? (
+					<div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/30 p-3">
+						<div className="flex items-start gap-3">
+							<div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+								{isDeactivated ? <ArchiveRestore className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
+							</div>
+							<div>
+								<p className="text-sm font-bold tracking-tight">{isDeactivated ? "Reativar este número" : "Desativar só este número"}</p>
+								<p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+									{isDeactivated
+										? "O número volta para os seletores, os envios e a checagem da Meta. Se a Meta ainda recusar o acesso, você recebe o aviso para reconectar."
+										: "Para números que a empresa não usa mais. As conversas continuam no hub; o número deixa de aparecer nos envios e os alertas de conexão param. Os outros números da conexão não mudam."}
+								</p>
+							</div>
+						</div>
+						<LoadingButton
+							variant="outline"
+							size="sm"
+							className="shrink-0 gap-2"
+							loading={isTogglingDeactivation}
+							disabled={isDisconnecting}
+							onClick={() => handleDeactivationToggle()}
+						>
+							{isDeactivated ? <ArchiveRestore className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
+							{isDeactivated ? "REATIVAR NÚMERO" : "DESATIVAR NÚMERO"}
 						</LoadingButton>
 					</div>
 				) : null}

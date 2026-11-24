@@ -296,9 +296,11 @@ export async function deliverCampaignMessage(params: TCampaignDeliveryInput): Pr
 			try {
 				const whatsappConnectionPhone = await db.query.whatsappConnectionPhones.findFirst({
 					where: (fields, { eq: eqFilter }) => eqFilter(fields.id, campaign.whatsappConexaoTelefoneId as string),
-					columns: { id: true, conexaoId: true, whatsappTelefoneId: true },
+					columns: { id: true, conexaoId: true, whatsappTelefoneId: true, dataDesativacao: true },
 				});
 				if (!whatsappConnectionPhone) throw new Error("Telefone de conexao do WhatsApp nao encontrado.");
+				// Desativar recusa campanha ativa no número; isto cobre a que for reativada depois.
+				if (whatsappConnectionPhone.dataDesativacao) throw new Error("Telefone de conexao do WhatsApp desativado.");
 
 				const payload = buildWhatsappTemplateSendPayload({
 					template: campaign.whatsappTemplate,

@@ -42,9 +42,13 @@ export async function loadChatForSending({ organizacaoId, chatId }: { organizaca
 		with: {
 			cliente: { columns: { id: true, nome: true, telefone: true } },
 			whatsappConexao: { columns: { id: true, token: true, tipoConexao: true, gatewaySessaoId: true, gatewayStatus: true } },
+			whatsappConexaoTelefone: { columns: { dataDesativacao: true } },
 		},
 	});
 	if (!chat) throw new createHttpError.NotFound("Chat não encontrado.");
+	if (chat.whatsappConexaoTelefone?.dataDesativacao) {
+		throw new createHttpError.BadRequest("O número de WhatsApp desta conversa foi desativado. Reative-o em Configurações para responder por ele.");
+	}
 	if (!chat.whatsappConexao) throw new createHttpError.BadRequest("Conexão WhatsApp não configurada para este chat.");
 	if (!chat.cliente?.telefone) throw new createHttpError.BadRequest("Cliente não possui telefone cadastrado.");
 

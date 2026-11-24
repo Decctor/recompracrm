@@ -179,6 +179,9 @@ async function getWhatsappAuthCallbackRoute(req: NextRequest) {
 					nome: incoming.nome,
 					numero: incoming.numero,
 					whatsappBusinessAccountId: incoming.whatsappBusinessAccountId,
+					// Reconectar o número na Meta é o jeito natural de trazê-lo de volta.
+					dataDesativacao: null,
+					desativacaoAutorId: null,
 					// A credencial nova resolve o bloqueio de envio por credencial inválida; os outros
 					// motivos (pagamento, conta restrita) continuam até a Meta confirmar uma entrega.
 					metadados: sql`case when ${whatsappConnectionPhones.metadados}->'bloqueioEnvio'->>'motivo' = 'CREDENCIAL_INVALIDA'

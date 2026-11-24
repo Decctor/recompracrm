@@ -37,7 +37,8 @@ export async function getOrganizationWhatsappPhones(organizationId: string): Pro
 			tipoConexao: true,
 		},
 		with: {
-			telefones: true,
+			// Desativados ficam fora: sincronizar ou submeter template por eles bate na Meta sem acesso.
+			telefones: { where: (phone, { isNull }) => isNull(phone.dataDesativacao) },
 		},
 	});
 

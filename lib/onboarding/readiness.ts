@@ -197,7 +197,12 @@ function resolveNextAction(readiness: Omit<TOnboardingReadiness, "proximaAcao">)
 		for (const stageId of journey.etapasAdiadas) {
 			const stage = getStageDefinition(journey.produto, stageId);
 			if (!stage || stage.isComplete(readiness as TOnboardingReadiness, journey)) continue;
-			return { chave: `retomar-${stageId}`, rotulo: `Retomar: ${stage.rotulo}`, descricao: "Esta etapa ficou para depois. Você pode continuar de onde parou.", href: `/onboarding?produto=${journey.produto}&retomar=true&etapa=${stageId}` };
+			return {
+				chave: `retomar-${stageId}`,
+				rotulo: `Retomar: ${stage.rotulo}`,
+				descricao: "Esta etapa ficou para depois. Você pode continuar de onde parou.",
+				href: `/onboarding?produto=${journey.produto}&retomar=true&etapa=${stageId}`,
+			};
 		}
 	}
 	if (readiness.jornadas.length && !readiness.jornadas.some((journey) => journey.produto === "CRM")) {
@@ -232,7 +237,16 @@ export async function getOnboardingReadiness({
 }): Promise<TOnboardingReadiness> {
 	const organization = await executor.query.organizations.findFirst({
 		where: eq(organizations.id, organizationId),
-		columns: { id: true, nome: true, atuacaoNicho: true, configuracao: true, poiConfiguracao: true, dataOnboardingConclusao: true, periodoTesteFim: true, stripeSubscriptionId: true },
+		columns: {
+			id: true,
+			nome: true,
+			atuacaoNicho: true,
+			configuracao: true,
+			poiConfiguracao: true,
+			dataOnboardingConclusao: true,
+			periodoTesteFim: true,
+			stripeSubscriptionId: true,
+		},
 	});
 	if (!organization) throw new Error("Organização não encontrada.");
 	const now = new Date();
@@ -287,7 +301,12 @@ export async function getOnboardingReadiness({
 		executor.query.whatsappConnections.findMany({
 			where: eq(whatsappConnections.organizacaoId, organizationId),
 			columns: { id: true, tipoConexao: true, dataExpiracao: true, gatewayStatus: true, dataInsercao: true },
-			with: { telefones: { columns: { id: true, nome: true, numero: true, metadados: true } } },
+			with: {
+				telefones: {
+					columns: { id: true, nome: true, numero: true, metadados: true },
+					where: (phone, { isNull }) => isNull(phone.dataDesativacao),
+				},
+			},
 		}),
 		executor.query.shopSettings.findFirst({
 			where: eq(shopSettings.organizacaoId, organizationId),
@@ -322,8 +341,20 @@ export async function getOnboardingReadiness({
 				.from(cashbackProgramBalances)
 				.where(and(eq(cashbackProgramBalances.organizacaoId, organizationId), gt(cashbackProgramBalances.saldoValorDisponivel, 0)))
 		: [{ total: 0 }];
-	const importJobs = await executor.select().from(integrationImportJobs).where(eq(integrationImportJobs.organizacaoId, organizationId)).orderBy(desc(integrationImportJobs.dataInicio));
-	const coverage = integrations.length ? resolveHistoricalCoverage(integrations.map((integration) => importJobs.filter((job) => job.integracaoId === integration.id && job.coberturaInicio).map((job) => ({ inicio: job.coberturaInicio!, fim: job.janelaAlvoFim })))) : null;
+	const importJobs = await executor
+		.select()
+		.from(integrationImportJobs)
+		.where(eq(integrationImportJobs.organizacaoId, organizationId))
+		.orderBy(desc(integrationImportJobs.dataInicio));
+	const coverage = integrations.length
+		? resolveHistoricalCoverage(
+				integrations.map((integration) =>
+					importJobs
+						.filter((job) => job.integracaoId === integration.id && job.coberturaInicio)
+						.map((job) => ({ inicio: job.coberturaInicio!, fim: job.janelaAlvoFim })),
+				),
+			)
+		: null;
 	const partialCoverage = integrations.some((integration) => {
 		const latest = importJobs.find((job) => job.integracaoId === integration.id);
 		return !latest || latest.estado !== "CONCLUIDO";
@@ -361,9 +392,7 @@ export async function getOnboardingReadiness({
 
 	const numero = resolveWhatsappNumberState({ connections, now });
 	const usablePhones = connections.flatMap((connection) =>
-		connection.telefones
-			.filter((phone) => resolvePhoneNumberState({ connection, phone, now }) === "CONECTADO")
-			.map((phone) => ({ connection, phone })),
+		connection.telefones.filter((phone) => resolvePhoneNumberState({ connection, phone, now }) === "CONECTADO").map((phone) => ({ connection, phone })),
 	);
 	const primaryConnection = usablePhones[0]?.connection ?? connections.find((connection) => connection.telefones.length > 0) ?? null;
 	const primaryPhone = usablePhones[0]?.phone ?? primaryConnection?.telefones[0] ?? null;
@@ -404,9 +433,12 @@ export async function getOnboardingReadiness({
 	const crmJourney = journeys.find((journey) => journey.produto === "CRM") ?? null;
 	const erpJourney = journeys.find((journey) => journey.produto === "ERP") ?? null;
 	const channel = erpJourney?.respostas.erpCanalInicial ?? null;
-	const usableProducts = organization.configuracao.recursos.erp.acesso ? await getUsableOnboardingProducts({ executor, organizationId, channel: channel ?? "BALCAO" }) : { total: 0, amostra: [] };
+	const usableProducts = organization.configuracao.recursos.erp.acesso
+		? await getUsableOnboardingProducts({ executor, organizationId, channel: channel ?? "BALCAO" })
+		: { total: 0, amostra: [] };
 	const shopConfig = shop ? normalizeShopSettingsConfiguration(shop.configuracoes) : null;
-	const shopReady = !!shopConfig && (shopConfig.atendimento.retirada.ativo || shopConfig.atendimento.entrega.ativo) && shopConfig.pagamento.metodosAceitos.length > 0;
+	const shopReady =
+		!!shopConfig && (shopConfig.atendimento.retirada.ativo || shopConfig.atendimento.entrega.ativo) && shopConfig.pagamento.metodosAceitos.length > 0;
 	const enabledKeys = new Set(crmJourney?.respostas.campanhasComEnvioHabilitado ?? []);
 
 	const dependencyContextBase: Omit<TCampaignDependencyContext, "envioHabilitadoPeloUsuario"> = {
@@ -429,7 +461,12 @@ export async function getOnboardingReadiness({
 			const ownNumber = ownConnection && ownPhone ? resolvePhoneNumberState({ connection: ownConnection, phone: ownPhone, now }) : "NENHUM";
 			const context: TCampaignDependencyContext = {
 				...dependencyContextBase,
-				whatsapp: { numero: ownNumber, tipoConexao: ownConnection?.tipoConexao ?? null, telefoneId: ownPhone?.id ?? null, pagamento: ownConnection?.tipoConexao === "INTERNAL_GATEWAY" ? "NAO_APLICAVEL" : ownPhone?.metadados?.pagamento?.status ?? "DESCONHECIDO" },
+				whatsapp: {
+					numero: ownNumber,
+					tipoConexao: ownConnection?.tipoConexao ?? null,
+					telefoneId: ownPhone?.id ?? null,
+					pagamento: ownConnection?.tipoConexao === "INTERNAL_GATEWAY" ? "NAO_APLICAVEL" : (ownPhone?.metadados?.pagamento?.status ?? "DESCONHECIDO"),
+				},
 				envioHabilitadoPeloUsuario: enabledKeys.has(campaign.chavePreset) || campaign.ativo,
 			};
 			const dependencias = resolveCampaignDependencies({ campaign: row, context });
@@ -465,7 +502,10 @@ export async function getOnboardingReadiness({
 				status: integration.status,
 				ultimaSincronizacao: integration.dataUltimaSincronizacao,
 				ultimoErro: integration.ultimoErro,
-				cargaHistorica: (() => { const job = importJobs.find((item) => item.integracaoId === integration.id); return job ? getImportJobProgress(job) : null; })(),
+				cargaHistorica: (() => {
+					const job = importJobs.find((item) => item.integracaoId === integration.id);
+					return job ? getImportJobProgress(job) : null;
+				})(),
 			})),
 		},
 		dados: {
@@ -503,7 +543,13 @@ export async function getOnboardingReadiness({
 			produtos: usableProducts.amostra,
 			produtosUtilizaveis: usableProducts.total,
 			lojaDigital: { existe: !!shop, ativa: shop?.ativo ?? false, modo: shop?.modo ?? null, configurada: shopReady },
-			pendenciasLancamento: getLaunchChecklist(channel, { acesso: organization.configuracao.recursos.erp.acesso, produtosUtilizaveis: usableProducts.total, lojaDigital: { existe: !!shop, ativa: shop?.ativo ?? false, configurada: shopReady }, pontosAtendimento: servicePointsRow?.total ?? 0, simulacaoConcluida: !!erpJourney?.respostas.erpSimulacaoConcluidaEm }).filter((item) => !item.concluida),
+			pendenciasLancamento: getLaunchChecklist(channel, {
+				acesso: organization.configuracao.recursos.erp.acesso,
+				produtosUtilizaveis: usableProducts.total,
+				lojaDigital: { existe: !!shop, ativa: shop?.ativo ?? false, configurada: shopReady },
+				pontosAtendimento: servicePointsRow?.total ?? 0,
+				simulacaoConcluida: !!erpJourney?.respostas.erpSimulacaoConcluidaEm,
+			}).filter((item) => !item.concluida),
 			pontosAtendimento: servicePointsRow?.total ?? 0,
 			simulacaoConcluida: !!erpJourney?.respostas.erpSimulacaoConcluidaEm,
 		},
