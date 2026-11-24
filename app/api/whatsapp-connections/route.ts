@@ -19,8 +19,15 @@ async function getWhatsappConnection({ session }: { session: TAuthUserSession })
 			telefones: true,
 		},
 	});
+	// `telefones` são só os ativos — é o que seletores, campanhas e templates enxergam. Os
+	// desativados vêm à parte, para as configurações (reativar) e os filtros do hub (histórico).
+	const connections = whatsappConnectionsResults.map(({ telefones, ...connection }) => ({
+		...connection,
+		telefones: telefones.filter((phone) => !phone.dataDesativacao),
+		telefonesDesativados: telefones.filter((phone) => !!phone.dataDesativacao),
+	}));
 	return {
-		data: whatsappConnectionsResults ?? null,
+		data: connections,
 		message: "Conexão do WhatsApp encontrada com sucesso.",
 	};
 }

@@ -47,7 +47,13 @@ export const OrganizationInputSchema = z.string({ invalid_type_error: "Tipo inv�
 /** Números de WhatsApp da organização — o modelo precisa dos ids para filtrar por número. */
 export async function listChatConnectionPhones(organizacaoId: string) {
 	return db
-		.select({ id: whatsappConnectionPhones.id, nome: whatsappConnectionPhones.nome, numero: whatsappConnectionPhones.numero })
+		.select({
+			id: whatsappConnectionPhones.id,
+			nome: whatsappConnectionPhones.nome,
+			numero: whatsappConnectionPhones.numero,
+			// Desativado continua listado: as conversas antigas seguem filtráveis por ele.
+			dataDesativacao: whatsappConnectionPhones.dataDesativacao,
+		})
 		.from(whatsappConnectionPhones)
 		.innerJoin(whatsappConnections, eq(whatsappConnectionPhones.conexaoId, whatsappConnections.id))
 		.where(eq(whatsappConnections.organizacaoId, organizacaoId))

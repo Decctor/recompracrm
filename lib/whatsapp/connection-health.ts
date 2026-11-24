@@ -4,7 +4,7 @@ import { organizationMembers, users } from "@/services/drizzle/schema";
 import { type TWhatsappPhoneDisconnection, whatsappConnectionPhones, whatsappConnections } from "@/services/drizzle/schema/whatsapp-connections";
 import { resend } from "@/services/resend";
 import dayjs from "dayjs";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { mapMetaPhoneFields, META_PHONE_STATE_FIELDS } from "./channel-activation";
 import {
 	classifyWhatsappPhoneHealth,
@@ -55,6 +55,8 @@ async function listMetaWhatsappPhones({ whatsappBusinessAccountId }: { whatsappB
 		.where(
 			and(
 				eq(whatsappConnections.tipoConexao, "META_CLOUD_API"),
+				// Número desativado pela loja: sem checagem, sem e-mail de alerta.
+				isNull(whatsappConnectionPhones.dataDesativacao),
 				whatsappBusinessAccountId ? eq(whatsappConnectionPhones.whatsappBusinessAccountId, whatsappBusinessAccountId) : undefined,
 			),
 		);

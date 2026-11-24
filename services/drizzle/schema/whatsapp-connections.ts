@@ -128,6 +128,11 @@ export const whatsappConnectionPhones = newTable("whatsapp_connection_phones", {
 	numero: text("numero").notNull(),
 	permitirAtendimentoIa: boolean("permitir_atendimento_ia").notNull().default(false),
 	metadados: jsonb("metadados").$type<TWhatsappConnectionPhoneMetadados>(),
+	// Soft delete do número (app/api/whatsapp-connections/phone-deactivation): a linha fica para as conversas
+	// manterem o vínculo, mas o número sai da checagem de saúde, dos seletores, dos envios e do
+	// canal. Reconectar o número na Meta reativa.
+	dataDesativacao: timestamp("data_desativacao"),
+	desativacaoAutorId: varchar("desativacao_autor_id", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
 });
 export const whatsappConnectionPhonesRelations = relations(whatsappConnectionPhones, ({ one }) => ({
 	conexao: one(whatsappConnections, {

@@ -134,7 +134,7 @@ function ConnectionDetailRow({ icon, label, children }: ConnectionDetailRowProps
 type ConnectionPhonePillsProps = {
 	phones: Array<{ phone: TWhatsappConnectionPhone; connection: TWhatsappConnection }>;
 	onPhoneClick: (context: TViewConnectionPhoneContext) => void;
-	tone?: "meta" | "gateway";
+	tone?: "meta" | "gateway" | "deactivated";
 };
 function ConnectionPhonePills({ phones, onPhoneClick, tone = "meta" }: ConnectionPhonePillsProps) {
 	if (!phones.length) return <span className="text-foreground/50 text-xs italic">Nenhum telefone vinculado</span>;
@@ -149,15 +149,17 @@ function ConnectionPhonePills({ phones, onPhoneClick, tone = "meta" }: Connectio
 						onPhoneClick({
 							phone,
 							connection,
-							totalPhonesInConnection: connection.telefones.length,
+							totalPhonesInConnection: connection.telefones.length + connection.telefonesDesativados.length,
 						})
 					}
 					className={cn(
 						"flex items-center gap-1.5 rounded-lg px-2 py-1 transition-transform hover:scale-[1.01] active:scale-[0.96]",
 						tone === "meta" && "bg-whatsapp/15 text-[#1a9e4a] hover:bg-whatsapp/20",
 						tone === "gateway" && "bg-[#24549C]/10 text-[#24549C] hover:bg-[#24549C]/15",
+						tone === "deactivated" && "bg-muted text-muted-foreground hover:bg-muted/80",
 					)}
 				>
+					{tone === "deactivated" ? <span className="text-[0.6rem] font-bold tracking-wider">DESATIVADO</span> : null}
 					<span className="max-w-32 truncate text-xs font-bold tracking-tight">{phone.nome}</span>
 					<span className="text-xs font-medium tracking-tight opacity-80">{formatToPhone(phone.numero)}</span>
 				</button>
@@ -180,6 +182,7 @@ function IntegrationWithMetaCloud({ connections, onPhoneClick }: IntegrationWith
 			connection,
 		})),
 	);
+	const deactivatedPhones = metaConnections.flatMap((connection) => connection.telefonesDesativados.map((phone) => ({ phone, connection })));
 
 	const [showPreparation, setShowPreparation] = useState(false);
 	const channel = useWhatsappChannelStatus({ enabled: connectionPhones.length > 0 });
@@ -233,6 +236,7 @@ function IntegrationWithMetaCloud({ connections, onPhoneClick }: IntegrationWith
 						{isConnected ? (
 							<>
 								<ConnectionPhonePills phones={connectionPhones} onPhoneClick={onPhoneClick} tone="meta" />
+								{deactivatedPhones.length > 0 ? <ConnectionPhonePills phones={deactivatedPhones} onPhoneClick={onPhoneClick} tone="deactivated" /> : null}
 								<Button variant="ghost" size="xs" className="flex items-center gap-1" asChild>
 									<Link href={META_CONNECT_HREF}>
 										<PlusIcon className="h-4 w-4" />

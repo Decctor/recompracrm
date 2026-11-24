@@ -32,7 +32,15 @@ export default function ChatsStatsSection({ whatsappConnections, canManageAttend
 	}));
 	const [phoneId, setPhoneId] = useState<string | null>(null);
 
-	const phones = useMemo(() => whatsappConnections.flatMap((connection) => connection.telefones ?? []), [whatsappConnections]);
+	const phones = useMemo(
+		() =>
+			whatsappConnections.flatMap((connection) => [
+				...(connection.telefones ?? []),
+				// Desativados seguem no filtro: as conversas antigas continuam ligadas a eles.
+				...(connection.telefonesDesativados ?? []).map((phone) => ({ ...phone, nome: `${phone.nome} (desativado)` })),
+			]),
+		[whatsappConnections],
+	);
 	const selectedPhone = phones.find((phone) => phone.id === phoneId) ?? null;
 
 	// O período de comparação é o intervalo imediatamente anterior, de mesma duração — é o

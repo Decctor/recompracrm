@@ -48,7 +48,7 @@ async function seedOnboardingCampaigns({ input, session }: { input: TSeedOnboard
 	// reconciliação preenche o vínculo quando o número chegar (ver reconcile).
 	const connection = await db.query.whatsappConnections.findFirst({
 		where: (fields, { eq: equals }) => equals(fields.organizacaoId, organizacaoId),
-		with: { telefones: { columns: { id: true }, limit: 1 } },
+		with: { telefones: { columns: { id: true }, where: (phone, { isNull }) => isNull(phone.dataDesativacao), limit: 1 } },
 	});
 	const whatsappConexaoTelefoneId = connection?.telefones[0]?.id ?? null;
 

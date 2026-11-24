@@ -376,8 +376,11 @@ export async function assertWhatsappPhoneCanSendCampaigns(phoneId: string | null
 	if (!phoneId) return;
 	const phone = await db.query.whatsappConnectionPhones.findFirst({
 		where: eq(whatsappConnectionPhones.id, phoneId),
-		columns: { metadados: true },
+		columns: { metadados: true, dataDesativacao: true },
 	});
+	if (phone?.dataDesativacao) {
+		throw new createHttpError.BadRequest("O número de WhatsApp desta campanha foi desativado. Escolha outro número ou reative-o em Configurações.");
+	}
 	const block = phone?.metadados?.bloqueioEnvio;
 	if (!block) return;
 	throw new createHttpError.BadRequest(

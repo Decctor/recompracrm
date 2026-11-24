@@ -26,7 +26,15 @@ type ChatsBoardFiltersProps = {
 };
 
 export function ChatsBoardFilters({ filters, onChange, whatsappConnections }: ChatsBoardFiltersProps) {
-	const phones = useMemo(() => whatsappConnections.flatMap((connection) => connection.telefones ?? []), [whatsappConnections]);
+	const phones = useMemo(
+		() =>
+			whatsappConnections.flatMap((connection) => [
+				...(connection.telefones ?? []),
+				// Desativados seguem no filtro: as conversas antigas continuam ligadas a eles.
+				...(connection.telefonesDesativados ?? []).map((phone) => ({ ...phone, nome: `${phone.nome} (desativado)` })),
+			]),
+		[whatsappConnections],
+	);
 	const selectedPhone = phones.find((phone) => phone.id === filters.whatsappConexaoTelefoneId) ?? null;
 	const selectedView = BOARD_VIEWS.find((item) => item.id === filters.view) ?? BOARD_VIEWS[0];
 	const SelectedViewIcon = selectedView.icon;
