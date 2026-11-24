@@ -44,6 +44,14 @@ export type TWhatsappConnectionPhonePaymentStatus = "DESCONHECIDO" | "CONFIRMADO
 
 export type TWhatsappConnectionPhoneHealthStatus = "SAUDAVEL" | "FALHA";
 
+export type TWhatsappPhoneDisconnection = {
+	evento: string;
+	// `disconnection_info.reason` / `initiated_by` da Meta, quando vierem.
+	motivo: string | null;
+	iniciadoPor: string | null;
+	recebidoEm: string;
+};
+
 export type TWhatsappConnectionPhoneMetadados = {
 	// Saúde do acesso ao telefone na Meta (lib/whatsapp/connection-health.ts). Gravada pelo cron
 	// `whatsapp-connections-health` e por webhooks `account_update`; ausência = nunca verificado.
@@ -57,6 +65,10 @@ export type TWhatsappConnectionPhoneMetadados = {
 		// Último aviso por e-mail da sequência atual de falha — base do silêncio de lembretes.
 		notificadoEm?: string | null;
 	};
+	// Último aviso da Meta de que o RecompraCRM saiu do WABA (webhook account_update
+	// PARTNER_REMOVED). A checagem de saúde só enxerga "sem acesso"; isto diz o porquê
+	// (ex.: PRIMARY_INACTIVITY = app da coexistência sem uso) e vira a mensagem da falha.
+	desconexao?: TWhatsappPhoneDisconnection;
 	// Estado do número visto pela Meta (nome de exibição, qualidade, limite diário), gravado pela
 	// checagem de saúde (lib/whatsapp/connection-health.ts). Ausência = ainda não consultado.
 	meta?: TWhatsappPhoneMetaState;
