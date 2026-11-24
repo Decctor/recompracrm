@@ -33,6 +33,34 @@ export function resolveAppliedCouponValues(evaluation: Extract<TCouponEvaluation
 }
 
 /**
+ * O cupom aplicado diverge dos valores resolvidos pelo motor? É a mesma régua no pedido da loja
+ * (que recusa o envio) e no checkout (que ressincroniza o cupom): comparar só `valorDesconto` com a
+ * avaliação crua confunde a taxa isenta do frete grátis com desconto nos itens.
+ */
+export function hasAppliedCouponValuesDrifted(
+	applied: TAppliedCouponValues,
+	resolved: ReturnType<typeof resolveAppliedCouponValues>,
+	itemDiscountTolerance = 0.01,
+): boolean {
+	return (
+		Math.abs(resolved.valorDesconto - applied.valorDesconto) > itemDiscountTolerance ||
+		Math.abs((resolved.taxaEntregaIsenta ?? 0) - readAppliedCouponWaivedDeliveryFee(applied)) > 0.01
+	);
+}
+
+/**
+ * Ressincronização do cupom aplicado no checkout da loja com uma avaliação nova do motor. Devolve o
+ * próprio `applied` quando nada mudou, para o chamador não disparar um update à toa.
+ */
+export function reconcileAppliedCouponValues<T extends TAppliedCouponValues & { brinde?: unknown }>(
+	applied: T,
+	evaluation: Extract<TCouponEvaluationResult, { elegivel: true }>,
+): T {
+	const resolved = resolveAppliedCouponValues(evaluation);
+	return hasAppliedCouponValuesDrifted(applied, resolved, applied.brinde ? 0.000001 : 0.01) ? { ...applied, ...resolved } : applied;
+}
+
+/**
  * Derivação do carrinho do PDV: com um cupom de frete grátis aplicado, a taxa cobrada é zero e o
  * cupom carrega a taxa que a venda teria. Derivar (em vez de zerar a taxa no estado) mantém a taxa
  * do operador guardada: tirar o cupom devolve a cobrança, e mudar a taxa atualiza o valor isentado.
