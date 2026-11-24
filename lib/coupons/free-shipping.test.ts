@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AppliedCouponSchema } from "@/schemas/coupons";
+import { AppliedCouponSchema, type TAppliedCoupon } from "@/schemas/coupons";
 import type { TCouponEntity } from "@/services/drizzle/schema";
 import { assertCouponCoherence } from "./creation";
 import { FREE_SHIPPING_ALREADY_FREE_REASON, FREE_SHIPPING_DELIVERY_ONLY_REASON, evaluateCouponAgainstCart, evaluateCouponAgainstSaleValue } from "./engine";
 import {
 	applyFreeShippingCoupon,
+	hasAppliedCouponValuesDrifted,
 	isFreeShippingRedemption,
 	readAppliedCouponWaivedDeliveryFee,
 	readCouponRedemptionItemDiscount,
 	readCouponRedemptionWaivedDeliveryFee,
+	reconcileAppliedCouponValues,
 	resolveAppliedCouponValues,
 } from "./free-shipping";
 
@@ -154,6 +156,48 @@ test("the cart charges no delivery fee while a free-shipping coupon is applied, 
 	assert.equal(applyFreeShippingCoupon(regularCoupon), regularCoupon);
 	const noCoupon = { taxaEntrega: 8.5, cupomResgate: null };
 	assert.equal(applyFreeShippingCoupon(noCoupon), noCoupon);
+});
+
+test("shop checkout: re-syncing a free-shipping coupon never turns the waived fee into an item discount", () => {
+	// Pedido de R$ 56 com taxa fixa de R$ 7 (FRETEGRATIS da Congelatte).
+	const shopCart = [{ chave: "item-1", produtoId: "produto-1", quantidade: 2, valorVendaUnitario: 28 }];
+	const context = { entregaModalidade: "ENTREGA" as const, comprasAnterioresConfirmadas: 0, taxaEntrega: 7 };
+	const evaluation = evaluateCouponAgainstCart({ coupon: freeShippingCoupon, targets: [], cartItems: shopCart, context });
+	assert.equal(evaluation.elegivel, true);
+	if (!evaluation.elegivel) return;
+
+	// Os pontos de partida que o checkout pode ter: aplicado pela etapa de benefícios e o estado que
+	// a ressincronização antiga produzia (desconto de R$ 7 somado à entrega grátis).
+	const startingCoupons: TAppliedCoupon[] = [
+		{ cupomId: "c", valorDesconto: 0, taxaEntregaIsenta: 7 },
+		{ cupomId: "c", valorDesconto: 7, taxaEntregaIsenta: 7 },
+		{ cupomId: "c", valorDesconto: 7 },
+	];
+	for (const start of startingCoupons) {
+		// CheckoutSheet e CashbackStep ressincronizam com a mesma avaliação; aplicar duas vezes tem de
+		// chegar a um ponto fixo, senão os dois efeitos ficam alternando o cupom.
+		const once: TAppliedCoupon = reconcileAppliedCouponValues(start, evaluation);
+		const twice: TAppliedCoupon = reconcileAppliedCouponValues(once, evaluation);
+		assert.equal(twice, once);
+		assert.equal(once.valorDesconto, 0);
+		assert.equal(readAppliedCouponWaivedDeliveryFee(once), 7);
+		assert.equal(AppliedCouponSchema.safeParse(once).success, true);
+		// A rota de pedidos da loja recusa o envio quando isto é verdadeiro.
+		assert.equal(hasAppliedCouponValuesDrifted(once, resolveAppliedCouponValues(evaluation)), false);
+	}
+
+	const doubleCounted: TAppliedCoupon = { cupomId: "c", valorDesconto: 7, taxaEntregaIsenta: 7 };
+	assert.equal(hasAppliedCouponValuesDrifted(doubleCounted, resolveAppliedCouponValues(evaluation)), true);
+	const synced: TAppliedCoupon = { cupomId: "c", valorDesconto: 0, taxaEntregaIsenta: 7 };
+	assert.equal(reconcileAppliedCouponValues(synced, evaluation), synced);
+});
+
+test("shop checkout: re-syncing a regular discount coupon keeps updating the item discount", () => {
+	const applied: TAppliedCoupon = { cupomId: "c", valorDesconto: 5 };
+	const evaluation = { elegivel: true as const, valorDesconto: 10, aplicacao: "VENDA_TOTAL" as const, descontosPorItem: [] };
+	const reconciled = reconcileAppliedCouponValues(applied, evaluation);
+	assert.deepEqual(reconciled, { cupomId: "c", valorDesconto: 10, taxaEntregaIsenta: null });
+	assert.equal(hasAppliedCouponValuesDrifted(reconciled, resolveAppliedCouponValues(evaluation)), false);
 });
 
 test("a free-shipping redemption is a waived fee, never an item discount", () => {

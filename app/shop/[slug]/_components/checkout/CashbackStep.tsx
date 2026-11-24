@@ -12,7 +12,7 @@ import CouponRemovalAction from "@/components/Coupons/CouponRemovalAction";
 import CouponGiftChoices from "@/components/Coupons/CouponGiftChoices";
 import { filterCouponGiftProducts, type TCouponGiftOption } from "@/lib/coupons/gifts";
 import { resolveAppliedCouponEvaluation } from "@/lib/coupons/gifts";
-import { readAppliedCouponWaivedDeliveryFee, resolveAppliedCouponValues } from "@/lib/coupons/free-shipping";
+import { readAppliedCouponWaivedDeliveryFee, reconcileAppliedCouponValues, resolveAppliedCouponValues } from "@/lib/coupons/free-shipping";
 import { buildShopCartLines } from "@/lib/shop/cart";
 import { HAPTICS, triggerHaptic } from "@/lib/shop/haptics";
 import { ArrowRight, BadgePercent, Gift, Info, Loader2, Minus, Plus, Ticket } from "lucide-react";
@@ -147,13 +147,8 @@ export default function CashbackStep({ onNext }: CashbackStepProps) {
 			toast.warning("O cupom aplicado deixou de valer para o carrinho atual e foi removido.");
 			return;
 		}
-		const couponValues = resolveAppliedCouponValues(evaluation);
-		if (
-			Math.abs(couponValues.valorDesconto - appliedCoupon.valorDesconto) > (appliedCoupon.brinde ? 0.000001 : 0.01) ||
-			Math.abs((couponValues.taxaEntregaIsenta ?? 0) - readAppliedCouponWaivedDeliveryFee(appliedCoupon)) > 0.01
-		) {
-			orderState.updateCoupon({ ...appliedCoupon, ...couponValues });
-		}
+		const reconciledCoupon = reconcileAppliedCouponValues(appliedCoupon, evaluation);
+		if (reconciledCoupon !== appliedCoupon) orderState.updateCoupon(reconciledCoupon);
 	}, [appliedCoupon, availableCoupons, orderState.updateCoupon]);
 
 	// Benefícios são mutuamente exclusivos (o estado limpa os irmãos ao aplicar um) — sem o aviso,

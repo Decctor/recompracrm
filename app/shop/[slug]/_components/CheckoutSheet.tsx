@@ -5,6 +5,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { getErrorMessage } from "@/lib/errors";
 import { createShopOrder } from "@/lib/mutations/shop";
 import { HAPTICS, triggerHaptic } from "@/lib/shop/haptics";
+import { reconcileAppliedCouponValues } from "@/lib/coupons/free-shipping";
 import { resolveAppliedCouponEvaluation } from "@/lib/coupons/gifts";
 import { buildShopCartLines } from "@/lib/shop/cart";
 import {
@@ -92,9 +93,10 @@ export default function CheckoutSheet() {
 		if (!evaluation?.elegivel) {
 			orderState.updateCoupon(null);
 			toast.warning("O cupom deixou de valer para este pedido e foi removido.");
-		} else if (Math.abs(evaluation.valorDesconto - appliedCoupon.valorDesconto) > (appliedCoupon.brinde ? 0.000001 : 0.01)) {
-			orderState.updateCoupon({ ...appliedCoupon, valorDesconto: evaluation.valorDesconto });
+			return;
 		}
+		const reconciledCoupon = reconcileAppliedCouponValues(appliedCoupon, evaluation);
+		if (reconciledCoupon !== appliedCoupon) orderState.updateCoupon(reconciledCoupon);
 	}, [appliedCoupon, availableCoupons, orderState.updateCoupon]);
 	const hasCouponBenefit = isCustomerIdentified && (isLoadingCoupons || (availableCoupons?.length ?? 0) > 0 || !!orderState.state.coupon.resgate);
 	const { descontoCashback: supportsCashbackDiscount, recompensas: supportsRewards } = getShopCashbackCapabilities(program);

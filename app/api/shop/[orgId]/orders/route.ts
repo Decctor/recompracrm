@@ -4,7 +4,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { recomputeClientDuplicatesSafely } from "@/lib/clients/duplicates";
 import { getAvailableCouponsForClient } from "@/lib/coupons/availability";
 import { type TCouponCartItem, evaluateCouponAgainstCart } from "@/lib/coupons/engine";
-import { readAppliedCouponWaivedDeliveryFee, resolveAppliedCouponValues } from "@/lib/coupons/free-shipping";
+import { hasAppliedCouponValuesDrifted, readAppliedCouponWaivedDeliveryFee, resolveAppliedCouponValues } from "@/lib/coupons/free-shipping";
 import { formatPhoneAsBase } from "@/lib/formatting";
 import { resolvePaymentFinancialAccounts } from "@/lib/payments";
 import { resolveCatalogOrderItem, type TResolvedCatalogOrderItem } from "@/lib/products/resolve-catalog-order-item";
@@ -286,10 +286,7 @@ async function validateCouponRequest({
   if (!evaluation.elegivel) throw new createHttpError.BadRequest(`Cupom não elegível para este pedido: ${evaluation.motivo}`);
   // O motor é o autoritativo; o que o cliente declarou só serve para detectar carrinho desatualizado.
   const couponValues = resolveAppliedCouponValues(evaluation);
-  if (
-    Math.abs(couponValues.valorDesconto - appliedCoupon.valorDesconto) > 0.01 ||
-    Math.abs((couponValues.taxaEntregaIsenta ?? 0) - readAppliedCouponWaivedDeliveryFee(appliedCoupon)) > 0.01
-  ) {
+  if (hasAppliedCouponValuesDrifted(appliedCoupon, couponValues)) {
     throw new createHttpError.BadRequest("O desconto do cupom está desatualizado. Reaplique o cupom e tente novamente.");
   }
 
