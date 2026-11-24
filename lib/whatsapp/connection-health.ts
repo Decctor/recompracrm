@@ -1,13 +1,14 @@
 import { appRoutes } from "@/lib/navigation/routes";
 import { db } from "@/services/drizzle";
 import { organizationMembers, users } from "@/services/drizzle/schema";
-import { whatsappConnectionPhones, whatsappConnections } from "@/services/drizzle/schema/whatsapp-connections";
+import { type TWhatsappPhoneDisconnection, whatsappConnectionPhones, whatsappConnections } from "@/services/drizzle/schema/whatsapp-connections";
 import { resend } from "@/services/resend";
 import dayjs from "dayjs";
 import { and, eq, sql } from "drizzle-orm";
 import { mapMetaPhoneFields, META_PHONE_STATE_FIELDS } from "./channel-activation";
 import {
 	classifyWhatsappPhoneHealth,
+	pickWhatsappDisconnection,
 	resolveNextWhatsappPhoneHealth,
 	type TWhatsappAccountHealthEvent,
 	type TWhatsappPhoneHealthCheck,
@@ -120,7 +121,12 @@ async function recordWhatsappPhoneHealth({ phoneId, check }: { phoneId: string; 
 			.for("update");
 		if (!row) return null;
 
-		const next = resolveNextWhatsappPhoneHealth({ current: row.metadados?.saude, check, now: new Date() });
+		const next = resolveNextWhatsappPhoneHealth({
+			current: row.metadados?.saude,
+			check,
+			now: new Date(),
+			desconexao: row.metadados?.desconexao,
+		});
 		if (!next) return null;
 
 		await tx
@@ -240,16 +246,38 @@ export async function runWhatsappConnectionsHealthCheck({ whatsappBusinessAccoun
 	return summary;
 }
 
+/**
+ * Guarda o motivo do PARTNER_REMOVED nos telefones do WABA antes da checagem: é dele que sai a
+ * mensagem da falha (e do e-mail), e ele precisa sobreviver às checagens seguintes do cron.
+ */
+async function recordWhatsappDisconnection({
+	whatsappBusinessAccountId,
+	desconexao,
+}: {
+	whatsappBusinessAccountId: string;
+	desconexao: TWhatsappPhoneDisconnection;
+}) {
+	await db
+		.update(whatsappConnectionPhones)
+		.set({
+			metadados: sql`coalesce(${whatsappConnectionPhones.metadados}, '{}'::jsonb) || jsonb_build_object('desconexao', ${JSON.stringify(desconexao)}::jsonb)`,
+		})
+		.where(eq(whatsappConnectionPhones.whatsappBusinessAccountId, whatsappBusinessAccountId));
+}
+
 /** Processador dos webhooks de conta/número: lança se alguma checagem falhou, para o inbox registrar FALHOU. */
 export async function handleWhatsappAccountHealthEvents(events: TWhatsappAccountHealthEvent[]) {
 	const accountIds = [...new Set(events.map((event) => event.whatsappBusinessAccountId))];
 	for (const whatsappBusinessAccountId of accountIds) {
+		const accountEvents = events.filter((event) => event.whatsappBusinessAccountId === whatsappBusinessAccountId);
 		console.log(`${LOG} Evento de conta recebido:`, {
 			whatsappBusinessAccountId,
-			eventos: events
-				.filter((event) => event.whatsappBusinessAccountId === whatsappBusinessAccountId)
-				.map((event) => `${event.campo}:${event.evento ?? "?"}`),
+			eventos: accountEvents.map((event) =>
+				[event.campo, event.evento ?? "?", event.motivoDesconexao, event.desconexaoIniciadaPor].filter(Boolean).join(":"),
+			),
 		});
+		const desconexao = pickWhatsappDisconnection(accountEvents, new Date());
+		if (desconexao) await recordWhatsappDisconnection({ whatsappBusinessAccountId, desconexao });
 		const summary = await runWhatsappConnectionsHealthCheck({ whatsappBusinessAccountId });
 		if (summary.erros.length > 0) {
 			throw new Error(`Checagem de saúde falhou para ${summary.erros.length} telefone(s) do WABA ${whatsappBusinessAccountId}.`);

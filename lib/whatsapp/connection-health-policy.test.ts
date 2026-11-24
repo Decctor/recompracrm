@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { classifyWhatsappPhoneHealth, parseWhatsappAccountHealthWebhook, resolveNextWhatsappPhoneHealth } from "./connection-health-policy";
+import {
+	classifyWhatsappPhoneHealth,
+	describeWhatsappDisconnection,
+	parseWhatsappAccountHealthWebhook,
+	pickWhatsappDisconnection,
+	resolveNextWhatsappPhoneHealth,
+} from "./connection-health-policy";
 
 const NOW = new Date("2026-09-28T12:00:00.000Z");
 const DAY = 24 * 60 * 60 * 1000;
@@ -61,7 +67,7 @@ test("recuperação limpa a sequência de falha, e uma nova falha avisa de novo"
 	assert.equal(again?.notify, true);
 });
 
-test("eventos de conta/número: um por change, WABA vem do entry.id", () => {
+test("eventos de conta/número: um por change, WABA vem do entry.id quando não há waba_info", () => {
 	const events = parseWhatsappAccountHealthWebhook({
 		object: "whatsapp_business_account",
 		entry: [
@@ -71,9 +77,100 @@ test("eventos de conta/número: um por change, WABA vem do entry.id", () => {
 		],
 	});
 	assert.deepEqual(events, [
-		{ whatsappBusinessAccountId: "111", campo: "account_update", evento: "PARTNER_REMOVED" },
-		{ whatsappBusinessAccountId: "333", campo: "phone_number_quality_update", evento: "FLAGGED" },
+		{ whatsappBusinessAccountId: "111", campo: "account_update", evento: "PARTNER_REMOVED", motivoDesconexao: null, desconexaoIniciadaPor: null },
+		{ whatsappBusinessAccountId: "333", campo: "phone_number_quality_update", evento: "FLAGGED", motivoDesconexao: null, desconexaoIniciadaPor: null },
 	]);
 	assert.deepEqual(parseWhatsappAccountHealthWebhook({ entry: "invalid" }), []);
 	assert.deepEqual(parseWhatsappAccountHealthWebhook({ entry: [{ id: "1", changes: [{ field: "toString" }] }] }), []);
+});
+
+// Formato real recebido em 05/10/2026: o entry.id é o portfólio do RecompraCRM, o WABA da loja vem em waba_info.
+const PARTNER_REMOVED_BODY = {
+	object: "whatsapp_business_account",
+	entry: [
+		{
+			id: "1314739170112586",
+			time: 1791197163,
+			changes: [
+				{
+					field: "account_update",
+					value: {
+						event: "PARTNER_REMOVED",
+						waba_info: { waba_id: "1908348169969369", owner_business_id: "1163011311090238" },
+						disconnection_info: { reason: "PRIMARY_INACTIVITY", initiated_by: "SYSTEM" },
+					},
+				},
+			],
+		},
+	],
+};
+
+test("eventos de parceiro: WABA vem de waba_info, com o motivo da desconexão", () => {
+	assert.deepEqual(parseWhatsappAccountHealthWebhook(PARTNER_REMOVED_BODY), [
+		{
+			whatsappBusinessAccountId: "1908348169969369",
+			campo: "account_update",
+			evento: "PARTNER_REMOVED",
+			motivoDesconexao: "PRIMARY_INACTIVITY",
+			desconexaoIniciadaPor: "SYSTEM",
+		},
+	]);
+});
+
+test("só PARTNER_REMOVED vira desconexão; o último do lote vence", () => {
+	const [removed] = parseWhatsappAccountHealthWebhook(PARTNER_REMOVED_BODY);
+	const uninstalled = { ...removed, evento: "PARTNER_APP_UNINSTALLED", motivoDesconexao: null, desconexaoIniciadaPor: null };
+	assert.equal(pickWhatsappDisconnection([uninstalled], NOW), null);
+	assert.deepEqual(pickWhatsappDisconnection([uninstalled, removed], NOW), {
+		evento: "PARTNER_REMOVED",
+		motivo: "PRIMARY_INACTIVITY",
+		iniciadoPor: "SYSTEM",
+		recebidoEm: NOW.toISOString(),
+	});
+});
+
+test("mensagem da desconexão por motivo", () => {
+	assert.match(
+		describeWhatsappDisconnection({ motivo: "PRIMARY_INACTIVITY", iniciadoPor: "SYSTEM" }),
+		/app WhatsApp Business ficou muito tempo sem ser aberto/,
+	);
+	assert.match(describeWhatsappDisconnection({ motivo: "ACCOUNT_DISCONNECTED", iniciadoPor: "USER" }), /Alguém da empresa desconectou/);
+	assert.match(describeWhatsappDisconnection({ motivo: null, iniciadoPor: null }), /removido como parceiro/);
+});
+
+test("a desconexão explica a falha de acesso atual e sobrevive às checagens seguintes", () => {
+	const check = { status: "FALHA" as const, motivo: "SEM_ACESSO", mensagem: "sem acesso" };
+	const desconexao = {
+		evento: "PARTNER_REMOVED",
+		motivo: "PRIMARY_INACTIVITY",
+		iniciadoPor: "SYSTEM",
+		recebidoEm: new Date(NOW.getTime() - 2 * 60 * 60 * 1000).toISOString(),
+	};
+	const expected = describeWhatsappDisconnection(desconexao);
+
+	const first = resolveNextWhatsappPhoneHealth({ current: null, check, now: NOW, desconexao });
+	assert.equal(first?.saude.motivo, "SEM_ACESSO");
+	assert.equal(first?.saude.mensagem, expected);
+
+	const weekLater = resolveNextWhatsappPhoneHealth({ current: first?.saude, check, now: new Date(NOW.getTime() + 7 * DAY), desconexao });
+	assert.equal(weekLater?.saude.mensagem, expected);
+	assert.equal(weekLater?.notify, true);
+});
+
+test("desconexão antiga ou falha de outro tipo mantém a mensagem da checagem", () => {
+	const check = { status: "FALHA" as const, motivo: "SEM_ACESSO", mensagem: "sem acesso" };
+	const stale = {
+		evento: "PARTNER_REMOVED",
+		motivo: "PRIMARY_INACTIVITY",
+		iniciadoPor: "SYSTEM",
+		recebidoEm: new Date(NOW.getTime() - 30 * DAY).toISOString(),
+	};
+	assert.equal(resolveNextWhatsappPhoneHealth({ current: null, check, now: NOW, desconexao: stale })?.saude.mensagem, "sem acesso");
+
+	const recent = { ...stale, recebidoEm: NOW.toISOString() };
+	const unavailable = { status: "FALHA" as const, motivo: "TELEFONE_INDISPONIVEL", mensagem: "status FLAGGED" };
+	assert.equal(resolveNextWhatsappPhoneHealth({ current: null, check: unavailable, now: NOW, desconexao: recent })?.saude.mensagem, "status FLAGGED");
+
+	const healthy = resolveNextWhatsappPhoneHealth({ current: null, check: { status: "SAUDAVEL" }, now: NOW, desconexao: recent });
+	assert.equal(healthy?.saude.mensagem, null);
 });
