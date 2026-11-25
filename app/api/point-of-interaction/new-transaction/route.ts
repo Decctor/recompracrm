@@ -770,8 +770,8 @@ export async function preparePointOfInteractionTransaction({ input, operatorCont
 		}
 
 		// FIFTH STEP: Processing sale processing (if applicable)
+		const saleDate = new Date();
 		if (transactionRequiresSaleProcessing) {
-			const saleDate = new Date();
 			const insertedSaleResponse = await tx
 				.insert(sales)
 				.values({
@@ -916,6 +916,7 @@ export async function preparePointOfInteractionTransaction({ input, operatorCont
 				idempotencyKey: `poi:${occurrenceId}`,
 				snapshot: {
 					compraValor: effectiveSaleValue,
+					dataCompra: transactionSaleId ? saleDate.toISOString() : undefined,
 					comprasQuantidadeAnterior: transactionRequiresSaleProcessing ? clientCurrentPurchaseCount - 1 : 0,
 					comprasQuantidadePosterior: transactionRequiresSaleProcessing ? clientCurrentPurchaseCount : 0,
 					comprasValorAnterior: transactionRequiresSaleProcessing ? clientCurrentPurchaseValue - effectiveSaleValue : 0,

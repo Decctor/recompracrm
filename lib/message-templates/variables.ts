@@ -31,6 +31,8 @@ export type TMessageTemplateVariables = {
 	clientFavoriteProductGroup: string | null;
 	clientSuggestedProduct: string | null;
 	purchaseValue: string;
+	purchaseCode: string;
+	purchaseDate: string;
 	purchaseCashbackAccumulated: string;
 	purchaseCashbackNewBalance: string;
 	purchaseSellerName: string;
@@ -111,6 +113,20 @@ export const MessageTemplateVariables: TMessageTemplateVariable[] = [
 		label: "Valor da Compra",
 		value: "purchaseValue",
 		description: "Valor total da compra que acionou a campanha.",
+		contexto: "COMPRA",
+	},
+	{
+		id: "purchase_code",
+		label: "Código da Compra",
+		value: "purchaseCode",
+		description: "Últimos 8 caracteres do ID da venda, em maiúsculas. Referência interna, não é o número do cupom fiscal.",
+		contexto: "COMPRA",
+	},
+	{
+		id: "purchase_date",
+		label: "Data da Compra",
+		value: "purchaseDate",
+		description: "Data da compra no formato DD/MM/AAAA, no fuso de São Paulo.",
 		contexto: "COMPRA",
 	},
 	{
@@ -284,6 +300,8 @@ export const MessageTemplateVariableExampleValues: Record<string, string> = {
 	clientFavoriteProductGroup: "Cafés especiais",
 	clientSuggestedProduct: "Croissant artesanal",
 	purchaseValue: "R$ 120,00",
+	purchaseCode: "A3B64A9E",
+	purchaseDate: "24/11/2026",
 	purchaseCashbackAccumulated: "R$ 12,00",
 	purchaseCashbackNewBalance: "R$ 42,00",
 	purchaseSellerName: "Mariana",

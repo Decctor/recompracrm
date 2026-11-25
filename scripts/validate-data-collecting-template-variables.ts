@@ -216,6 +216,8 @@ async function buildSyntheticInteractionForSale({
 	const metadata = buildBasePurchaseInteractionMetadata({
 		terminologia: terminology,
 		saleValue: sale.valorTotal,
+		saleId: sale.id,
+		saleDate: sale.dataVenda?.toISOString(),
 		transactionAccumulatedCashback: accumulatedInPurchase,
 		availableBalance: activeAccumulations[0]?.saldoValorPosterior ?? 0,
 		accumulatedTotal: 0,

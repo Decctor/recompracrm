@@ -26,6 +26,8 @@ type TCampaignCashbackGenerationConfig = {
 type TBuildBasePurchaseInteractionMetadataParams = {
 	terminologia: TCashbackProgramTerminologyEnum;
 	saleValue: number;
+	saleId?: string;
+	saleDate?: string;
 	transactionAccumulatedCashback: number;
 	availableBalance: number;
 	accumulatedTotal: number;
@@ -59,6 +61,8 @@ export function buildBaseCashbackInteractionMetadata({
 export function buildBasePurchaseInteractionMetadata({
 	terminologia,
 	saleValue,
+	saleId,
+	saleDate,
 	transactionAccumulatedCashback,
 	availableBalance,
 	accumulatedTotal,
@@ -70,6 +74,8 @@ export function buildBasePurchaseInteractionMetadata({
 	return {
 		terminologia,
 		compraValor: saleValue,
+		compraCodigo: saleId?.slice(-8).toUpperCase(),
+		compraData: saleDate,
 		compraCashbackAcumulado: transactionAccumulatedCashback,
 		compraCashbackNovoSaldo: availableBalance,
 		compraVendedorNome: sellerName,

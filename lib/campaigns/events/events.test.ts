@@ -24,6 +24,8 @@ import type { TPersistedSaleForEffects, TResolvedAuxiliaryEntities } from "@/lib
 import type { TCanonicalSale, TCanonicalImportBatch } from "@/lib/data-connectors/types";
 import { recordCampaignOccurrence } from "./occurrences";
 import { recordPurchaseCampaignEvent } from "./purchases";
+import { buildInteractionMessageVariables } from "@/lib/interactions/message-preview";
+import { getVariablesForTrigger } from "@/lib/message-templates/variables";
 import { recordSegmentationCampaignEvents } from "@/lib/campaigns/engine/segmentation";
 
 const SINGLE_RECEIPT = { versao: 1, comportamentoParcelas: "TRANSACAO_UNICA", intervaloMeses: null } as const;
@@ -283,6 +285,58 @@ test("duplicate confirmation and repeated worker delivery create one dispatch an
 	assert.equal((await database.query.campaignDispatchRecipients.findMany()).length, 1);
 	assert.equal((await database.query.cashbackProgramTransactions.findMany()).length, 1);
 	assert.equal((await database.query.interactions.findMany()).length, 0);
+});
+
+test("purchase template references preserve the sale date and render in the operation timezone", async () => {
+	await campaign("new-purchase", { gatilhoTipo: "NOVA-COMPRA" });
+	const purchasedAt = new Date("2026-11-25T01:30:00.000Z");
+	const saleId = "12345678-1234-1234-1234-1234a3b64a9e";
+	await database.update(schema.sales).set({ id: saleId, dataVenda: purchasedAt, statusVenda: "CONFIRMADA" }).where(eq(schema.sales.id, "sale"));
+	await database.transaction((tx) =>
+		captureSaleCampaignEvent({
+			tx: asTransaction(tx),
+			organizationId: "org",
+			saleId,
+			clientId: "client",
+			occurredAt: new Date(),
+			accumulation: null,
+			enabled: true,
+		}),
+	);
+	const event = await database.query.campaignEvents.findFirst();
+	assert.equal(event?.contexto.dataCompra, purchasedAt.toISOString());
+	// Later sale edits must not change the date of the occurrence already captured.
+	await database
+		.update(schema.sales)
+		.set({ dataVenda: new Date("2026-11-26T12:00:00.000Z") })
+		.where(eq(schema.sales.id, saleId));
+	await processEvent();
+	const recipient = await database.query.campaignDispatchRecipients.findFirst();
+	assert.equal(recipient?.contexto?.compraCodigo, "A3B64A9E");
+	assert.equal(recipient?.contexto?.compraData, purchasedAt.toISOString());
+	const variables = buildInteractionMessageVariables({ client: { nome: "Maria" }, contextMetadados: recipient?.contexto });
+	assert.equal(variables.purchaseCode, "A3B64A9E");
+	assert.equal(variables.purchaseDate, "24/11/2026");
+	const available = getVariablesForTrigger("NOVA-COMPRA").map((variable) => variable.value);
+	assert.ok(available.includes("purchaseCode"));
+	assert.ok(available.includes("purchaseDate"));
+	assert.ok(!getVariablesForTrigger("RECORRENTE").some((variable) => variable.value === "purchaseCode"));
+});
+
+test("older purchase events resolve the sale reference and absent metadata stays empty", async () => {
+	await campaign("new-purchase", { gatilhoTipo: "NOVA-COMPRA" });
+	await confirm();
+	const event = await database.query.campaignEvents.findFirst();
+	assert.ok(event);
+	await database.update(schema.campaignEvents).set({ contexto: snapshot }).where(eq(schema.campaignEvents.id, event.id));
+	const purchasedAt = new Date("2026-11-24T15:00:00.000Z");
+	await database.update(schema.sales).set({ dataVenda: purchasedAt }).where(eq(schema.sales.id, "sale"));
+	await processEvent();
+	const recipient = await database.query.campaignDispatchRecipients.findFirst();
+	assert.equal(recipient?.contexto?.compraData, purchasedAt.toISOString());
+	const variables = buildInteractionMessageVariables({ client: { nome: "Maria" } });
+	assert.equal(variables.purchaseCode, "");
+	assert.equal(variables.purchaseDate, "");
 });
 
 test("third purchase uses a fresh live total and a distinct threshold", async () => {

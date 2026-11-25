@@ -920,6 +920,7 @@ const createSaleRoute: PagesRouteHandler<TCreateSaleOutput> = async (req, res) =
 				idempotencyKey: `cashback-venda:${saleId}`,
 				snapshot: {
 					compraValor: input.saleValue,
+					dataCompra: saleDate.toISOString(),
 					comprasQuantidadeAnterior: 0,
 					comprasQuantidadePosterior: 0,
 					comprasValorAnterior: 0,

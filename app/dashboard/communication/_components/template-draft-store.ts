@@ -82,6 +82,8 @@ export const MessageTemplateVariableExampleValues: Record<string, string> = {
 	clientFavoriteProductGroup: "Cafés especiais",
 	clientSuggestedProduct: "Croissant artesanal",
 	purchaseValue: "R$ 120,00",
+	purchaseCode: "A3B64A9E",
+	purchaseDate: "24/11/2026",
 	purchaseCashbackAccumulated: "R$ 12,00",
 	purchaseCashbackNewBalance: "R$ 42,00",
 	purchaseSellerName: "Mariana",

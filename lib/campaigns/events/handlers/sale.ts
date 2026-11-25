@@ -98,7 +98,7 @@ async function processSaleEvent({ tx, event, payload, now }: Parameters<TCampaig
 	)
 		return { dispatches: [], discardReason: "Fonte de compra inválida." };
 	const [sale] = await tx
-		.select({ clienteId: sales.clienteId, statusVenda: sales.statusVenda })
+		.select({ clienteId: sales.clienteId, statusVenda: sales.statusVenda, dataVenda: sales.dataVenda })
 		.from(sales)
 		.where(and(eq(sales.id, event.fonteId), eq(sales.organizacaoId, event.organizacaoId)))
 		.for("share");
@@ -177,6 +177,8 @@ async function processSaleEvent({ tx, event, payload, now }: Parameters<TCampaig
 							...buildBasePurchaseInteractionMetadata({
 								terminologia: snapshot.terminologia,
 								saleValue: snapshot.compraValor,
+								saleId: event.fonteTipo === "VENDA" ? event.fonteId : undefined,
+								saleDate: snapshot.dataCompra ?? (event.fonteTipo === "VENDA" ? sale?.dataVenda?.toISOString() : undefined),
 								transactionAccumulatedCashback: snapshot.cashbackAcumulado,
 								availableBalance: snapshot.cashbackSaldoDisponivel,
 								accumulatedTotal: snapshot.cashbackTotalAcumulado,

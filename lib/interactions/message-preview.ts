@@ -1,4 +1,5 @@
 import { formatCashbackValue, formatToMoney } from "@/lib/formatting";
+import { formatDateTimeInOperationTimezone } from "@/lib/operation-timezone";
 import type { TInteractionContextMetadados, TMessageTemplateVariables } from "@/lib/message-templates";
 import type { TCashbackProgramTerminologyEnum } from "@/schemas/enums";
 
@@ -29,6 +30,8 @@ export function buildContextVariablesMap(
 ): TInteractionContextVariablesMap {
 	return {
 		purchaseValue: formatToMoney(ctx?.compraValor ?? 0),
+		purchaseCode: ctx?.compraCodigo ?? "",
+		purchaseDate: formatDateTimeInOperationTimezone(ctx?.compraData)?.split(" ")[0] ?? "",
 		purchaseCashbackAccumulated: formatCashbackValue(ctx?.compraCashbackAcumulado ?? 0, terminology),
 		purchaseCashbackNewBalance: formatCashbackValue(ctx?.compraCashbackNovoSaldo ?? 0, terminology),
 		purchaseSellerName: ctx?.compraVendedorNome ?? "",

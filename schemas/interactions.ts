@@ -38,6 +38,8 @@ export const InteractionContextMetadataSchema = z.object({
 	terminologia: CashbackProgramTerminologyEnum.optional(),
 	cashbackAcumuladoValor: z.number().optional().nullable(),
 	compraValor: z.number().optional(),
+	compraCodigo: z.string({ required_error: "Código da compra não informado.", invalid_type_error: "Código da compra inválido." }).optional(),
+	compraData: z.string({ required_error: "Data da compra não informada.", invalid_type_error: "Data da compra inválida." }).datetime().optional(),
 	compraCashbackAcumulado: z.number().optional(),
 	compraCashbackNovoSaldo: z.number().optional(),
 	compraVendedorNome: z.string().optional(),

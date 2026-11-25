@@ -34,7 +34,7 @@ export async function captureSaleCampaignEvent({
 	if (type === "CASHBACK_ACUMULADO" && (!accumulation?.transactionId || accumulation.alreadyProcessed || accumulation.accumulatedValue <= 0)) return;
 	const sale = await tx.query.sales.findFirst({
 		where: and(eq(sales.id, saleId), eq(sales.organizacaoId, organizationId)),
-		columns: { valorTotal: true, vendedorNome: true, clienteId: true, statusVenda: true, processamentoOrigem: true },
+		columns: { valorTotal: true, vendedorNome: true, clienteId: true, statusVenda: true, processamentoOrigem: true, dataVenda: true },
 	});
 	if (!sale || sale.statusVenda !== "CONFIRMADA" || sale.clienteId !== clientId || sale.valorTotal <= 0) return;
 	if (type === "CASHBACK_ACUMULADO" && sale.processamentoOrigem !== "INTERNO") return;
@@ -82,6 +82,7 @@ export async function captureSaleCampaignEvent({
 			dataEvento: occurredAt,
 			contexto: {
 				compraValor: sale.valorTotal,
+				dataCompra: sale.dataVenda?.toISOString(),
 				comprasQuantidadeAnterior: history?.quantidade ?? 0,
 				comprasQuantidadePosterior: (history?.quantidade ?? 0) + 1,
 				comprasValorAnterior: history?.valor ?? 0,
