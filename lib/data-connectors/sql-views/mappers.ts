@@ -104,7 +104,10 @@ export function mapSqlViewsClient({
 		name: name || (basePhone ? `CLIENTE ${basePhone}` : `CLIENTE ${sale.cliente_id}`),
 		phone: basePhone ? formatToPhone(rawPhone) : "",
 		basePhone,
-		cpfCnpj: formatToCPForCNPJ(client?.cpf_cnpj || sale.cliente_cpf_cnpj || "") || null,
+		// O CPF identifica o cliente na importação (vem antes do telefone), então vem do cadastro. O da
+		// venda é o CPF na nota, que pode ser de outra pessoa (a nota no CPF do cônjuge): só vale
+		// quando a fonte não expôs o cadastro.
+		cpfCnpj: formatToCPForCNPJ((client ? client.cpf_cnpj : sale.cliente_cpf_cnpj) || "") || null,
 		stateRegistration: client?.inscricao_estadual,
 		email: client?.email,
 		birthDate,

@@ -26,8 +26,12 @@ export type TCampaignWithAudienceRelations = TCampaignEntity & {
 
 export type TResolvedClientForImport = {
 	id: string;
+	/** Código do cliente na fonte (`clients.idExterno`); gravado quando a venda casa pelo CPF. */
+	externalId: string | null;
 	name: string;
 	basePhone: string;
+	/** CPF/CNPJ normalizado (`normalizeClientDocument`); null sem documento válido. */
+	document: string | null;
 	rfmTitle: string | null;
 	metadataTotalPurchases: number;
 	metadataTotalPurchaseValue: number;
@@ -47,6 +51,11 @@ export type TResolvedAuxiliaryEntities = {
 	clientsByExternalId: Map<string, TResolvedClientForImport>;
 	clientsByName: Map<string, TResolvedClientForImport>;
 	clientsByBasePhone: Map<string, TResolvedClientForImport>;
+	/**
+	 * Por CPF/CNPJ normalizado. Lista porque o CRM tem duplicatas pelo mesmo documento; o desempate é
+	 * de `matchClientForCanonicalSale`.
+	 */
+	clientsByDocument: Map<string, TResolvedClientForImport[]>;
 	productsByCode: Map<string, string>;
 	/**
 	 * Vínculos de catálogo (catalog_links) por id do item remoto E por id de contexto do item (o

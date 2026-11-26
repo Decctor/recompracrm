@@ -1,4 +1,5 @@
 import type { TCanonicalImportBatch } from "@/lib/data-connectors";
+import { normalizeClientDocument } from "./client-document";
 
 /**
  * Chaves que um lote canônico pode consultar no contexto auxiliar (`TResolvedAuxiliaryEntities`).
@@ -14,6 +15,8 @@ export type TBatchLookupKeys = {
 	clientExternalIds: string[];
 	clientBasePhones: string[];
 	clientNames: string[];
+	/** CPF/CNPJ normalizado (`normalizeClientDocument`), só dígitos. */
+	clientDocuments: string[];
 	productCodes: string[];
 	productExternalItemIds: string[];
 	sellerIdentifiers: string[];
@@ -36,6 +39,7 @@ export function collectBatchLookupKeys(batch: TCanonicalImportBatch): TBatchLook
 		clientExternalIds: uniqueNonEmpty(saleClients.map((client) => client?.externalId)),
 		clientBasePhones: uniqueNonEmpty(saleClients.map((client) => client?.basePhone)),
 		clientNames: uniqueNonEmpty(saleClients.map((client) => (client ? normalizeClientName(client.name) : null))),
+		clientDocuments: uniqueNonEmpty(saleClients.map((client) => normalizeClientDocument(client?.cpfCnpj))),
 		productCodes: uniqueNonEmpty([...batch.products.map((product) => product.code), ...saleItems.map((item) => item.productCode)]),
 		productExternalItemIds: uniqueNonEmpty([
 			...batch.products.map((product) => product.externalId),

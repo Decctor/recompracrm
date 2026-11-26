@@ -1,9 +1,11 @@
 import type { TCanonicalClient, TCanonicalImportBatch } from "@/lib/data-connectors";
 import { normalizeLocation } from "@/lib/geo/brazilian-locations";
+import { formatToCPForCNPJ } from "@/lib/formatting";
 import { linkPartnerToClient } from "@/lib/partners/link-partner-to-client";
 import { catalogLinks, clients, partners, productAddOnOptions, productAddOns, productVariants, products, sellers } from "@/services/drizzle/schema";
-import { and, arrayOverlaps, asc, eq, inArray, ne, or, sql } from "drizzle-orm";
+import { and, arrayOverlaps, asc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { indexCatalogLinksByExternalItemId } from "./catalog-link-index";
+import { clientDocumentsConflict, normalizeClientDocument } from "./client-document";
 import { collectBatchLookupKeys, normalizeClientName as normalizeName, type TBatchLookupKeys } from "./batch-lookup-keys";
 import type { TDataCollectingV2Executor, TResolvedAuxiliaryEntities, TResolvedClientForImport } from "./types";
 import { loadExternalIdentities, resolveExternalIdentity } from "@/lib/products/external-identities";
@@ -73,6 +75,7 @@ function createEmptyContext(): TResolvedAuxiliaryEntities {
 		clientsByExternalId: new Map(),
 		clientsByName: new Map(),
 		clientsByBasePhone: new Map(),
+		clientsByDocument: new Map(),
 		productsByCode: new Map(),
 		productsByExternalItemId: new Map(),
 		variantsByCode: new Map(),
@@ -95,6 +98,9 @@ function loadExistingClients(tx: TDataCollectingV2Executor, organizationId: stri
 		if (keys.clientBasePhones.length > 0) matchers.push(inArray(clients.telefoneBase, keys.clientBasePhones));
 		// Mesma normalização de `clientsByName` (trim + upper), aplicada do lado do banco.
 		if (keys.clientNames.length > 0) matchers.push(inArray(sql`upper(btrim(${clients.nome}))`, keys.clientNames));
+		// O CRM guarda o documento formatado, mas cadastros antigos e importações têm só dígitos.
+		if (keys.clientDocuments.length > 0)
+			matchers.push(inArray(clients.cpfCnpj, [...keys.clientDocuments, ...keys.clientDocuments.map((document) => formatToCPForCNPJ(document))]));
 		if (matchers.length === 0) return Promise.resolve([]);
 		conditions.push(or(...matchers)!);
 	}
@@ -106,6 +112,7 @@ function loadExistingClients(tx: TDataCollectingV2Executor, organizationId: stri
 			idExterno: true,
 			nome: true,
 			telefoneBase: true,
+			cpfCnpj: true,
 			analiseRFMTitulo: true,
 			metadataTotalCompras: true,
 			metadataValorTotalCompras: true,
@@ -199,7 +206,7 @@ export function getCanonicalClientResolutionKey(batch: TCanonicalImportBatch, cl
 	const nameKey = normalizeName(client.name);
 
 	if (batch.policies.clientResolutionStrategy === "EXTERNAL_ID_THEN_PHONE") {
-		return client.externalId || client.basePhone || null;
+		return client.externalId || normalizeClientDocument(client.cpfCnpj) || client.basePhone || null;
 	}
 
 	if (batch.policies.clientResolutionStrategy === "NAME_THEN_PHONE") {
@@ -222,8 +229,10 @@ function uniqueBy<T>(values: T[], getKey: (value: T) => string | null | undefine
 function buildResolvedClient(
 	client: {
 		id: string;
+		idExterno: string | null;
 		nome: string;
 		telefoneBase: string;
+		cpfCnpj: string | null;
 		analiseRFMTitulo: string | null;
 		metadataTotalCompras: number | null;
 		metadataValorTotalCompras: number | null;
@@ -232,8 +241,10 @@ function buildResolvedClient(
 ): TResolvedClientForImport {
 	return {
 		id: client.id,
+		externalId: client.idExterno,
 		name: client.nome,
 		basePhone: client.telefoneBase,
+		document: normalizeClientDocument(client.cpfCnpj),
 		rfmTitle: client.analiseRFMTitulo,
 		metadataTotalPurchases: client.metadataTotalCompras ?? 0,
 		metadataTotalPurchaseValue: client.metadataValorTotalCompras ?? 0,
@@ -250,19 +261,58 @@ function indexClient(context: TResolvedAuxiliaryEntities, client: TResolvedClien
 	if (canonicalClient?.basePhone || client.basePhone) {
 		context.clientsByBasePhone.set(canonicalClient?.basePhone || client.basePhone, client);
 	}
+
+	// Lista por documento: o CRM tem duplicatas pelo mesmo CPF (o cadastro antigo com telefone e o
+	// criado pelo conector com o código da fonte). A ordem de carga põe a compra mais recente por
+	// último; `pickClientByDocument` desempata.
+	const document = normalizeClientDocument(canonicalClient?.cpfCnpj) ?? client.document;
+	if (document) {
+		const candidates = context.clientsByDocument.get(document) ?? [];
+		if (!candidates.some((candidate) => candidate.id === client.id)) context.clientsByDocument.set(document, [...candidates, client]);
+	}
 }
 
-export function resolveClientForCanonicalSale(batch: TCanonicalImportBatch, context: TResolvedAuxiliaryEntities, client: TCanonicalClient | null) {
+/**
+ * Entre clientes com o mesmo documento (mesma pessoa, cadastro duplicado), fica o de sempre: o
+ * que tem o telefone da venda, depois o que já carrega um código da fonte, depois o de compra mais
+ * recente. Sem isso a venda alternaria entre as duplicatas a cada sincronização.
+ */
+function pickClientByDocument(candidates: TResolvedClientForImport[] | undefined, basePhone: string) {
+	if (!candidates || candidates.length === 0) return null;
+	const samePhone = basePhone ? candidates.filter((candidate) => candidate.basePhone === basePhone) : [];
+	const byPhone = samePhone.length > 0 ? samePhone : candidates;
+	const withCode = byPhone.filter((candidate) => !!candidate.externalId);
+	const pool = withCode.length > 0 ? withCode : byPhone;
+	return pool[pool.length - 1];
+}
+
+export type TClientMatchVia = "EXTERNAL_ID" | "DOCUMENT" | "PHONE" | "NAME";
+
+export function matchClientForCanonicalSale(
+	batch: TCanonicalImportBatch,
+	context: TResolvedAuxiliaryEntities,
+	client: TCanonicalClient | null,
+): { client: TResolvedClientForImport; via: TClientMatchVia } | null {
 	if (!client) return null;
 
 	if (batch.policies.clientResolutionStrategy === "EXTERNAL_ID_THEN_PHONE") {
 		if (client.externalId) {
 			const byExternalId = context.clientsByExternalId.get(client.externalId);
-			if (byExternalId) return byExternalId;
+			if (byExternalId) return { client: byExternalId, via: "EXTERNAL_ID" };
 		}
 
+		// CPF antes do telefone: telefone não é identidade. Famílias dividem o celular e lojas
+		// preenchem cadastros com o próprio fixo — pelo telefone, as compras de uma pessoa iam para o
+		// histórico, os pontos e o pós-venda de outra.
+		const document = normalizeClientDocument(client.cpfCnpj);
+		const byDocument = document ? pickClientByDocument(context.clientsByDocument.get(document), client.basePhone) : null;
+		if (byDocument) return { client: byDocument, via: "DOCUMENT" };
+
+		// O telefone ainda decide quando falta documento num dos lados; com documentos diferentes, é
+		// outra pessoa e a venda ganha um cadastro próprio.
 		if (client.basePhone) {
-			return context.clientsByBasePhone.get(client.basePhone) ?? null;
+			const byPhone = context.clientsByBasePhone.get(client.basePhone);
+			if (byPhone && !clientDocumentsConflict(document, byPhone.document)) return { client: byPhone, via: "PHONE" };
 		}
 
 		return null;
@@ -270,15 +320,20 @@ export function resolveClientForCanonicalSale(batch: TCanonicalImportBatch, cont
 
 	if (batch.policies.clientResolutionStrategy === "NAME_THEN_PHONE") {
 		const byName = context.clientsByName.get(normalizeName(client.name));
-		if (byName) return byName;
+		if (byName) return { client: byName, via: "NAME" };
 	}
 
 	if (client.basePhone) {
 		const byPhone = context.clientsByBasePhone.get(client.basePhone);
-		if (byPhone) return byPhone;
+		if (byPhone) return { client: byPhone, via: "PHONE" };
 	}
 
-	return context.clientsByName.get(normalizeName(client.name)) ?? null;
+	const byName = context.clientsByName.get(normalizeName(client.name));
+	return byName ? { client: byName, via: "NAME" } : null;
+}
+
+export function resolveClientForCanonicalSale(batch: TCanonicalImportBatch, context: TResolvedAuxiliaryEntities, client: TCanonicalClient | null) {
+	return matchClientForCanonicalSale(batch, context, client)?.client ?? null;
 }
 
 // Venda válida mais antiga do batch para o cliente — origem de primeiraCompraData e, quando o
@@ -316,6 +371,9 @@ export async function syncAuxiliaryEntities({
 		auditLookups(audit, "clientsByExternalId", keys.clientExternalIds, context.clientsByExternalId, shadow.clientsByExternalId, (client) => client.id);
 		auditLookups(audit, "clientsByBasePhone", keys.clientBasePhones, context.clientsByBasePhone, shadow.clientsByBasePhone, (client) => client.id);
 		auditLookups(audit, "clientsByName", keys.clientNames, context.clientsByName, shadow.clientsByName, (client) => client.id);
+		auditLookups(audit, "clientsByDocument", keys.clientDocuments, context.clientsByDocument, shadow.clientsByDocument, (candidates) =>
+			candidates.map((client) => client.id).join(","),
+		);
 	}
 
 	// Sellers sincronizam ANTES dos clientes: o autorVendedorId do cliente novo referencia o
@@ -343,8 +401,23 @@ export async function syncAuxiliaryEntities({
 		(client) => `${client.externalId ?? ""}|${normalizeName(client.name)}|${client.basePhone}`,
 	)) {
 		if (!getCanonicalClientResolutionKey(batch, client)) continue;
-		const existingClient = resolveClientForCanonicalSale(batch, context, client);
-		if (existingClient) {
+		const match = matchClientForCanonicalSale(batch, context, client);
+		if (match) {
+			const existingClient = match.client;
+			// Casou pelo CPF um cliente que ainda não carrega código da fonte: grava o código, e as
+			// próximas vendas deste cadastro vão direto por ele. Só pelo CPF — pelo telefone, gravar
+			// tornaria permanente justamente o casamento errado que o CPF existe para evitar.
+			if (match.via === "DOCUMENT" && client.externalId && !existingClient.externalId) {
+				const stamped = await tx
+					.update(clients)
+					.set({ idExterno: client.externalId })
+					.where(and(eq(clients.id, existingClient.id), isNull(clients.idExterno)))
+					.returning({ id: clients.id });
+				if (stamped.length > 0) {
+					existingClient.externalId = client.externalId;
+					context.clientsByExternalId.set(client.externalId, existingClient);
+				}
+			}
 			// Telefones 0800/localizer do iFood são rotas temporárias, não identidade do cliente. Se
 			// uma versão anterior do conector os persistiu, o próximo sync corrige o cadastro.
 			if (client.phoneIsTemporary && existingClient.basePhone) {
@@ -392,8 +465,10 @@ export async function syncAuxiliaryEntities({
 			})
 			.returning({
 				id: clients.id,
+				idExterno: clients.idExterno,
 				nome: clients.nome,
 				telefoneBase: clients.telefoneBase,
+				cpfCnpj: clients.cpfCnpj,
 				analiseRFMTitulo: clients.analiseRFMTitulo,
 				metadataTotalCompras: clients.metadataTotalCompras,
 				metadataValorTotalCompras: clients.metadataValorTotalCompras,

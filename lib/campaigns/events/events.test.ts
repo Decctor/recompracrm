@@ -1153,8 +1153,10 @@ test("the real importer refreshes stale starting totals and freezes each purchas
 	await seed(schema.integrations, { id: "integration", organizacaoId: "org", tipo: "CARDAPIO-WEB" });
 	const client = {
 		id: "client",
+		externalId: "external",
 		name: "Cliente",
 		basePhone: "11999999999",
+		document: null,
 		rfmTitle: "PROMISSORES",
 		metadataTotalPurchases: 99,
 		metadataTotalPurchaseValue: 999,
@@ -1164,6 +1166,7 @@ test("the real importer refreshes stale starting totals and freezes each purchas
 		clientsByExternalId: new Map([["external", client]]),
 		clientsByName: new Map(),
 		clientsByBasePhone: new Map(),
+		clientsByDocument: new Map(),
 		productsByCode: new Map(),
 		productsByExternalItemId: new Map(),
 		variantsByCode: new Map(),
