@@ -342,3 +342,26 @@ test("metadados gerados passam no schema da coluna", () => {
 	});
 	assert.doesNotThrow(() => SaleIntegrationMetadataSchema.parse(sale.integrationMetadata));
 });
+
+test("CPF do cliente vem do cadastro; o CPF da nota só vale sem cadastro", () => {
+	// CPFs válidos, sem relação com pessoas reais.
+	const noteCpf = "52998224725";
+	const withRecord = mapSqlViewsSale({
+		sale: buildSale({ cliente_cpf_cnpj: noteCpf }),
+		items: [],
+		client: buildClient({ cpf_cnpj: null }),
+		anonymousClientIds: [],
+	});
+	assert.equal(withRecord.client?.cpfCnpj ?? null, null);
+
+	const fromRecord = mapSqlViewsSale({
+		sale: buildSale({ cliente_cpf_cnpj: noteCpf }),
+		items: [],
+		client: buildClient({ cpf_cnpj: "11144477735" }),
+		anonymousClientIds: [],
+	});
+	assert.equal(fromRecord.client?.cpfCnpj, "111.444.777-35");
+
+	const withoutRecord = mapSqlViewsSale({ sale: buildSale({ cliente_cpf_cnpj: noteCpf }), items: [], client: undefined, anonymousClientIds: [] });
+	assert.equal(withoutRecord.client?.cpfCnpj, "529.982.247-25");
+});

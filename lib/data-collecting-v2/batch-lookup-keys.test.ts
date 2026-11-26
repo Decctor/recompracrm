@@ -104,6 +104,7 @@ test("collects deduplicated keys from sales, items and batch-level entities", ()
 		clientExternalIds: ["C1"],
 		clientBasePhones: ["11999990000"],
 		clientNames: ["JOÃO"],
+		clientDocuments: [],
 		productCodes: ["P1", "P2", "P3"],
 		productExternalItemIds: ["EXT-1", "EXT-9"],
 		sellerIdentifiers: ["V1", "V2"],
