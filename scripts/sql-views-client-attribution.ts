@@ -220,9 +220,13 @@ async function diagnose(organizationId: string) {
 		), p as (
 			select cliente_id, erp_cliente_id from v group by 1, 2
 		), suspeitos as (
-			select cliente_id, erp_cliente_id from p
-			where cliente_id in (select cliente_id from p group by 1 having count(*) > 1)
-				or erp_cliente_id in (select erp_cliente_id from p group by 1 having count(*) > 1)
+			-- Além de quem mistura códigos, entra todo par cujo cliente não carrega aquele código:
+			-- um cadastro do ERP inteiro casado pelo telefone num cliente sem idExterno não mistura nada,
+			-- mas é tão suspeito quanto. Só o par com idExterno igual ao código e sem mistura fica de fora.
+			select p.cliente_id, p.erp_cliente_id from p join ampmais_clients c on c.id = p.cliente_id
+			where p.cliente_id in (select cliente_id from p group by 1 having count(*) > 1)
+				or p.erp_cliente_id in (select erp_cliente_id from p group by 1 having count(*) > 1)
+				or c.id_externo is distinct from p.erp_cliente_id
 		)
 		select v.cliente_id, v.erp_cliente_id,
 			count(*)::int as vendas,
