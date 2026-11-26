@@ -89,6 +89,12 @@ export type TMergeClientsInput = {
 	fieldChoices?: TClientMergeFieldChoices | null;
 	autorId?: string | null;
 	candidateId?: string | null;
+	/**
+	 * Recalcula os derivados do keeper logo após o commit (padrão). Lotes passam `false` e
+	 * recalculam cada keeper uma vez no fim — o ranking produto × cliente é por produto e custa
+	 * segundos por merge num catálogo de farmácia.
+	 */
+	recomputeKeeper?: boolean;
 };
 
 export type TMergeClientsResult = {
@@ -397,7 +403,9 @@ export async function mergeClients(input: TMergeClientsInput): Promise<TMergeCli
 
 	// Pós-commit, best-effort: metadados de compra, RFM, vínculos de vendedor e
 	// produto do keeper. O cron noturno é a rede de segurança.
-	await recomputeClientDerivedDataSafely({ organizacaoId: input.organizacaoId, clienteId: result.keeperId });
+	if (input.recomputeKeeper !== false) {
+		await recomputeClientDerivedDataSafely({ organizacaoId: input.organizacaoId, clienteId: result.keeperId });
+	}
 
 	return result;
 }

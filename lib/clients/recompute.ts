@@ -242,10 +242,13 @@ export async function recomputeClientProductReferences({
 	tx,
 	organizacaoId,
 	clienteId,
+	rerank = true,
 }: {
 	tx: DBTransaction;
 	organizacaoId: string;
 	clienteId: string;
+	/** `false` em lote: o chamador re-rankeia os produtos tocados uma vez no fim (`rerankProductClientReferences`). */
+	rerank?: boolean;
 }) {
 	await tx
 		.delete(productClientReferences)
@@ -292,8 +295,21 @@ export async function recomputeClientProductReferences({
 		.from(productClientReferences)
 		.where(and(eq(productClientReferences.organizacaoId, organizacaoId), eq(productClientReferences.clienteId, clienteId)));
 	const touchedProductIds = touchedProducts.map((row) => row.produtoId);
-	if (touchedProductIds.length === 0) return;
+	if (rerank) await rerankProductClientReferences({ tx, organizacaoId, productIds: touchedProductIds });
+	return touchedProductIds;
+}
 
+/** Re-rankeia (por produto e janela) as afinidades produto × cliente dos produtos dados. */
+export async function rerankProductClientReferences({
+	tx,
+	organizacaoId,
+	productIds,
+}: {
+	tx: DBTransaction;
+	organizacaoId: string;
+	productIds: string[];
+}) {
+	if (productIds.length === 0) return;
 	await tx.execute(sql`
 		update ${productClientReferences} as refs
 		set ranking_valor = ranked.ranking_valor
@@ -310,7 +326,7 @@ export async function recomputeClientProductReferences({
 				)::integer as ranking_valor
 			from ${productClientReferences}
 			where ${productClientReferences.organizacaoId} = ${organizacaoId}
-				and ${inArray(productClientReferences.produtoId, touchedProductIds)}
+				and ${inArray(productClientReferences.produtoId, productIds)}
 		) as ranked
 		where refs.id = ranked.id
 	`);

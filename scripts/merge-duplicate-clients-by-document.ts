@@ -1,9 +1,16 @@
 import "@/utils/scripts/load-next-env";
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { normalizeClientDocument } from "@/lib/data-collecting-v2/client-document";
 import { mergeClients } from "@/lib/clients/merge";
+import {
+	recomputeClientProductReferences,
+	recomputeClientPurchaseMetadata,
+	recomputeClientRFM,
+	recomputeClientSellerReferences,
+	rerankProductClientReferences,
+} from "@/lib/clients/recompute";
 import { connection, db } from "@/services/drizzle";
 import { compareNamesForSameDocument, isPlaceholderName, nameTokens } from "./lib/person-names";
 
@@ -22,7 +29,11 @@ import { compareNamesForSameDocument, isPlaceholderName, nameTokens } from "./li
  *
  * Uso:
  *   node --conditions=react-server --import tsx scripts/merge-duplicate-clients-by-document.ts \
- *     [--org <id>] [--documentos <cpf,cpf>] [--limite <n>] [--apply]
+ *     [--org <id>] [--documentos <cpf,cpf>] [--limite <n>] [--paralelo <n>] [--apply]
+ *
+ * Desempenho: as unificações correm em paralelo (`--paralelo`, padrão 6) sem recalcular o
+ * principal a cada merge; no fim, cada principal é recalculado uma vez e o ranking produto ×
+ * cliente é refeito uma vez por produto tocado (era ~80% do tempo quando feito a cada merge).
  *
  * Sem --apply só simula. Saída em scripts/output/merge-duplicate-clients-by-document/<stamp>/
  * (fora do git: tem dados pessoais). Reexecutável: o que já foi unificado deixa de ser duplicata.
@@ -58,6 +69,7 @@ function parseArgs() {
 	};
 	const documents = valueOf("--documentos");
 	const limit = valueOf("--limite");
+	const concurrency = valueOf("--paralelo");
 	return {
 		organizationId: valueOf("--org") ?? DEFAULT_ORGANIZATION_ID,
 		documentFilter: documents
@@ -69,6 +81,8 @@ function parseArgs() {
 				)
 			: null,
 		limit: limit ? Number(limit) : null,
+		// O pool do projeto tem 10 conexões; 6 deixa folga para a transação de cada merge.
+		concurrency: concurrency ? Math.max(1, Math.min(8, Number(concurrency))) : 6,
 		apply: args.includes("--apply"),
 	};
 }
@@ -214,16 +228,22 @@ async function main() {
 		return;
 	}
 
-	type TMergeRow = { documento: string; principal: string; duplicado: string; status: "UNIFICADO" | "ERRO"; detalhe: string };
-	const results: TMergeRow[] = [];
-	// O recálculo do principal loga a cada cliente; em milhares de merges isso afoga a saída.
-	const originalLog = console.log;
-	console.log = (...logArgs: unknown[]) => {
-		if (typeof logArgs[0] === "string" && /^\[(CASHBACK|RFM|RECOMPUTE|CLIENT)/.test(logArgs[0])) return;
-		originalLog(...logArgs);
-	};
-	try {
-		for (const merge of merges) {
+	// Uma fila por principal: as unificações do mesmo grupo vão em sequência (travam o mesmo
+	// cliente); grupos diferentes correm em paralelo. O recálculo fica para depois, uma vez por principal.
+	const queue = selectedGroups
+		.map((group) => ({ group, merges: merges.filter((merge) => merge.keeper.id === group.keeper.id) }))
+		.filter((entry) => entry.merges.length > 0);
+	const resultsPath = path.join(outputDir, "unificacoes.csv");
+	writeCsv(resultsPath, ["documento", "principal_id", "duplicado_id", "status", "detalhe"], []);
+	const appendResult = (row: unknown[]) => appendFileSync(resultsPath, `${row.map(csvCell).join(";")}
+`, "utf8");
+
+	const statusCount: Record<string, number> = {};
+	const mergedKeepers = new Set<string>();
+	let done = 0;
+	const startedAt = Date.now();
+	await runWithConcurrency(queue, args.concurrency, async ({ group, merges: groupMerges }) => {
+		for (const merge of groupMerges) {
 			try {
 				const result = await mergeClients({
 					db,
@@ -232,41 +252,71 @@ async function main() {
 					sourceId: merge.source.id,
 					fieldChoices: mergeFieldChoices(merge.keeper, merge.source),
 					autorId: null,
+					recomputeKeeper: false,
 				});
-				results.push({
-					documento: merge.document,
-					principal: merge.keeper.id,
-					duplicado: merge.source.id,
-					status: "UNIFICADO",
-					detalhe: JSON.stringify(result.registrosMovidos),
-				});
+				mergedKeepers.add(group.keeper.id);
+				statusCount.UNIFICADO = (statusCount.UNIFICADO ?? 0) + 1;
+				appendResult([merge.document, merge.keeper.id, merge.source.id, "UNIFICADO", JSON.stringify(result.registrosMovidos)]);
 			} catch (error) {
-				results.push({
-					documento: merge.document,
-					principal: merge.keeper.id,
-					duplicado: merge.source.id,
-					status: "ERRO",
-					detalhe: error instanceof Error ? error.message : String(error),
-				});
+				statusCount.ERRO = (statusCount.ERRO ?? 0) + 1;
+				appendResult([merge.document, merge.keeper.id, merge.source.id, "ERRO", error instanceof Error ? error.message : String(error)]);
 			}
-			if (results.length % 100 === 0) originalLog(`[UNIFICACAO] ${results.length}/${merges.length} unificações.`);
+			done += 1;
+			if (done % 200 === 0) console.log(`[UNIFICACAO] ${done}/${merges.length} unificações (${elapsed(startedAt)}).`);
 		}
-	} finally {
-		console.log = originalLog;
-		writeCsv(
-			path.join(outputDir, "unificacoes.csv"),
-			["documento", "principal_id", "duplicado_id", "status", "detalhe"],
-			results.map((row) => [row.documento, row.principal, row.duplicado, row.status, row.detalhe]),
-		);
-	}
+	});
+	console.log(`[UNIFICACAO] Unificações: ${JSON.stringify(statusCount)} em ${elapsed(startedAt)}.`);
 
-	const statusCount = results.reduce<Record<string, number>>((acc, row) => {
-		acc[row.status] = (acc[row.status] ?? 0) + 1;
-		return acc;
-	}, {});
-	console.log(JSON.stringify({ unificacoes: statusCount }, null, 2));
+	// Recálculo: metadados de compra, RFM e vínculos de cada principal; o ranking produto × cliente é
+	// por produto, então re-rankeia uma vez só os produtos tocados, em blocos.
+	const keepers = [...mergedKeepers];
+	const touchedProducts = new Set<string>();
+	let recomputed = 0;
+	let recomputeErrors = 0;
+	const recomputeStartedAt = Date.now();
+	await runWithConcurrency(keepers, args.concurrency, async (clienteId) => {
+		try {
+			await db.transaction(async (tx) => {
+				await recomputeClientPurchaseMetadata({ tx, organizacaoId: args.organizationId, clienteId });
+				await recomputeClientRFM({ tx, organizacaoId: args.organizationId, clienteId });
+				await recomputeClientSellerReferences({ tx, organizacaoId: args.organizationId, clienteId });
+				const productIds = await recomputeClientProductReferences({ tx, organizacaoId: args.organizationId, clienteId, rerank: false });
+				for (const productId of productIds ?? []) touchedProducts.add(productId);
+			});
+		} catch (error) {
+			recomputeErrors += 1;
+			console.error(`[UNIFICACAO] Falha ao recalcular ${clienteId}:`, error instanceof Error ? error.message : error);
+		}
+		recomputed += 1;
+		if (recomputed % 250 === 0) console.log(`[UNIFICACAO] ${recomputed}/${keepers.length} principais recalculados (${elapsed(recomputeStartedAt)}).`);
+	});
+	const productIds = [...touchedProducts];
+	for (let index = 0; index < productIds.length; index += 500) {
+		await db.transaction((tx) => rerankProductClientReferences({ tx, organizacaoId: args.organizationId, productIds: productIds.slice(index, index + 500) }));
+	}
+	console.log(
+		`[UNIFICACAO] Recalculados ${recomputed} principais (${recomputeErrors} falhas) e o ranking de ${productIds.length} produtos em ${elapsed(recomputeStartedAt)}.`,
+	);
 	console.log(`[UNIFICACAO] Saída em ${outputDir}`);
 	await connection.end();
+}
+
+function elapsed(startedAt: number) {
+	const seconds = Math.round((Date.now() - startedAt) / 1000);
+	return `${Math.floor(seconds / 60)}min${String(seconds % 60).padStart(2, "0")}s`;
+}
+
+async function runWithConcurrency<T>(items: T[], concurrency: number, worker: (item: T) => Promise<void>) {
+	let next = 0;
+	await Promise.all(
+		Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+			while (next < items.length) {
+				const item = items[next];
+				next += 1;
+				await worker(item);
+			}
+		}),
+	);
 }
 
 main().catch(async (error) => {
