@@ -144,6 +144,8 @@ export const campaignDispatchRecipients = newTable(
 		index("idx_campaign_dispatch_recipients_interacao_id").on(table.interacaoId),
 		index("idx_campaign_dispatch_recipients_venda_id").on(table.vendaId),
 		index("idx_campaign_dispatch_recipients_campanha_evento_id").on(table.campanhaEventoId),
+		// FK ON DELETE CASCADE para clientes (0162): o delete e o merge de cliente procuram por ele só.
+		index("idx_campaign_dispatch_recipients_cliente_id").on(table.clienteId),
 	],
 );
 export const campaignDispatchRecipientRelations = relations(campaignDispatchRecipients, ({ one }) => ({

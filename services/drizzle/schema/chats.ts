@@ -331,6 +331,10 @@ export const chatMessages = newTable(
 			.where(sql`${table.whatsappMessageId} is not null`),
 		index("idx_chat_messages_cliente_mensagem_id").on(table.clienteMensagemId),
 		index("idx_chat_messages_organizacao_data_envio").on(table.organizacaoId, table.dataEnvio.desc()),
+		// FKs para clientes (0162): o merge de clientes re-aponta as duas colunas e, sem índice,
+		// cada unificação varria a tabela inteira duas vezes.
+		index("idx_chat_messages_cliente_id").on(table.clienteId),
+		index("idx_chat_messages_autor_cliente_id").on(table.autorClienteId).where(sql`${table.autorClienteId} IS NOT NULL`),
 	],
 );
 export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
