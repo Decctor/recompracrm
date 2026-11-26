@@ -31,6 +31,7 @@ import { useRouter } from "next/navigation";
 import React, { useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import useSound from "use-sound";
+import { SaleSellerPicker } from "../_shared/components/sale-seller-picker";
 import { StepProgressHeader } from "../_shared/components/step-progress-header";
 import { SuccessCelebration } from "../_shared/components/success-celebration";
 import {
@@ -117,6 +118,7 @@ type NewSaleContentProps = {
 		acumuloPermitirViaPontoIntegracao: boolean;
 		resgatePermitirViaPontoIntegracao: boolean;
 		poiConfirmacaoValorObrigatoria: boolean;
+		poiColetaVendedor: boolean;
 	};
 	clientId: string;
 	prizes: TPrize[];
@@ -564,6 +566,11 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 	const confirmationStep = isMobileMode ? totalSteps : isPrizeMode ? (isPrizeSaleOnlyFlow || isFreeFormFlow ? 3 : 2) : 3;
 	const freeFormReward = state.sale.freeFormReward;
 	const isSubmitting = isCreatingSale || isCreatingRequest;
+	// Só nas confirmações que registram venda (desconto, "apenas pontuar" e resgate do catálogo);
+	// a recompensa avulsa não cria venda e não recebe o seletor.
+	const saleSellerPicker = org.poiColetaVendedor ? (
+		<SaleSellerPicker orgId={org.id} value={state.sale.vendedorId} onChange={(vendedorId) => updateSale({ vendedorId })} />
+	) : null;
 
 	return (
 		<div className={cn("w-full min-h-screen flex flex-col items-center", isMobileMode ? "px-4 py-5" : "p-6 md:p-10 short:p-3 short:min-h-0")}>
@@ -669,6 +676,7 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 									if (!state.sale.coupon) return;
 									updateCoupon({ ...state.sale.coupon, valorDesconto: value });
 								}}
+								sellerPicker={saleSellerPicker}
 								onSubmit={submitTransaction}
 							/>
 						)}
@@ -730,6 +738,7 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 								requiresSaleValueConfirmation={false}
 								operatorConfirmedSaleValue={state.operatorConfirmedSaleValue}
 								onOperatorConfirmedSaleValueChange={updateOperatorConfirmedSaleValue}
+								sellerPicker={saleSellerPicker}
 								onSubmit={submitTransaction}
 							/>
 						)}
@@ -754,6 +763,7 @@ export default function NewSaleContent({ org, clientId, prizes, initialOperatorP
 								requiresSaleValueConfirmation={org.poiConfirmacaoValorObrigatoria}
 								operatorConfirmedSaleValue={state.operatorConfirmedSaleValue}
 								onOperatorConfirmedSaleValueChange={updateOperatorConfirmedSaleValue}
+								sellerPicker={saleSellerPicker}
 								onSubmit={submitTransaction}
 							/>
 						)}

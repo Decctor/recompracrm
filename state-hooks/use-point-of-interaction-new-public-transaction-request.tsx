@@ -29,6 +29,8 @@ export const PointOfInteractionNewSaleStateSchema = z.object({
 		valor: true,
 	})
 		.extend({
+			// Quem fez a venda (opcional): null = a venda fica com o operador.
+			vendedorId: z.string({ invalid_type_error: "Tipo não válido para o vendedor da venda." }).nullable(),
 			entregaModalidade: DeliveryModeEnum.optional().nullable(),
 			cashback: z.object({
 				aplicar: z
@@ -111,6 +113,7 @@ export function usePointOfInteractionNewSaleState(initialOrgId: string, initialI
 			prizeRedemptions: [],
 			freeFormReward: null,
 			coupon: null,
+			vendedorId: null,
 		},
 		operatorIdentifier: "",
 		operatorConfirmedSaleValue: null,
@@ -215,6 +218,7 @@ export function usePointOfInteractionNewSaleState(initialOrgId: string, initialI
 				prizeRedemptions: [],
 				freeFormReward: null,
 				coupon: null,
+				vendedorId: null,
 			},
 			operatorIdentifier: "",
 			operatorConfirmedSaleValue: null,

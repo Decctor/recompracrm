@@ -41,6 +41,7 @@ export default async function NewSalePage({
 			corSecundaria: true,
 			corSecundariaForeground: true,
 			poiConfirmacaoValorObrigatoria: true,
+			poiConfiguracao: true,
 		},
 	});
 	if (!org) {
@@ -97,8 +98,11 @@ export default async function NewSalePage({
 		},
 	});
 
+	const { poiConfiguracao, ...orgColumns } = org;
 	const orgWithCashbackConfig = {
-		...org,
+		...orgColumns,
+		// "Quem fez a venda?" só existe quando o POI registra venda: sem venda, não há a quem creditar.
+		poiColetaVendedor: poiConfiguracao?.vendas.registroAtivo === true && poiConfiguracao.vendas.coletaVendedor === true,
 		terminologia: cashbackProgramConfig?.terminologia ?? "DINHEIRO",
 		modalidadeDescontosPermitida: cashbackProgramConfig?.modalidadeDescontosPermitida ?? true,
 		modalidadeRecompensasPermitida: cashbackProgramConfig?.modalidadeRecompensasPermitida ?? false,

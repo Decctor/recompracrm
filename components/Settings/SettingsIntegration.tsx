@@ -23,10 +23,7 @@ import { CUSTOM_FIELD_TYPE_LABELS, POI_REGISTRATION_FLOW_LABELS, PoiRegistration
 import type { TStoredPoiRegistrationConfig } from "@/schemas/organizations";
 import { formatDateAsLocale } from "@/lib/formatting";
 import { DATA_SOURCE_INTEGRATION_PROVIDERS, type TDataSourceIntegrationProvider } from "@/lib/integrations/data-source-providers";
-import {
-	isDataSourceIntegrationSummary,
-	useDataSourceIntegrationConnect,
-} from "@/lib/integrations/use-data-source-integration-connect";
+import { isDataSourceIntegrationSummary, useDataSourceIntegrationConnect } from "@/lib/integrations/use-data-source-integration-connect";
 import { cn } from "@/lib/utils";
 import { Chip } from "../ui/chip";
 
@@ -72,10 +69,32 @@ export default function SettingsIntegration({ membership }: SettingsIntegrationP
 	// `poiConfiguracao` é gravada como jsonb inteiro (a rota não faz merge por chave), então
 	// escrever `vendas` obriga a reenviar o `cadastro` atual — e vice-versa.
 	const poiRegistrationConfig = membership.organizacao.poiConfiguracao?.cadastro;
+	const poiSalesConfig = membership.organizacao.poiConfiguracao?.vendas;
+	const poiSellerCollectionEnabled = poiSalesConfig?.coletaVendedor === true;
 
 	const enablePoiSalesRegistrationMutation = useMutation({
 		mutationFn: async (registroAtivo: boolean) =>
-			updateOrganization({ organization: { poiConfiguracao: { vendas: { registroAtivo }, cadastro: poiRegistrationConfig } } }),
+			updateOrganization({
+				organization: { poiConfiguracao: { vendas: { ...poiSalesConfig, registroAtivo }, cadastro: poiRegistrationConfig } },
+			}),
+		onSuccess: () => {
+			toast.success("Configuração do Ponto de Interação atualizada com sucesso!");
+			setTimeout(() => {
+				window.location.reload();
+			}, 1500);
+		},
+		onError: (error) => {
+			toast.error(getErrorMessage(error));
+		},
+	});
+
+	const enablePoiSellerCollectionMutation = useMutation({
+		mutationFn: async (coletaVendedor: boolean) =>
+			updateOrganization({
+				organization: {
+					poiConfiguracao: { vendas: { registroAtivo: poiSalesRegistrationEnabled, coletaVendedor }, cadastro: poiRegistrationConfig },
+				},
+			}),
 		onSuccess: () => {
 			toast.success("Configuração do Ponto de Interação atualizada com sucesso!");
 			setTimeout(() => {
@@ -237,6 +256,24 @@ export default function SettingsIntegration({ membership }: SettingsIntegrationP
 					/>
 				</div>
 
+				{/* Só faz sentido com venda registrada: sem venda, não há a quem creditar. */}
+				{poiSalesRegistrationEnabled ? (
+					<div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+						<div className="flex flex-col gap-1">
+							<span className="text-sm font-semibold">Perguntar quem fez a venda</span>
+							<p className="text-sm text-muted-foreground">
+								Na confirmação da venda, o operador escolhe o vendedor pelo avatar antes de digitar a senha. A venda (metas, rankings) fica com o vendedor
+								escolhido; a senha continua identificando quem fez a operação. Sem escolha, a venda fica com o operador.
+							</p>
+						</div>
+						<Switch
+							checked={poiSellerCollectionEnabled}
+							disabled={!canEdit || enablePoiSellerCollectionMutation.isPending}
+							onCheckedChange={(checked) => enablePoiSellerCollectionMutation.mutate(checked)}
+						/>
+					</div>
+				) : null}
+
 				{poiRedemptionEnabled !== null ? (
 					<div className="flex flex-col gap-2 border-t border-border pt-3 sm:flex-row sm:items-center sm:justify-between">
 						<div className="flex flex-col gap-1">
@@ -260,7 +297,12 @@ export default function SettingsIntegration({ membership }: SettingsIntegrationP
 					</div>
 				) : null}
 
-				<PoiRegistrationSettings storedConfig={poiRegistrationConfig} salesRegistrationEnabled={poiSalesRegistrationEnabled} canEdit={canEdit} />
+				<PoiRegistrationSettings
+					storedConfig={poiRegistrationConfig}
+					salesRegistrationEnabled={poiSalesRegistrationEnabled}
+					sellerCollectionEnabled={poiSellerCollectionEnabled}
+					canEdit={canEdit}
+				/>
 			</div>
 
 			{connectDialogs}
@@ -285,9 +327,10 @@ const POI_REGISTRATION_SURFACES: { key: TPoiRegistrationSurfaceKey; label: strin
 type PoiRegistrationSettingsProps = {
 	storedConfig: TStoredPoiRegistrationConfig | undefined;
 	salesRegistrationEnabled: boolean;
+	sellerCollectionEnabled: boolean;
 	canEdit: boolean;
 };
-function PoiRegistrationSettings({ storedConfig, salesRegistrationEnabled, canEdit }: PoiRegistrationSettingsProps) {
+function PoiRegistrationSettings({ storedConfig, salesRegistrationEnabled, sellerCollectionEnabled, canEdit }: PoiRegistrationSettingsProps) {
 	// Sem `ativoOnly`: os inativos não podem ser adicionados, mas precisam ser conhecidos — um
 	// campo nativo desativado ainda ocupa a chave, e oferecer "ativar" de novo daria erro.
 	const { data: customFieldsResult, isLoading: customFieldsAreLoading, refetch: refetchCustomFields } = useCustomFields({ entidade: "CLIENTE" });
@@ -346,7 +389,11 @@ function PoiRegistrationSettings({ storedConfig, salesRegistrationEnabled, canEd
 
 	const saveRegistrationConfigMutation = useMutation({
 		mutationFn: async () =>
-			updateOrganization({ organization: { poiConfiguracao: { vendas: { registroAtivo: salesRegistrationEnabled }, cadastro: config } } }),
+			updateOrganization({
+				organization: {
+					poiConfiguracao: { vendas: { registroAtivo: salesRegistrationEnabled, coletaVendedor: sellerCollectionEnabled }, cadastro: config },
+				},
+			}),
 		onSuccess: () => {
 			toast.success("Cadastro do Ponto de Interação atualizado com sucesso!");
 			setTimeout(() => {
@@ -517,8 +564,8 @@ function PoiRegistrationSettings({ storedConfig, salesRegistrationEnabled, canEd
 
 			<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 				<p className="text-xs text-muted-foreground">
-					Os campos prontos já são entendidos pela plataforma (segmentação e aniversariantes saem de graça). Campos próprios da organização são
-					criados e editados em{" "}
+					Os campos prontos já são entendidos pela plataforma (segmentação e aniversariantes saem de graça). Campos próprios da organização são criados e
+					editados em{" "}
 					<Link href="/dashboard/settings?view=custom-fields" className="font-semibold text-primary hover:underline">
 						Campos personalizados
 					</Link>{" "}

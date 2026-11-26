@@ -2,7 +2,7 @@
 
 import { usePoiSellers } from "@/lib/queries/sellers";
 import { cn } from "@/lib/utils";
-import { Check, HelpCircle } from "lucide-react";
+import { Check, HelpCircle, type LucideIcon } from "lucide-react";
 import Image from "next/image";
 
 type SellerPickerProps = {
@@ -13,26 +13,48 @@ type SellerPickerProps = {
 	isSkipped: boolean;
 	onSelectSeller: (sellerId: string | null) => void;
 	onSkip: () => void;
+	/** Título acima da grade. Padrão: a pergunta do autocadastro. */
+	label?: string;
+	/** Rótulo e ícone do cartão de "pular". Padrão: "NÃO SEI" (autocadastro). */
+	skipLabel?: string;
+	SkipIcon?: LucideIcon;
+	/**
+	 * Some com um único vendedor ativo. Na venda ele é necessariamente o operador (a senha é de um
+	 * vendedor), então perguntar seria escolher entre a mesma pessoa e ela mesma.
+	 */
+	hideWhenSingleSeller?: boolean;
 	className?: string;
 };
 
 /**
- * "Quem te atendeu?": seleção opcional de vendedor no autocadastro do ponto de interação.
+ * Seleção opcional de vendedor por avatar no ponto de interação: o "Quem te atendeu?" do
+ * autocadastro e o "Quem fez a venda?" da confirmação de venda.
  *
- * Vive aqui, e não dentro de uma das telas, porque as duas superfícies de cadastro (o formulário
- * rápido do hub e o assistente do fluxo COMPLETO) precisam oferecer exatamente a mesma coisa —
- * duas cópias divergiriam no primeiro ajuste.
+ * Vive aqui, e não dentro de uma das telas, porque as superfícies de cadastro (o formulário rápido
+ * do hub e o assistente do fluxo COMPLETO) e as de venda (totem e painel) precisam oferecer
+ * exatamente a mesma coisa — cópias divergiriam no primeiro ajuste.
  *
  * Não renderiza nada quando a organização não tem vendedores ativos: um campo vazio só adicionaria
  * um passo morto entre o cliente e o cadastro.
  */
-export function SellerPicker({ orgId, selectedSellerId, isSkipped, onSelectSeller, onSkip, className }: SellerPickerProps) {
+export function SellerPicker({
+	orgId,
+	selectedSellerId,
+	isSkipped,
+	onSelectSeller,
+	onSkip,
+	label = "QUEM TE ATENDEU? (OPCIONAL)",
+	skipLabel = "NÃO SEI",
+	SkipIcon = HelpCircle,
+	hideWhenSingleSeller = false,
+	className,
+}: SellerPickerProps) {
 	const { data: poiSellers, isLoading: isLoadingPoiSellers } = usePoiSellers({ orgId });
 
 	if (isLoadingPoiSellers) {
 		return (
 			<div className={cn("flex flex-col gap-1.5", className)}>
-				<span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">QUEM TE ATENDEU? (OPCIONAL)</span>
+				<span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{label}</span>
 				<div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
 					{[0, 1, 2, 3].map((placeholder) => (
 						<div
@@ -49,10 +71,11 @@ export function SellerPicker({ orgId, selectedSellerId, isSkipped, onSelectSelle
 	}
 
 	if (!poiSellers || poiSellers.length === 0) return null;
+	if (hideWhenSingleSeller && poiSellers.length === 1) return null;
 
 	return (
 		<div className={cn("flex flex-col gap-1.5", className)}>
-			<span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">QUEM TE ATENDEU? (OPCIONAL)</span>
+			<span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{label}</span>
 			{/* Teto de altura: orgs com muitos vendedores rolam aqui dentro, o AVANÇAR nunca sai da dobra. */}
 			<div className="max-h-[15.5rem] short:max-h-44 overflow-y-auto overscroll-contain pr-1">
 				<div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
@@ -114,9 +137,9 @@ export function SellerPicker({ orgId, selectedSellerId, isSkipped, onSelectSelle
 							</span>
 						) : null}
 						<div className="relative w-12 h-12 short:w-10 short:h-10 rounded-full bg-muted flex items-center justify-center">
-							<HelpCircle className="w-6 h-6 text-muted-foreground" />
+							<SkipIcon className="w-6 h-6 text-muted-foreground" />
 						</div>
-						<span className="w-full text-[0.65rem] font-bold uppercase leading-tight text-center truncate text-muted-foreground">NÃO SEI</span>
+						<span className="w-full text-[0.65rem] font-bold uppercase leading-tight text-center truncate text-muted-foreground">{skipLabel}</span>
 					</button>
 				</div>
 			</div>

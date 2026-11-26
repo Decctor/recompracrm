@@ -5,7 +5,7 @@ import ResponsiveMenuSection from "@/components/Utils/ResponsiveMenuSection";
 import { formatCashbackValue } from "@/lib/formatting";
 import { cn } from "@/lib/utils";
 import type { TCashbackProgramTerminologyEnum } from "@/schemas/enums";
-import { ArrowRight, ChevronRight, CircleCheck, LockKeyhole } from "lucide-react";
+import { ArrowRight, ChevronRight, CircleCheck, LockKeyhole, UserRound } from "lucide-react";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
 import type { ReactNode } from "react";
 import type { TNewTransactionStep } from "./NewTransactionSteps";
@@ -40,6 +40,8 @@ type NewTransactionReviewProps = {
 	onOperatorConfirmedSaleValueChange: (value: number | null) => void;
 	operatorIdentifier: string;
 	onOperatorIdentifierChange: (value: string) => void;
+	/** "Quem fez a venda?", quando o POI coleta o vendedor. */
+	sellerPicker?: ReactNode;
 };
 export function NewTransactionReview({
 	kind,
@@ -54,6 +56,7 @@ export function NewTransactionReview({
 	onOperatorConfirmedSaleValueChange,
 	operatorIdentifier,
 	onOperatorIdentifierChange,
+	sellerPicker,
 }: NewTransactionReviewProps) {
 	const meta = POI_OPERATION_KINDS[kind];
 	const Icon = meta.icon;
@@ -119,6 +122,12 @@ export function NewTransactionReview({
 					</div>
 				</div>
 			</ResponsiveMenuSection>
+
+			{sellerPicker ? (
+				<ResponsiveMenuSection title="VENDEDOR" icon={<UserRound className="h-4 min-h-4 w-4 min-w-4" />}>
+					{sellerPicker}
+				</ResponsiveMenuSection>
+			) : null}
 
 			<ResponsiveMenuSection title="OPERADOR" icon={<LockKeyhole className="h-4 min-h-4 w-4 min-w-4" />}>
 				{requiresSaleValueConfirmation ? (

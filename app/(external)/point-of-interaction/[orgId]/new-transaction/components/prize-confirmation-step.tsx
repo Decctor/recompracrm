@@ -7,6 +7,7 @@ import { SaleValueConfirmationInput } from "../../_shared/components/sale-value-
 import type { TSelectedPrize } from "../../_shared/types";
 import { ArrowRight, Gift } from "lucide-react";
 import Image from "next/image";
+import type { ReactNode } from "react";
 
 type PrizeConfirmationStepProps = {
 	clientName: string;
@@ -19,6 +20,8 @@ type PrizeConfirmationStepProps = {
 	requiresSaleValueConfirmation: boolean;
 	operatorConfirmedSaleValue: number | null;
 	onOperatorConfirmedSaleValueChange: (value: number | null) => void;
+	/** "Quem fez a venda?", quando o POI coleta o vendedor; vem antes da senha do operador. */
+	sellerPicker?: ReactNode;
 	onSubmit: () => void;
 };
 
@@ -32,6 +35,7 @@ export function PrizeConfirmationStep({
 	requiresSaleValueConfirmation,
 	operatorConfirmedSaleValue,
 	onOperatorConfirmedSaleValueChange,
+	sellerPicker,
 	onSubmit,
 }: PrizeConfirmationStepProps) {
 	const totalDebit = selectedPrizes.reduce((sum, { prize, quantity }) => sum + prize.valor * quantity, 0);
@@ -49,7 +53,11 @@ export function PrizeConfirmationStep({
 		>
 			<div className="text-center space-y-2 short:space-y-0.5">
 				<h2 className="text-xl short:text-lg font-extrabold tracking-tight">Confirmar resgate</h2>
-				<p className="text-muted-foreground short:text-xs">Confira as recompensas e digite a senha do operador.</p>
+				<p className="text-muted-foreground short:text-xs">
+					{sellerPicker
+						? "Confira as recompensas, diga quem fez a venda e digite a senha do operador."
+						: "Confira as recompensas e digite a senha do operador."}
+				</p>
 			</div>
 
 			{/* Uma linha por recompensa; a mesma recompensa repetida aparece como ×N */}
@@ -118,6 +126,8 @@ export function PrizeConfirmationStep({
 					<span className="font-black text-brand short:text-xs">{formatToMoney(finalValue)}</span>
 				</div>
 			</div>
+
+			{sellerPicker ? <div className="max-w-md mx-auto w-full">{sellerPicker}</div> : null}
 
 			{requiresSaleValueConfirmation ? (
 				<SaleValueConfirmationInput value={operatorConfirmedSaleValue} onChange={onOperatorConfirmedSaleValueChange} useVirtualKeyboard />

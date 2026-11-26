@@ -14,6 +14,9 @@ type PointOfInteractionPageProps = {
 };
 export default function PointOfInteractionPage({ user, organization, usuarioVendedorId }: PointOfInteractionPageProps) {
 	const [newTransactionModalOpen, setNewTransactionModalOpen] = useState(false);
+	// "Quem fez a venda?" só existe quando o POI registra venda.
+	const poiSalesConfig = organization.poiConfiguracao?.vendas;
+	const poiColetaVendedor = poiSalesConfig?.registroAtivo === true && poiSalesConfig.coletaVendedor === true;
 	return (
 		<div className="w-full flex flex-col gap-3 md:flex-1 md:min-h-0">
 			<div className="w-full flex justify-end">
@@ -31,6 +34,7 @@ export default function PointOfInteractionPage({ user, organization, usuarioVend
 						orgId={organization.id}
 						usuarioVendedorId={usuarioVendedorId}
 						poiConfirmacaoValorObrigatoria={organization.poiConfirmacaoValorObrigatoria}
+						poiColetaVendedor={poiColetaVendedor}
 					/>
 				</div>
 			</div>
@@ -39,6 +43,7 @@ export default function PointOfInteractionPage({ user, organization, usuarioVend
 					sessionOrgId={organization.id}
 					sessionUser={user}
 					poiConfirmacaoValorObrigatoria={organization.poiConfirmacaoValorObrigatoria}
+					poiColetaVendedor={poiColetaVendedor}
 					closeMenu={() => setNewTransactionModalOpen(false)}
 				/>
 			) : null}
