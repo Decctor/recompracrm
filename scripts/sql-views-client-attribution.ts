@@ -14,6 +14,7 @@ import { isValidCpfCnpj } from "@/lib/validation";
 import { connection, db } from "@/services/drizzle";
 import { campaignConversions, cashbackPrograms, clients, saleItems, sales } from "@/services/drizzle/schema";
 import { and, eq, isNull, sql } from "drizzle-orm";
+import { type TPersonVerdict, type TPersonVerdictBasis, compareNames } from "./lib/person-names";
 
 /**
  * Vendas do conector SQL-VIEWS atribuídas ao cliente errado: diagnóstico e correção.
@@ -61,11 +62,10 @@ import { and, eq, isNull, sql } from "drizzle-orm";
  */
 
 const DEFAULT_ORGANIZATION_ID = "76e37c1c-927b-4f2c-88e5-104f07aa836a"; // Fran Farma — única org com SQL-VIEWS
-const NAME_PARTICLES = new Set(["DE", "DA", "DO", "DAS", "DOS", "E", "D"]);
 const SCRIPT_ORIGIN = "SCRIPT_SQL_VIEWS_ATRIBUICAO_CLIENTE";
 
-type TVerdict = "MESMA_PESSOA" | "OUTRA_PESSOA" | "INCERTO";
-type TVerdictBasis = "CPF" | "CPF_DIVERGE_NOME_IGUAL" | "NOME" | "NOME_PARCIAL" | "SEM_DADOS";
+type TVerdict = TPersonVerdict;
+type TVerdictBasis = TPersonVerdictBasis;
 
 type TPairRow = {
 	cliente_id: string;
@@ -112,20 +112,6 @@ function normalizeDocument(value: string | null | undefined) {
 	return isValidCpfCnpj(digits) ? digits : null;
 }
 
-function nameTokens(value: string | null | undefined) {
-	return (value ?? "")
-		.normalize("NFD")
-		.replace(/[̀-ͯ]/g, "")
-		.toUpperCase()
-		.replace(/[^A-Z ]/g, " ")
-		.split(/\s+/)
-		.filter((token) => token.length > 0 && !NAME_PARTICLES.has(token));
-}
-
-function isPlaceholderName(tokens: string[]) {
-	return tokens.length === 0 || (tokens.length === 1 && tokens[0] === "CLIENTE");
-}
-
 /** Mesma pessoa? CPF decide quando os dois lados têm um válido do mesmo tipo; senão o nome. */
 function comparePeople(
 	crm: { nome: string; cpf: string | null },
@@ -141,19 +127,6 @@ function comparePeople(
 		return { verdict: "OUTRA_PESSOA", basis: "CPF" };
 	}
 	return byName;
-}
-
-function compareNames(crmName: string, erpName: string): { verdict: TVerdict; basis: TVerdictBasis } {
-	const a = nameTokens(crmName);
-	const b = nameTokens(erpName);
-	if (isPlaceholderName(a) || isPlaceholderName(b)) return { verdict: "INCERTO", basis: "SEM_DADOS" };
-	if (a.join(" ") === b.join(" ")) return { verdict: "MESMA_PESSOA", basis: "NOME" };
-	if (a[0] !== b[0]) return { verdict: "OUTRA_PESSOA", basis: "NOME" };
-	if (a.length > 1 && b.length > 1 && a[a.length - 1] === b[b.length - 1]) return { verdict: "MESMA_PESSOA", basis: "NOME_PARCIAL" };
-	const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a];
-	if (shorter.length >= 2 && shorter.every((token) => longer.includes(token))) return { verdict: "MESMA_PESSOA", basis: "NOME_PARCIAL" };
-	// Mesmo primeiro nome, sobrenomes diferentes: pode ser cadastro abreviado ou outra pessoa.
-	return { verdict: "INCERTO", basis: "NOME_PARCIAL" };
 }
 
 function erpPhoneBases(row: TSqlViewsClientRow | undefined) {
