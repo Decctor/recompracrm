@@ -35,6 +35,8 @@ export const PointOfInteractionNewInternalTransactionRequestStateSchema = z.obje
 		valor: true,
 	})
 		.extend({
+			// Quem fez a venda (opcional): null = a venda fica com o operador.
+			vendedorId: z.string({ invalid_type_error: "Tipo não válido para o vendedor da venda." }).nullable(),
 			cashback: z.object({
 				aplicar: z
 					.boolean({
@@ -110,6 +112,7 @@ function buildInitialState(): TPointOfInteractionNewInternalTransactionRequestSt
 			partnerCode: null,
 			prizeRedemptions: [],
 			freeFormReward: { descricao: "", valor: null },
+			vendedorId: null,
 		},
 		marketingConsent: false,
 		operatorIdentifier: "",

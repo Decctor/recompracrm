@@ -87,6 +87,9 @@ export const OrganizationPoiConfigSchema = z.object({
 			required_error: "Configuração de registro de vendas do POI não informada.",
 			invalid_type_error: "Tipo não válido para o registro de vendas do POI.",
 		}),
+		// Pergunta quem fez a venda, à parte do operador (que só autentica a operação). Opcional
+		// para o operador: sem escolha, a venda fica com ele. Ausente = desligado, sem backfill.
+		coletaVendedor: z.boolean({ invalid_type_error: "Tipo não válido para a coleta de vendedor do POI." }).optional(),
 	}),
 	cadastro: StoredPoiRegistrationConfigSchema.optional(),
 });

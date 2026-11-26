@@ -22,6 +22,8 @@ type PointOfInteractionTransactionRequestsQueueProps = {
 	orgId: string;
 	usuarioVendedorId: string | null;
 	poiConfirmacaoValorObrigatoria: boolean;
+	/** Pergunta quem fez a venda na aprovação, à parte do operador. */
+	poiColetaVendedor: boolean;
 };
 
 type TQueueRequest = TGetPoiTransactionRequestsOutput["data"]["requests"][number];
@@ -81,6 +83,7 @@ export function PointOfInteractionTransactionRequestsQueue({
 	orgId,
 	usuarioVendedorId,
 	poiConfirmacaoValorObrigatoria,
+	poiColetaVendedor,
 }: PointOfInteractionTransactionRequestsQueueProps) {
 	const queryClient = useQueryClient();
 	const { data: requests = [], isLoading, queryKey } = usePoiTransactionRequests();
@@ -145,6 +148,7 @@ export function PointOfInteractionTransactionRequestsQueue({
 
 			{approvalTarget ? (
 				<ApproveTransaction
+					orgId={orgId}
 					requestId={approvalTarget.requestId}
 					kind={approvalTarget.kind}
 					clientDisplayName={approvalTarget.clientDisplayName}
@@ -156,6 +160,8 @@ export function PointOfInteractionTransactionRequestsQueue({
 					hasLinkedSeller={hasLinkedSeller}
 					requiresOperatorPassword={poiConfirmacaoValorObrigatoria}
 					requiresSaleValueConfirmation={approvalTarget.requiresSaleValueConfirmation}
+					// Recompensa avulsa não cria venda: não há a quem creditar.
+					collectsSaleSeller={poiColetaVendedor && approvalTarget.kind !== "free-form"}
 					closeModal={() => setApprovalTarget(null)}
 					callbacks={{
 						onSuccess: () => {

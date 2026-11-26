@@ -41,6 +41,10 @@ export const sales = newTable(
 		custoTotal: doublePrecision("custo_total").notNull(),
 		vendedorNome: text("vendedor_nome").notNull(),
 		vendedorId: varchar("vendedor_id", { length: 255 }).references(() => sellers.id, { onDelete: "set null" }),
+		// Quem orquestrou a venda (a senha digitada no Ponto de Interação). Separado de `vendedorId`
+		// porque o POI pode coletar o vendedor à parte: o vendedor recebe o crédito da venda (metas,
+		// rankings), o operador responde pela operação. Null = venda de fora do POI.
+		operadorVendedorId: varchar("operador_vendedor_id", { length: 255 }).references(() => sellers.id, { onDelete: "set null" }),
 		// Partner
 		parceiro: text("parceiro").notNull(),
 		parceiroId: varchar("parceiro_id", { length: 255 }).references(() => partners.id, { onDelete: "set null" }),
@@ -163,6 +167,10 @@ export const salesRelations = relations(sales, ({ one, many }) => ({
 	}),
 	vendedor: one(sellers, {
 		fields: [sales.vendedorId],
+		references: [sellers.id],
+	}),
+	operadorVendedor: one(sellers, {
+		fields: [sales.operadorVendedorId],
 		references: [sellers.id],
 	}),
 	parceiro: one(partners, {

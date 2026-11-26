@@ -54,6 +54,7 @@ import { NewTransactionPrizes, type TNewTransactionPrize } from "./Blocks/NewTra
 import { NewTransactionReview, OPERATOR_PASSWORD_LENGTH, type TNewTransactionReviewLine } from "./Blocks/NewTransactionReview";
 import { NewTransactionSaleDetails } from "./Blocks/NewTransactionSaleDetails";
 import { NEW_TRANSACTION_STEPS, NewTransactionSteps, type TNewTransactionStep } from "./Blocks/NewTransactionSteps";
+import { SaleSellerPicker } from "@/app/(external)/point-of-interaction/[orgId]/_shared/components/sale-seller-picker";
 
 // Tolerância de ponto flutuante ao comparar débitos com o saldo.
 const BALANCE_EPSILON = 0.0001;
@@ -62,6 +63,8 @@ type NewTransactionProps = {
 	sessionOrgId: string;
 	sessionUser: TAuthUserSession["user"];
 	poiConfirmacaoValorObrigatoria: boolean;
+	/** Pergunta quem fez a venda, à parte do operador (`poiConfiguracao.vendas.coletaVendedor`). */
+	poiColetaVendedor: boolean;
 	closeMenu: () => void;
 	callbacks?: {
 		onMutate?: () => void;
@@ -76,7 +79,14 @@ type NewTransactionProps = {
  * detalhes e conferência — no lugar do formulário corrido: cada etapa só deixa avançar quando o que
  * ela pede está certo, e a conferência mostra o efeito no saldo antes da senha do operador.
  */
-export function NewTransaction({ sessionOrgId, sessionUser, poiConfirmacaoValorObrigatoria, closeMenu, callbacks }: NewTransactionProps) {
+export function NewTransaction({
+	sessionOrgId,
+	sessionUser,
+	poiConfirmacaoValorObrigatoria,
+	poiColetaVendedor,
+	closeMenu,
+	callbacks,
+}: NewTransactionProps) {
 	const queryClient = useQueryClient();
 	const {
 		state,
@@ -348,6 +358,7 @@ export function NewTransaction({ sessionOrgId, sessionUser, poiConfirmacaoValorO
 						cashback: operation === "sale-only" ? { aplicar: false, valor: 0 } : state.sale.cashback,
 						partnerCode: state.sale.partnerCode,
 						prizeRedemptions: operation === "prize" ? state.sale.prizeRedemptions : [],
+						vendedorId: poiColetaVendedor ? state.sale.vendedorId : null,
 					},
 			operatorIdentifier: state.operatorIdentifier,
 			operatorConfirmedSaleValue: requiresSaleValueConfirmation ? state.operatorConfirmedSaleValue : undefined,
@@ -475,6 +486,11 @@ export function NewTransaction({ sessionOrgId, sessionUser, poiConfirmacaoValorO
 									onOperatorConfirmedSaleValueChange={updateOperatorConfirmedSaleValue}
 									operatorIdentifier={state.operatorIdentifier}
 									onOperatorIdentifierChange={updateOperatorIdentifier}
+									sellerPicker={
+										poiColetaVendedor && !isFreeForm ? (
+											<SaleSellerPicker orgId={sessionOrgId} value={state.sale.vendedorId} onChange={(vendedorId) => updateSale({ vendedorId })} />
+										) : null
+									}
 								/>
 							) : null}
 							{/* Enter avança a etapa. `sr-only`, não `hidden`: alguns navegadores não submetem por um botão oculto. */}

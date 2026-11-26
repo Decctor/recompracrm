@@ -38,6 +38,8 @@ const ApprovePoiTransactionRequestInputSchema = z.object({
 		.positive("O valor da recompensa avulsa deve ser maior que zero.")
 		.optional()
 		.nullable(),
+	// Quem fez a venda, escolhido pelo operador na aprovação. Ausente = a venda fica com o operador.
+	saleSellerId: z.string({ invalid_type_error: "Tipo não válido para o vendedor da venda." }).optional().nullable(),
 });
 export type TApprovePoiTransactionRequestInput = z.infer<typeof ApprovePoiTransactionRequestInputSchema>;
 async function approvePoiTransactionRequest({ session, input }: { session: TAuthUserSession; input: TApprovePoiTransactionRequestInput }) {
@@ -49,7 +51,7 @@ async function approvePoiTransactionRequest({ session, input }: { session: TAuth
 	const operatorMembershipId = membership.id;
 	let operatorSellerId: string | null = null;
 
-	const { requestId, operatorIdentifier, operatorConfirmedSaleValue, operatorCouponDiscountValue, operatorFreeFormRewardValue } = input;
+	const { requestId, operatorIdentifier, operatorConfirmedSaleValue, operatorCouponDiscountValue, operatorFreeFormRewardValue, saleSellerId } = input;
 	const poiRequest = await db.query.poiTransactionRequests.findFirst({
 		where: and(eq(poiTransactionRequests.id, requestId), eq(poiTransactionRequests.organizacaoId, orgId)),
 		with: {
@@ -102,6 +104,7 @@ async function approvePoiTransactionRequest({ session, input }: { session: TAuth
 				operatorFreeFormRewardValue,
 				operatorSellerId: operatorSellerId,
 				operatorUserId: operatorUserId,
+				saleSellerId: saleSellerId ?? null,
 			},
 		});
 

@@ -93,6 +93,9 @@ export const CreatePointOfInteractionTransactionInputSchema = z.object({
 	marketingConsent: z.boolean({ invalid_type_error: "Tipo não válido para o consentimento de marketing." }).optional().nullable(),
 	sale: z.object({
 		entregaModalidade: DeliveryModeEnum.optional().nullable(),
+		// Quem fez a venda, quando o POI coleta o vendedor à parte. Ausente = a venda fica com o
+		// operador (a senha digitada). Só vale quando a transação registra venda.
+		vendedorId: z.string({ invalid_type_error: "Tipo não válido para o vendedor da venda." }).optional().nullable(),
 		valor: z
 			.number({
 				required_error: "Valor da transação não informado.",
@@ -249,6 +252,8 @@ type TPreparePointOfInteractionTransactionParams = {
 		operatorFreeFormRewardValue?: number | null;
 		operatorSellerId?: string | null;
 		operatorUserId?: string | null;
+		// Vendedor escolhido pelo operador na aprovação da solicitação (o celular não o envia).
+		saleSellerId?: string | null;
 	};
 };
 
@@ -377,6 +382,25 @@ export async function preparePointOfInteractionTransaction({ input, operatorCont
 		});
 		const operatorMembershipUser = operatorMembership?.usuario;
 
+		// Vendedor da venda: o escolhido no POI, senão o operador. Só existe quando há venda — um
+		// vendedor mandado junto de uma recompensa avulsa é ignorado, não recusado. Na aprovação de
+		// uma solicitação a escolha é do operador, e "nenhum" também é escolha: o que veio no pedido
+		// do celular do cliente nunca prevalece.
+		const requestedSaleSellerId = !transactionRequiresSaleProcessing
+			? null
+			: operatorContext
+				? (operatorContext.saleSellerId ?? null)
+				: (input.sale.vendedorId ?? null);
+		let saleSeller: { id: string; nome: string } = operator;
+		if (requestedSaleSellerId) {
+			const chosenSaleSeller = await tx.query.sellers.findFirst({
+				where: (fields, { and, eq }) => and(eq(fields.id, requestedSaleSellerId), eq(fields.organizacaoId, input.orgId), eq(fields.ativo, true)),
+				columns: { id: true, nome: true },
+			});
+			if (!chosenSaleSeller) throw new createHttpError.BadRequest("Vendedor informado não encontrado ou inativo.");
+			saleSeller = chosenSaleSeller;
+		}
+
 		let transactionSaleId: string | null = null;
 		let transactionAccumulationId: string | null = null;
 		let transactionRedemptionId: string | null = null;
@@ -411,10 +435,11 @@ export async function preparePointOfInteractionTransaction({ input, operatorCont
 
 			if (input.client.cpfCnpj && !isValidCpfCnpj(input.client.cpfCnpj)) throw new createHttpError.BadRequest("CPF/CNPJ inválido.");
 
-			// "Quem atendeu" escolhido no cadastro; sem ele, o autor é o operador da transação.
+			// "Quem atendeu" escolhido no cadastro; sem ele, o autor é quem fez a venda (o vendedor
+			// escolhido ou, na falta dele, o operador da transação).
 			const clientAuthorSellerId = input.client.autorVendedorId
 				? await resolveValidatedAuthorSeller({ trx: tx, organizacaoId: input.orgId, vendedorId: input.client.autorVendedorId })
-				: operator.id;
+				: saleSeller.id;
 
 			const insertedClientResponse = await tx
 				.insert(clients)
@@ -781,8 +806,9 @@ export async function preparePointOfInteractionTransaction({ input, operatorCont
 					valorTotal: effectiveSaleFinalValue,
 					descontosTotal: (transactionRequiresRedemptionProcessing ? Math.min(effectiveSaleValue, effectiveRedemptionValue) : 0) + couponDiscountValue,
 					custoTotal: prizesCost,
-					vendedorNome: operator.nome,
-					vendedorId: operator.id,
+					vendedorNome: saleSeller.nome,
+					vendedorId: saleSeller.id,
+					operadorVendedorId: operator.id,
 					parceiro: normalizedPartnerCode ?? "N/A",
 					parceiroId: salePartnerId,
 					chave: "N/A",
@@ -924,7 +950,7 @@ export async function preparePointOfInteractionTransaction({ input, operatorCont
 					primeiraCompra: clientIsNew,
 					contabilizarCompra: transactionRequiresSaleProcessing,
 					segmentacao: clientRfmTitle,
-					vendedorNome: operator.nome,
+					vendedorNome: saleSeller.nome,
 					terminologia: program.terminologia,
 					cashbackAcumulado: clientNewAccumulatedCashbackValue,
 					cashbackSaldoDisponivel: clientCashbackAvailableBalance ?? 0,

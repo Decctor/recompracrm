@@ -3,6 +3,7 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatToMoney } from "@/lib/formatting";
+import type { ReactNode } from "react";
 import { OperatorConfirmationInput } from "../../_shared/components/operator-confirmation-input";
 import { SaleValueConfirmationInput } from "../../_shared/components/sale-value-confirmation-input";
 
@@ -24,6 +25,8 @@ type ConfirmationStepProps = {
 	onOperatorConfirmedSaleValueChange: (value: number | null) => void;
 	appliedCoupon?: TConfirmationStepAppliedCoupon | null;
 	onCouponDiscountChange?: (value: number | null) => void;
+	/** "Quem fez a venda?", quando o POI coleta o vendedor; vem antes da senha do operador. */
+	sellerPicker?: ReactNode;
 	onSubmit: () => void;
 };
 
@@ -37,6 +40,7 @@ export function ConfirmationStep({
 	onOperatorConfirmedSaleValueChange,
 	appliedCoupon,
 	onCouponDiscountChange,
+	sellerPicker,
 	onSubmit,
 }: ConfirmationStepProps) {
 	return (
@@ -49,7 +53,9 @@ export function ConfirmationStep({
 		>
 			<div className="text-center space-y-2 short:space-y-0.5">
 				<h2 className="text-xl short:text-lg font-extrabold tracking-tight">Finalizar operação</h2>
-				<p className="text-muted-foreground short:text-xs">Confira os dados e digite o usuário do operador.</p>
+				<p className="text-muted-foreground short:text-xs">
+					{sellerPicker ? "Confira os dados, diga quem fez a venda e digite a senha do operador." : "Confira os dados e digite o usuário do operador."}
+				</p>
 			</div>
 
 			<div className="bg-brand/5 rounded-3xl short:rounded-xl p-6 short:p-2.5 space-y-3 short:space-y-1.5 border border-brand/20">
@@ -91,6 +97,8 @@ export function ConfirmationStep({
 					/>
 				</div>
 			) : null}
+
+			{sellerPicker ? <div className="max-w-md mx-auto w-full">{sellerPicker}</div> : null}
 
 			<OperatorConfirmationInput value={operatorIdentifier} onChange={onOperatorIdentifierChange} useVirtualKeyboard />
 			{requiresSaleValueConfirmation ? (

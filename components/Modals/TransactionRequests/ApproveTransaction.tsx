@@ -4,6 +4,7 @@ import { LoadingButton } from "@/components/loading-button";
 import { PoiBalanceUsageBar, POI_OPERATION_KINDS, type TPoiOperationKind } from "@/components/PointOfInteraction/operation-kinds";
 import ResponsiveMenu from "@/components/Utils/ResponsiveMenu";
 
+import { SaleSellerPicker } from "@/app/(external)/point-of-interaction/[orgId]/_shared/components/sale-seller-picker";
 import { SaleValueConfirmationInput } from "@/app/(external)/point-of-interaction/[orgId]/_shared/components/sale-value-confirmation-input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -48,6 +49,7 @@ type TApproveTransactionFreeFormReward = {
 };
 
 type ApproveTransactionProps = {
+	orgId: string;
 	requestId: string;
 	/** Tipo da operação pedida: dá a cor e o ícone da faixa do topo. */
 	kind: TPoiOperationKind;
@@ -64,6 +66,8 @@ type ApproveTransactionProps = {
 	hasLinkedSeller: boolean;
 	requiresOperatorPassword: boolean;
 	requiresSaleValueConfirmation: boolean;
+	/** Pergunta quem fez a venda: a senha passa a identificar só quem aprova. */
+	collectsSaleSeller: boolean;
 	closeModal: () => void;
 	callbacks?: {
 		onMutate?: () => void;
@@ -86,6 +90,7 @@ function HighlightedMoney({ value }: { value: number }) {
 }
 
 export function ApproveTransaction({
+	orgId,
 	requestId,
 	kind,
 	clientDisplayName,
@@ -97,6 +102,7 @@ export function ApproveTransaction({
 	hasLinkedSeller,
 	requiresOperatorPassword,
 	requiresSaleValueConfirmation,
+	collectsSaleSeller,
 	closeModal,
 	callbacks,
 }: ApproveTransactionProps) {
@@ -105,6 +111,7 @@ export function ApproveTransaction({
 	const [operatorCouponDiscountValue, setOperatorCouponDiscountValue] = useState<number | null>(null);
 	const [highValueConfirmed, setHighValueConfirmed] = useState(false);
 	const [operatorFreeFormRewardValue, setOperatorFreeFormRewardValue] = useState<number | null>(freeFormReward?.valor ?? null);
+	const [saleSellerId, setSaleSellerId] = useState<string | null>(null);
 
 	// Recompensa avulsa não tem venda: o valor em reais a conferir é zero, o que importa é o débito.
 	const requiresHighValueConfirmation = !freeFormReward && valorFinal >= HIGH_VALUE_CONFIRMATION_THRESHOLD;
@@ -182,8 +189,11 @@ export function ApproveTransaction({
 			operatorConfirmedSaleValue: requiresSaleValueConfirmation ? operatorConfirmedSaleValue : undefined,
 			operatorCouponDiscountValue: requiresCouponDiscountInput ? operatorCouponDiscountValue : undefined,
 			operatorFreeFormRewardValue: freeFormReward ? operatorFreeFormRewardValue : undefined,
+			saleSellerId: collectsSaleSeller ? saleSellerId : undefined,
 		});
 	}, [
+		collectsSaleSeller,
+		saleSellerId,
 		freeFormReward,
 		operatorFreeFormRewardValue,
 		hasLinkedSeller,
@@ -201,11 +211,17 @@ export function ApproveTransaction({
 		valorFinal,
 	]);
 
-	const description = hasLinkedSeller
-		? requiresOperatorPassword
-			? "Informe os 5 dígitos da senha do vendedor que receberá a venda."
-			: "Informe os 5 dígitos da senha do vendedor que receberá a venda. Se deixar em branco, será usado o vendedor vinculado ao seu usuário."
-		: "Informe os 5 dígitos da senha do operador (vendedor) que receberá esta venda.";
+	// Com o vendedor coletado à parte, a senha só identifica quem aprova; a venda vai para o vendedor
+	// escolhido acima (ou fica com o operador, se ninguém for escolhido).
+	const description = collectsSaleSeller
+		? hasLinkedSeller && !requiresOperatorPassword
+			? "Informe os 5 dígitos da senha do operador que está aprovando. Se deixar em branco, será usado o vendedor vinculado ao seu usuário."
+			: "Informe os 5 dígitos da senha do operador que está aprovando."
+		: hasLinkedSeller
+			? requiresOperatorPassword
+				? "Informe os 5 dígitos da senha do vendedor que receberá a venda."
+				: "Informe os 5 dígitos da senha do vendedor que receberá a venda. Se deixar em branco, será usado o vendedor vinculado ao seu usuário."
+			: "Informe os 5 dígitos da senha do operador (vendedor) que receberá esta venda.";
 
 	return (
 		<ResponsiveMenu.Root
@@ -301,6 +317,8 @@ export function ApproveTransaction({
 						{requiresSaleValueConfirmation ? (
 							<SaleValueConfirmationInput value={operatorConfirmedSaleValue} onChange={setOperatorConfirmedSaleValue} compact />
 						) : null}
+
+						{collectsSaleSeller ? <SaleSellerPicker orgId={orgId} value={saleSellerId} onChange={setSaleSellerId} /> : null}
 
 						<div className="flex w-full min-w-0 flex-col gap-3 overflow-x-hidden">
 							<Label htmlFor="poi-approve-operator-password" className="text-sm font-medium tracking-tight text-foreground/80">
