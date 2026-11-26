@@ -201,6 +201,9 @@ export const cashbackProgramTransactions = newTable(
 		resgateRecompensaIdIdx: index("idx_cashback_program_transactions_resgate_recompensa_id")
 			.on(table.resgateRecompensaId)
 			.where(sql`${table.resgateRecompensaId} IS NOT NULL`),
+		// FK para clientes sem índice (0162): o extrato do cliente e o merge de duplicatas varriam a
+		// tabela inteira.
+		clienteIdIdx: index("idx_cashback_program_transactions_cliente_id").on(table.clienteId),
 	}),
 );
 export const cashbackProgramTransactionRelations = relations(cashbackProgramTransactions, ({ one }) => ({

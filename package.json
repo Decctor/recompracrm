@@ -52,7 +52,7 @@
 		"test:manual-stock-movements": "node --import tsx --test lib/stock/manual-stock-movements.test.ts",
 		"test:stock-analytics": "node --import tsx --test lib/stock/analytics/analytics.test.ts",
 		"test:pos-barcode": "node --import tsx --test lib/pos/barcode-scan-detector.test.ts lib/pos/barcode-lookup.test.ts lib/pos/scale-barcode.test.ts lib/pos/serial-scale-protocol.test.ts lib/pos/serial-scale-diagnostics.test.ts",
-		"test:client-duplicates": "node --import tsx --test lib/clients/name-duplicate-query.test.ts lib/clients/merge-suggestions.test.ts",
+		"test:client-duplicates": "node --import tsx --test lib/clients/name-duplicate-query.test.ts lib/clients/merge-suggestions.test.ts scripts/lib/person-names.test.ts",
 		"test:fiscal-credit": "node --import tsx --test lib/fiscal/simples-credit.test.ts",
 		"test:fiscal-errors": "node --import tsx --test lib/fiscal/errors.test.ts",
 		"test:fiscal-inbound-sync": "node --import tsx --test lib/fiscal/inbound/sync-cooldown.test.ts lib/fiscal/providers/spedy/sync-response.test.ts lib/fiscal/providers/spedy/rate-limit.test.ts",
