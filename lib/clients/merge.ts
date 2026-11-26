@@ -3,6 +3,8 @@ import type { DB } from "@/services/drizzle";
 import {
 	aiAgentRuns,
 	campaignConversions,
+	campaignDispatchRecipients,
+	campaignEvents,
 	cashbackProgramBalances,
 	cashbackProgramTransactions,
 	chatAssignments,
@@ -315,6 +317,20 @@ export async function mergeClients(input: TMergeClientsInput): Promise<TMergeCli
 		await repoint("comandas", tabs);
 		// ai_agent_runs.cliente_id é denormalizado (sem FK) — o cascade do delete não cobre.
 		await repoint("execucoesAgente", aiAgentRuns);
+		// Eventos e destinatários de campanha: sem eles o cascade apagava o histórico de envios da
+		// origem (e o limite de frequência deixava de vê-los). Destinatários são únicos por
+		// (disparo, cliente): no mesmo disparo vale o do keeper, e o da origem sai com ela.
+		await repoint("eventosCampanha", campaignEvents);
+		const keeperDispatchIds = tx
+			.select({ dispatchId: campaignDispatchRecipients.dispatchId })
+			.from(campaignDispatchRecipients)
+			.where(eq(campaignDispatchRecipients.clienteId, keeper.id));
+		const movedRecipients = await tx
+			.update(campaignDispatchRecipients)
+			.set({ clienteId: keeper.id })
+			.where(and(eq(campaignDispatchRecipients.clienteId, source.id), notInArray(campaignDispatchRecipients.dispatchId, keeperDispatchIds)))
+			.returning({ id: campaignDispatchRecipients.id });
+		registrosMovidos.destinatariosCampanha = movedRecipients.length;
 
 		// audience_destination_members fica INTACTO de propósito: a linha da origem
 		// carrega o hash necessário para o DELETE na Meta na próxima sincronização
