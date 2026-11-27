@@ -3,7 +3,7 @@ import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { hydratePOSProducts } from "@/lib/pos/hydrate-pos-products";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { db } from "@/services/drizzle";
-import { productClientReferences, saleItems, sales } from "@/services/drizzle/schema";
+import { productClientReferences, productPairScores, saleItems, sales } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
 import { and, countDistinct, desc, eq, gte, inArray, isNotNull, notInArray, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
@@ -63,12 +63,69 @@ function buildMotivo(sources: Set<ScoreSource>): string {
 	return "Mais vendido da loja";
 }
 
+/**
+ * Coprodutos da cesta. Lê os pares que o cron product-client-references grava toda noite
+ * (productPairScores: top 30 por produto, vendas confirmadas dos últimos 365 dias) — uma busca por
+ * índice no lugar do self-join de itens, que levava até 6,9 s por requisição no PDV.
+ *
+ * Organização ainda sem pares gravados (antes do primeiro cron após o deploy, ou recém-criada) cai
+ * no cálculo ao vivo de antes.
+ */
+async function loadBasketCoOccurrence({ organizacaoId, basketIds }: { organizacaoId: string; basketIds: string[] }) {
+	const stored = await db
+		.select({ produtoId: productPairScores.produtoRelacionadoId, score: sum(productPairScores.coocorrencias) })
+		.from(productPairScores)
+		.where(
+			and(
+				eq(productPairScores.organizacaoId, organizacaoId),
+				inArray(productPairScores.produtoId, basketIds),
+				notInArray(productPairScores.produtoRelacionadoId, basketIds),
+			),
+		)
+		.groupBy(productPairScores.produtoRelacionadoId)
+		.orderBy(desc(sum(productPairScores.coocorrencias)))
+		.limit(CANDIDATE_POOL);
+	if (stored.length > 0) return stored;
+
+	const organizationHasPairs = await db
+		.select({ id: productPairScores.id })
+		.from(productPairScores)
+		.where(eq(productPairScores.organizacaoId, organizacaoId))
+		.limit(1);
+	if (organizationHasPairs.length > 0) return stored;
+
+	return loadBasketCoOccurrenceLive({ organizacaoId, basketIds });
+}
+
+function loadBasketCoOccurrenceLive({ organizacaoId, basketIds }: { organizacaoId: string; basketIds: string[] }) {
+	const twelveMonthsAgo = dayjs().subtract(12, "months").toDate();
+	const basketSaleIds = db
+		.selectDistinct({ vendaId: saleItems.vendaId })
+		.from(saleItems)
+		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
+		.where(
+			and(
+				eq(saleItems.organizacaoId, organizacaoId),
+				inArray(saleItems.produtoId, basketIds),
+				isNotNull(sales.dataVenda),
+				gte(sales.dataVenda, twelveMonthsAgo),
+			),
+		);
+
+	return db
+		.select({ produtoId: saleItems.produtoId, score: countDistinct(saleItems.vendaId) })
+		.from(saleItems)
+		.where(and(eq(saleItems.organizacaoId, organizacaoId), inArray(saleItems.vendaId, basketSaleIds), notInArray(saleItems.produtoId, basketIds)))
+		.groupBy(saleItems.produtoId)
+		.orderBy(desc(countDistinct(saleItems.vendaId)))
+		.limit(CANDIDATE_POOL);
+}
+
 async function getCrossSell({ input, session }: { input: TGetCrossSellInput; session: TAuthUserSession }) {
 	const organizacaoId = session.membership?.organizacao.id;
 	if (!organizacaoId) throw new createHttpError.Unauthorized("Você precisa estar vinculado a uma organização para acessar esse recurso.");
 
 	const basketIds = input.basketProductIds;
-	const twelveMonthsAgo = dayjs().subtract(12, "months").toDate();
 
 	// Aggregated score per candidate product, plus which sources contributed (for the "why").
 	const scoreMap = new Map<string, { score: number; sources: Set<ScoreSource> }>();
@@ -109,27 +166,7 @@ async function getCrossSell({ input, session }: { input: TGetCrossSellInput; ses
 
 	// Source 2 — basket co-occurrence: "who bought these also bought" over the last 12 months.
 	if (basketIds.length > 0) {
-		const basketSaleIds = db
-			.selectDistinct({ vendaId: saleItems.vendaId })
-			.from(saleItems)
-			.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-			.where(
-				and(
-					eq(saleItems.organizacaoId, organizacaoId),
-					inArray(saleItems.produtoId, basketIds),
-					isNotNull(sales.dataVenda),
-					gte(sales.dataVenda, twelveMonthsAgo),
-				),
-			);
-
-		const coOccurrenceRaw = await db
-			.select({ produtoId: saleItems.produtoId, score: countDistinct(saleItems.vendaId) })
-			.from(saleItems)
-			.where(and(eq(saleItems.organizacaoId, organizacaoId), inArray(saleItems.vendaId, basketSaleIds), notInArray(saleItems.produtoId, basketIds)))
-			.groupBy(saleItems.produtoId)
-			.orderBy(desc(countDistinct(saleItems.vendaId)))
-			.limit(CANDIDATE_POOL);
-
+		const coOccurrenceRaw = await loadBasketCoOccurrence({ organizacaoId, basketIds });
 		const basketMax = Math.max(0, ...coOccurrenceRaw.map((row) => Number(row.score ?? 0)));
 		if (basketMax > 0) {
 			for (const row of coOccurrenceRaw) {
