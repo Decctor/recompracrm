@@ -161,7 +161,7 @@
 		},
 		{
 			"path": "/api/cron/product-client-references",
-			"schedule": "30 2 * * *"
+			"schedule": "30 2,3,4,5 * * *"
 		},
 		{
 			"path": "/api/cron/client-seller-references",

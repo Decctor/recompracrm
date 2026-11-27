@@ -69,6 +69,8 @@ export const chats = newTable(
 	},
 	(table) => [
 		index("idx_chats_organizacao_ultima_mensagem").on(table.organizacaoId, table.ultimaMensagemData.desc()),
+		// FK ON DELETE CASCADE por cliente_id sozinho (0163).
+		index("idx_chats_cliente_id").on(table.clienteId),
 		index("idx_chats_conexao_telefone_ultima_mensagem").on(table.whatsappConexaoTelefoneId, table.ultimaMensagemData.desc()),
 		// Chave natural do chat. Parcial porque whatsappTelefoneId é nullable e NULL nunca conflita
 		// no Postgres — deixar explícito evita a falsa impressão de que chats sem número estão protegidos.

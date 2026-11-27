@@ -640,6 +640,9 @@ export const productClientReferences = newTable(
 			table.janela,
 			table.rankingValor,
 		),
+		// FK ON DELETE CASCADE por cliente_id sozinho (0163): cada exclusão de cliente varria a tabela
+		// (117 MB); o índice cliente_janela começa por organizacao_id e não serve à cascata.
+		clienteIdIdx: index("idx_product_client_references_cliente_id").on(table.clienteId),
 		clienteJanelaIdx: index("idx_product_client_references_cliente_janela").on(table.organizacaoId, table.clienteId, table.janela),
 		atualizacaoIdx: index("idx_product_client_references_data_atualizacao").on(table.organizacaoId, table.dataUltimaAtualizacao),
 	}),

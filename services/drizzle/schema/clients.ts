@@ -122,6 +122,13 @@ export const clients = newTable(
 		emailIndex: index("idx_clients_email_gin").using("gin", sql`lower(${table.email}) gin_trgm_ops`),
 		rfmTituloIdx: index("idx_clients_rfm_titulo").on(table.analiseRFMTitulo),
 		orgPrimeiraCompraIdx: index("idx_clients_org_primeira_compra").on(table.organizacaoId, table.primeiraCompraData),
+		// Resolução de cliente da integração (sync-auxiliary-entities, loadExistingClients) e busca por
+		// telefone do WhatsApp: igualdade por org + chave. Sem eles, cada lote lia todos os clientes da
+		// org (BitmapOr não tinha índice para combinar). Migration 0163.
+		orgTelefoneBaseIdx: index("idx_clients_org_telefone_base").on(table.organizacaoId, table.telefoneBase),
+		orgCpfCnpjIdx: index("idx_clients_org_cpf_cnpj").on(table.organizacaoId, table.cpfCnpj),
+		orgIdExternoIdx: index("idx_clients_org_id_externo").on(table.organizacaoId, table.idExterno),
+		orgNomeNormalizadoIdx: index("idx_clients_org_nome_normalizado").on(table.organizacaoId, sql`upper(btrim(${table.nome}))`),
 	}),
 );
 

@@ -2,6 +2,7 @@ import { db } from "@/services/drizzle";
 import { fiscalOutboundDocuments, productFiscalProfiles, products, saleItems, sales } from "@/services/drizzle/schema";
 import type { TFiscalDocumentTypeEnum } from "@/schemas/enums";
 import { and, countDistinct, desc, eq, gte, inArray, isNull, notExists, sql } from "drizzle-orm";
+import { revalidateTag, unstable_cache } from "next/cache";
 import { FISCAL_DEADLINES } from "./constants";
 import { resolveCancellationDeadline } from "./document-actions";
 import { resolveFiscalDocumentProblems, type TFiscalProblem, type TFiscalProblemTarget } from "./problems";
@@ -36,6 +37,61 @@ function groupKey(problem: TFiscalProblem) {
 }
 
 type TFiscalPendingProvider = string | null | undefined;
+
+// Produtos vendidos nos últimos 30 dias sem perfil fiscal: agregação sobre os itens da janela (~0,4 s
+// em média, ~3 s na maior org) que a sidebar repetia a cada 2 min por aba aberta. Muda devagar — só
+// quando vendas entram ou um perfil é criado/excluído — então fica em cache por org; a criação e a
+// exclusão de perfil invalidam pela tag (invalidateFiscalProductsWithoutProfile).
+const PRODUCTS_WITHOUT_PROFILE_CACHE_SECONDS = 300;
+const productsWithoutProfileTag = (organizationId: string) => `fiscal-products-without-profile:${organizationId}`;
+
+function loadProductsWithoutProfile(organizationId: string) {
+	const lookbackStart = new Date(Date.now() - PRODUCTS_WITHOUT_PROFILE_LOOKBACK_DAYS * 86_400_000);
+	return db
+		.select({
+			produtoId: products.id,
+			nome: products.nome,
+			vendasRecentes: countDistinct(saleItems.vendaId),
+		})
+		.from(saleItems)
+		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
+		.innerJoin(products, eq(saleItems.produtoId, products.id))
+		.where(
+			and(
+				eq(sales.organizacaoId, organizationId),
+				eq(sales.statusVenda, "CONFIRMADA"),
+				gte(sales.dataVenda, lookbackStart),
+				eq(products.ativo, true),
+				notExists(
+					db
+						.select({ id: productFiscalProfiles.id })
+						.from(productFiscalProfiles)
+						.where(
+							and(
+								eq(productFiscalProfiles.organizacaoId, organizationId),
+								eq(productFiscalProfiles.produtoId, products.id),
+								isNull(productFiscalProfiles.produtoVarianteId),
+								eq(productFiscalProfiles.ativo, true),
+							),
+						),
+				),
+			),
+		)
+		.groupBy(products.id, products.nome)
+		.orderBy(desc(countDistinct(saleItems.vendaId)))
+		.limit(PRODUCTS_WITHOUT_PROFILE_LIMIT);
+}
+
+function getProductsWithoutProfileCached(organizationId: string) {
+	return unstable_cache(() => loadProductsWithoutProfile(organizationId), ["fiscal-products-without-profile", organizationId], {
+		revalidate: PRODUCTS_WITHOUT_PROFILE_CACHE_SECONDS,
+		tags: [productsWithoutProfileTag(organizationId)],
+	})();
+}
+
+export function invalidateFiscalProductsWithoutProfile(organizationId: string) {
+	revalidateTag(productsWithoutProfileTag(organizationId), "max");
+}
 
 /**
  * Trabalho fiscal a fazer, agrupado pela causa e nao pelo documento: um perfil fiscal ausente
@@ -88,39 +144,7 @@ export async function getFiscalPendingSummary({
 						with: { venda: { columns: { valorTotal: true } } },
 					}),
 		),
-		db
-			.select({
-				produtoId: products.id,
-				nome: products.nome,
-				vendasRecentes: countDistinct(saleItems.vendaId),
-			})
-			.from(saleItems)
-			.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-			.innerJoin(products, eq(saleItems.produtoId, products.id))
-			.where(
-				and(
-					eq(sales.organizacaoId, organizationId),
-					eq(sales.statusVenda, "CONFIRMADA"),
-					gte(sales.dataVenda, lookbackStart),
-					eq(products.ativo, true),
-					notExists(
-						db
-							.select({ id: productFiscalProfiles.id })
-							.from(productFiscalProfiles)
-							.where(
-								and(
-									eq(productFiscalProfiles.organizacaoId, organizationId),
-									eq(productFiscalProfiles.produtoId, products.id),
-									isNull(productFiscalProfiles.produtoVarianteId),
-									eq(productFiscalProfiles.ativo, true),
-								),
-							),
-					),
-				),
-			)
-			.groupBy(products.id, products.nome)
-			.orderBy(desc(countDistinct(saleItems.vendaId)))
-			.limit(PRODUCTS_WITHOUT_PROFILE_LIMIT),
+		getProductsWithoutProfileCached(organizationId),
 		db
 			.select({ qtde: sql<number>`count(*)::int` })
 			.from(sales)

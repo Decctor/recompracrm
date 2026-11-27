@@ -75,6 +75,8 @@ export const interactions = newTable(
 		clientRelationshipIdx: index("idx_interactions_org_cliente_data_interacao").on(table.organizacaoId, table.clienteId, table.dataInteracao),
 		// Carteira do vendedor: interações e follow-ups (PLANEJADA) do dia.
 		sellerPortfolioIdx: index("idx_interactions_org_vendedor_status_data").on(table.organizacaoId, table.vendedorId, table.status, table.dataInteracao),
+		// FK ON DELETE CASCADE por cliente_id sozinho (0163).
+		clienteIdIdx: index("idx_interactions_cliente_id").on(table.clienteId),
 	}),
 );
 export const interactionRelations = relations(interactions, ({ one }) => ({

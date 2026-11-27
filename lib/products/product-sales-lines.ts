@@ -1,6 +1,6 @@
 import { db } from "@/services/drizzle";
-import { saleItemModifiers, saleItems } from "@/services/drizzle/schema";
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { saleItemModifiers, saleItems, sales } from "@/services/drizzle/schema";
+import { and, eq, isNotNull, type SQL, sql } from "drizzle-orm";
 
 /**
  * Linhas de venda ATRIBUÍDAS A PRODUTO — a fonte das estatísticas por produto.
@@ -37,7 +37,16 @@ import { and, eq, isNotNull, sql } from "drizzle-orm";
  */
 export type TProductSalesLineOrigin = "ITEM" | "ADICIONAL";
 
-export function getProductSalesLines({ organizationId }: { organizationId: string }) {
+/**
+ * `salesScope` (opcional): condição sobre `sales` aplicada DENTRO de cada ramo do UNION. Sem ela o
+ * Postgres não empurra o filtro da consulta externa para dentro do UNION ALL e lê todos os itens da
+ * organização antes do hash join com as vendas (Fran Farma, 30 dias: 556k itens lidos para 42k
+ * úteis, 29–38 s). Com ela o plano parte das vendas do período (índice org+data_venda) e busca os
+ * itens por venda_id (mesma consulta: ~6 s frio). Use quando houver recorte de período; sem período,
+ * a leitura de todos os itens da org continua sendo o plano certo. A consulta externa continua
+ * juntando `sales` para os campos da venda — o filtro repetido é redundante, não muda o resultado.
+ */
+export function getProductSalesLines({ organizationId, salesScope }: { organizationId: string; salesScope?: SQL }) {
 	const linkedAddOns = db
 		.select({
 			itemVendaId: saleItemModifiers.itemVendaId,
@@ -72,7 +81,14 @@ export function getProductSalesLines({ organizationId }: { organizationId: strin
 		})
 		.from(saleItems)
 		.leftJoin(linkedAddOns, eq(linkedAddOns.itemVendaId, saleItems.id))
-		.where(eq(saleItems.organizacaoId, organizationId));
+		.where(
+			salesScope
+				? and(
+						eq(saleItems.organizacaoId, organizationId),
+						sql`exists (select 1 from ${sales} where ${sales.id} = ${saleItems.vendaId} and ${salesScope})`,
+					)
+				: eq(saleItems.organizacaoId, organizationId),
+		);
 
 	// Fator que encolhe os adicionais quando passam do bruto da linha (dado de importação incoerente).
 	const scale = sql`(case when ${linkedLineValue} > ${bruto} and ${linkedLineValue} > 0 then ${bruto} / ${linkedLineValue} else 1 end)`;
@@ -98,7 +114,13 @@ export function getProductSalesLines({ organizationId }: { organizationId: strin
 		.from(saleItemModifiers)
 		.innerJoin(saleItems, eq(saleItems.id, saleItemModifiers.itemVendaId))
 		.innerJoin(linkedAddOns, eq(linkedAddOns.itemVendaId, saleItems.id))
-		.where(and(isNotNull(saleItemModifiers.produtoId), eq(saleItems.organizacaoId, organizationId)));
+		.where(
+			and(
+				isNotNull(saleItemModifiers.produtoId),
+				eq(saleItems.organizacaoId, organizationId),
+				salesScope ? sql`exists (select 1 from ${sales} where ${sales.id} = ${saleItems.vendaId} and ${salesScope})` : undefined,
+			),
+		);
 
 	return itemLines.unionAll(addOnLines).as("product_sales_lines");
 }
