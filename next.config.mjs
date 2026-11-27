@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+	// Local mode (`npm run local:dev`) builds into its own folder, so it can run next to a regular
+	// `next dev` in the same checkout. See docs/dev/local-environment.md.
+	...(process.env.LOCAL_DEV === "1" ? { distDir: ".next-localdb" } : {}),
 	reactCompiler: true,
 	reactStrictMode: true,
 	async redirects() {

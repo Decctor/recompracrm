@@ -6,6 +6,15 @@
  */
 export async function register() {
 	if (process.env.NEXT_RUNTIME === "nodejs") {
+		// Local mode: the server may only open connections to this machine. Installed before anything
+		// else so no stub key ever reaches a real service. See docs/dev/local-environment.md.
+		if (process.env.LOCAL_DEV === "1") {
+			const { assertLocalDatabase } = await import("./lib/local-dev/guard");
+			const { installLocalNetworkGuard } = await import("./lib/local-dev/network-guard");
+			const { database } = assertLocalDatabase();
+			installLocalNetworkGuard();
+			console.log(`[local-dev] Local mode: database "${database}", outbound connections restricted to this machine.`);
+		}
 		const { registerAiSdkWarningLogger } = await import("./lib/ai/providers/warnings");
 		registerAiSdkWarningLogger();
 	}
