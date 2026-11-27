@@ -117,7 +117,7 @@
 		},
 		{
 			"path": "/api/cron/fix-previous-sales",
-			"schedule": "0 4 * * *"
+			"schedule": "0 4,5 * * *"
 		},
 		{
 			"path": "/api/cron/rfm-analysis",
