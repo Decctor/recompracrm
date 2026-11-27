@@ -22,3 +22,7 @@ CREATE TABLE IF NOT EXISTS "ampmais_product_pair_scores" (
 CREATE UNIQUE INDEX IF NOT EXISTS "idx_product_pair_scores_produto_ranking" ON "ampmais_product_pair_scores" USING btree ("produto_id", "ranking");
 CREATE INDEX IF NOT EXISTS "idx_product_pair_scores_organizacao" ON "ampmais_product_pair_scores" USING btree ("organizacao_id");
 CREATE INDEX IF NOT EXISTS "idx_product_pair_scores_relacionado" ON "ampmais_product_pair_scores" USING btree ("produto_relacionado_id");
+
+-- Mesmo padrão das demais tabelas ampmais_: RLS ligado e sem policies. O app conecta como postgres
+-- (ignora RLS); a API pública do Supabase (anon/authenticated) fica sem acesso mesmo se ganhar grant.
+ALTER TABLE "ampmais_product_pair_scores" ENABLE ROW LEVEL SECURITY;
