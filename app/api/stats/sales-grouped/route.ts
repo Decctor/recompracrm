@@ -305,7 +305,19 @@ async function getSalesGroupedStats({ filters, organizacaoId }: GetSalesParams) 
 	});
 	// Por item e por grupo de produto: linhas atribuídas a produto — adicional vinculado conta para
 	// o produto da opção (lib/products/product-sales-lines.ts).
-	const lines = getProductSalesLines({ organizationId: organizacaoId });
+	// Com período, o recorte de vendas (só colunas de `sales`) entra nas linhas — ver `salesScope`
+	// em product-sales-lines.ts; o filtro completo continua no EXISTS abaixo.
+	const lines = getProductSalesLines({
+		organizationId: organizacaoId,
+		salesScope: ajustedAfter
+			? and(
+					eq(sales.organizacaoId, organizacaoId),
+					eq(sales.statusVenda, "CONFIRMADA"),
+					gte(sales.dataVenda, ajustedAfter),
+					ajustedBefore ? lte(sales.dataVenda, ajustedBefore) : undefined,
+				)
+			: undefined,
+	});
 	const resultsByItem = await db
 		.select({
 			id: products.id,

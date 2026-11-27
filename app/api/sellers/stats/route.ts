@@ -105,7 +105,8 @@ async function getSellerStats({ session, input }: GetSellerStatsParams) {
 	const avgSalesItemsPerSale = totalSalesItems / salesCount;
 	// Por grupo e por produto: linhas atribuídas a produto — adicional vinculado conta para o
 	// produto da opção (lib/products/product-sales-lines.ts).
-	const lines = getProductSalesLines({ organizationId: userOrgId });
+	// Com período, `saleWhere` (só colunas de `sales`) entra nas linhas — ver `salesScope` em product-sales-lines.ts.
+	const lines = getProductSalesLines({ organizationId: userOrgId, salesScope: periodAfterDate ? saleWhere : undefined });
 	// Quantitative: value sold by product category
 	const byProductGroupRaw = await db
 		.select({ grupo: products.grupo, total: sum(lines.valorVendaTotalLiquido), sales: countDistinct(lines.vendaId) })

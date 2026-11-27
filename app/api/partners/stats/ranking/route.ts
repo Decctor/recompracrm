@@ -75,7 +75,8 @@ async function fetchRankingForPeriod({
 	// Get partners with sales and margin data
 	// Linhas atribuídas a produto: o custo inclui o do produto vinculado a cada adicional
 	// (lib/products/product-sales-lines.ts). A receita é a mesma de sale_items.
-	const lines = getProductSalesLines({ organizationId: userOrgId });
+	// Com período, o recorte de vendas entra nas linhas (ver `salesScope` em product-sales-lines.ts).
+	const lines = getProductSalesLines({ organizationId: userOrgId, salesScope: periodAfter ? and(...saleConditions) : undefined });
 	const partnersWithMargin = await db
 		.select({
 			parceiroId: sales.parceiroId,

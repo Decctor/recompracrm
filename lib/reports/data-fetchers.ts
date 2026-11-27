@@ -433,8 +433,8 @@ export async function getProductRankings({ after, before, organizacaoId }: Perio
 	);
 
 	// Linhas atribuídas a produto: adicional vinculado conta para o produto da opção
-	// (lib/products/product-sales-lines.ts).
-	const lines = getProductSalesLines({ organizationId: organizacaoId });
+	// (lib/products/product-sales-lines.ts). `saleWhere` só usa `sales`: vira o `salesScope`.
+	const lines = getProductSalesLines({ organizationId: organizacaoId, salesScope: saleWhere });
 	const resultsByProduct = await db
 		.select({
 			produtoId: products.id,
@@ -475,7 +475,7 @@ export async function getProductGroupRankings({ after, before, organizacaoId }: 
 		lte(sales.dataVenda, before),
 	);
 
-	const lines = getProductSalesLines({ organizationId: organizacaoId });
+	const lines = getProductSalesLines({ organizationId: organizacaoId, salesScope: saleWhere });
 	const resultsByGroup = await db
 		.select({
 			grupo: products.grupo,
