@@ -663,3 +663,42 @@ export const productClientReferencesRelations = relations(productClientReference
 }));
 
 export type TProductClientReference = typeof productClientReferences.$inferSelect;
+
+// "Quem comprou A também comprou B", por organização: os 30 coprodutos mais fortes de cada produto
+// nas vendas confirmadas dos últimos 365 dias. Derivada — o cron product-client-references reescreve
+// as linhas da org a cada noite, na mesma transação das referências. O PDV (cross-sell da cesta) lê
+// daqui em vez de recalcular o self-join de itens a cada requisição. Migration 0164.
+export const productPairScores = newTable(
+	"product_pair_scores",
+	{
+		id: varchar("id", { length: 255 })
+			.primaryKey()
+			.$defaultFn(() => crypto.randomUUID()),
+		organizacaoId: varchar("organizacao_id", { length: 255 })
+			.references(() => organizations.id, { onDelete: "cascade" })
+			.notNull(),
+		// Produto de referência (o que está na cesta / que o cliente já compra).
+		produtoId: varchar("produto_id", { length: 255 })
+			.references(() => products.id, { onDelete: "cascade" })
+			.notNull(),
+		// Coproduto: comprado na mesma venda que `produtoId`.
+		produtoRelacionadoId: varchar("produto_relacionado_id", { length: 255 })
+			.references(() => products.id, { onDelete: "cascade" })
+			.notNull(),
+		// Vendas confirmadas da janela com os dois produtos.
+		coocorrencias: integer("coocorrencias").notNull(),
+		// 1..30 dentro de `produtoId`, por coocorrências.
+		ranking: integer("ranking").notNull(),
+		dataAtualizacao: timestamp("data_atualizacao").defaultNow().notNull(),
+	},
+	(table) => ({
+		// Consulta do PDV (produtos da cesta) e cascata da exclusão de produto: cada produto pertence a
+		// uma só organização, então `produto_id` na frente basta para a busca e serve ao FK.
+		produtoRankingUnique: uniqueIndex("idx_product_pair_scores_produto_ranking").on(table.produtoId, table.ranking),
+		// DELETE noturno por organização no cron e cascata da exclusão de organização.
+		organizacaoIdx: index("idx_product_pair_scores_organizacao").on(table.organizacaoId),
+		// Cascata da exclusão do coproduto.
+		relacionadoIdx: index("idx_product_pair_scores_relacionado").on(table.produtoRelacionadoId),
+	}),
+);
+export type TProductPairScore = typeof productPairScores.$inferSelect;

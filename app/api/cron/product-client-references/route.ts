@@ -2,7 +2,7 @@ import { appApiHandler } from "@/lib/app-api";
 import { assertCronAuthorized } from "@/lib/cron/assert-cron-authorized";
 import { formatDurationMs } from "@/lib/formatting";
 import { type DBTransaction, db } from "@/services/drizzle";
-import { clients, organizations, productClientReferences, products, saleItems, sales } from "@/services/drizzle/schema";
+import { clients, organizations, productClientReferences, productPairScores, products, saleItems, sales } from "@/services/drizzle/schema";
 import dayjs from "dayjs";
 import { eq, max, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
@@ -123,10 +123,17 @@ async function computeSuggestedProductsForOrganization({ tx, organizationId }: {
 	// Clear stale suggestions first: clients that lost their signal must end up null, not keep an outdated product.
 	await tx.update(clients).set({ metadataProdutoSugeridoId: null }).where(eq(clients.organizacaoId, organizationId));
 
+	// 1. Org-wide item-item matrix: "buyers of A also bought B" (distinct sales, recent window), persisted
+	//    in productPairScores so the POS basket cross-sell reads it instead of recomputing the self-join
+	//    per request. Only active candidates and the strongest co-products per seed: without the cap the
+	//    fan-out to clients reached ~4.8M rows (sorted on disk) in the largest orgs, and a co-product
+	//    outside a seed's top-N contributes too little to beat the top candidates.
+	await tx.delete(productPairScores).where(eq(productPairScores.organizacaoId, organizationId));
 	await tx.execute(sql`
+		insert into ${productPairScores} (id, organizacao_id, produto_id, produto_relacionado_id, coocorrencias, ranking, data_atualizacao)
 		with
-		-- 0. One row per (sale, product) in the window: the self-join below then counts sales with count(*)
-		--    instead of count(distinct), and repeated lines of the same product don't multiply the pairs.
+		-- One row per (sale, product) in the window: the self-join then counts sales with count(*) instead
+		-- of count(distinct), and repeated lines of the same product don't multiply the pairs.
 		sale_products as (
 			select distinct si.venda_id, si.produto_id
 			from ${sales} s
@@ -136,25 +143,30 @@ async function computeSuggestedProductsForOrganization({ tx, organizationId }: {
 				and s.status_venda = ${VALID_SALE_STATUS}
 				and s.data_venda >= ${windowStartIso}::timestamp
 		),
-		-- 1. Org-wide item-item matrix: "buyers of A also bought B" (distinct sales, recent window).
 		pair_counts as (
-			select a.produto_id as seed_id, b.produto_id as co_id, count(*)::double precision as co_count
+			select a.produto_id as seed_id, b.produto_id as co_id, count(*)::integer as co_count
 			from sale_products a
 			join sale_products b on b.venda_id = a.venda_id and b.produto_id <> a.produto_id
 			group by a.produto_id, b.produto_id
 			having count(*) >= ${SUGGESTION_MIN_CO_OCCURRENCE}
 		),
-		-- 1b. Only active candidates, and only the strongest co-products per seed. Without the cap the
-		--     fan-out to clients reached ~4.8M rows (sorted on disk) in the largest orgs; a co-product
-		--     outside a seed's top-N contributes too little to beat the top candidates.
+		ranked_pairs as (
+			select pc.seed_id, pc.co_id, pc.co_count,
+				row_number() over (partition by pc.seed_id order by pc.co_count desc, pc.co_id asc)::integer as co_rank
+			from pair_counts pc
+			join ${products} cand on cand.id = pc.co_id and cand.ativo = true
+		)
+		select gen_random_uuid()::varchar, ${organizationId}::varchar, seed_id, co_id, co_count, co_rank, now()::timestamp
+		from ranked_pairs
+		where co_rank <= ${SUGGESTION_CO_PRODUCTS_PER_SEED}
+	`);
+
+	await tx.execute(sql`
+		with
 		pair_scores as (
-			select seed_id, co_id, co_count from (
-				select pc.seed_id, pc.co_id, pc.co_count,
-					row_number() over (partition by pc.seed_id order by pc.co_count desc, pc.co_id asc) as co_rank
-				from pair_counts pc
-				join ${products} cand on cand.id = pc.co_id and cand.ativo = true
-			) ranked_pairs
-			where co_rank <= ${SUGGESTION_CO_PRODUCTS_PER_SEED}
+			select produto_id as seed_id, produto_relacionado_id as co_id, coocorrencias::double precision as co_count
+			from ${productPairScores}
+			where organizacao_id = ${organizationId}
 		),
 		-- 2. Seeds: top-K products the client already buys (weighted by spend), GERAL window.
 		client_seed as (
