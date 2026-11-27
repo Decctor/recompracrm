@@ -141,6 +141,8 @@ export const cashbackProgramBalances = newTable(
 		// consolidação de saldo do merge de clientes contra o que se defender.
 		// Migration 0096 deduplica as linhas existentes antes de criar o índice.
 		orgClienteProgramaUnique: uniqueIndex("idx_cashback_balances_org_cliente_programa").on(table.organizacaoId, table.clienteId, table.programaId),
+		// FK ON DELETE CASCADE por cliente_id sozinho (0163): o índice acima começa por organizacao_id.
+		clienteIdIdx: index("idx_cashback_program_balances_cliente_id").on(table.clienteId),
 	}),
 );
 export const cashbackProgramBalanceRelations = relations(cashbackProgramBalances, ({ one }) => ({

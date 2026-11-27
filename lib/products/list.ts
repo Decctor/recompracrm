@@ -200,7 +200,12 @@ export async function queryProductsList(
 	// contagem repetia tudo: ~760 ms de banco por requisição. Agora é uma agregação (~90 ms), uma vez.
 	// Linhas atribuídas a produto: adicional vinculado conta para o produto da opção
 	// (lib/products/product-sales-lines.ts).
-	const lines = getProductSalesLines({ organizationId: userOrgId });
+	// Com período, o recorte das vendas entra nas linhas (ver `salesScope` em product-sales-lines):
+	// sem isso a org inteira de itens era lida a cada página (Fran Farma: 29–38 s por requisição).
+	const lines = getProductSalesLines({
+		organizationId: userOrgId,
+		salesScope: input.statsPeriodAfter ? and(...statsConditions) : undefined,
+	});
 	const salesStatsSubquery = db
 		.select({
 			produtoId: lines.produtoId,

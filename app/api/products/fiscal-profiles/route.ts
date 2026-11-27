@@ -1,6 +1,7 @@
 import z from "zod";
 import type { TAuthUserSession } from "@/lib/authentication/types";
 import { appApiHandler } from "@/lib/app-api";
+import { invalidateFiscalProductsWithoutProfile } from "@/lib/fiscal/pending";
 import { isUniqueViolationError } from "@/lib/db-utils";
 import { getCurrentSessionUncached } from "@/lib/authentication/session";
 import { ProductFiscalProfileSchema } from "@/schemas/fiscal";
@@ -222,6 +223,7 @@ async function createProductFiscalProfile({ input, session }: { input: TCreatePr
 	}
 
 	if (!createdProfile?.id) throw new createHttpError.InternalServerError("Erro ao criar perfil fiscal do produto.");
+	invalidateFiscalProductsWithoutProfile(userOrgId);
 
 	return {
 		data: {
@@ -321,6 +323,7 @@ async function deleteProductFiscalProfile({ input, session }: { input: TDeletePr
 		.returning({ id: productFiscalProfiles.id });
 
 	if (!deletedProfile?.id) throw new createHttpError.InternalServerError("Erro ao excluir perfil fiscal do produto.");
+	invalidateFiscalProductsWithoutProfile(userOrgId);
 
 	return {
 		data: {

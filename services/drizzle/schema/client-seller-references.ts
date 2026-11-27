@@ -40,6 +40,8 @@ export const clientSellerReferences = newTable(
 		// Carteira do vendedor: clientes onde ele é o dono do vínculo.
 		vendedorRankingIdx: index("idx_client_seller_refs_org_vendedor_ranking").on(table.organizacaoId, table.vendedorId, table.rankingVinculo),
 		clienteIdx: index("idx_client_seller_refs_org_cliente").on(table.organizacaoId, table.clienteId),
+		// FK ON DELETE CASCADE por cliente_id sozinho (0163): o índice acima começa por organizacao_id.
+		clienteIdIdx: index("idx_client_seller_references_cliente_id").on(table.clienteId),
 	}),
 );
 export const clientSellerReferenceRelations = relations(clientSellerReferences, ({ one }) => ({
