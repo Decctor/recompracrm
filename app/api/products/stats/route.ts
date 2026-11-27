@@ -69,10 +69,6 @@ async function getProductStats({ session, input }: GetProductStatsParams) {
 	const periodAfterDate = input.periodAfter ? new Date(input.periodAfter) : undefined;
 	const periodBeforeDate = input.periodBefore ? new Date(input.periodBefore) : undefined;
 
-	// Linhas atribuídas a produto: o produto aparece tanto como item quanto como adicional
-	// vinculado de outro item (lib/products/product-sales-lines.ts).
-	const lines = getProductSalesLines({ organizationId: userOrgId });
-	const saleItemWhereConditions = [eq(lines.organizacaoId, userOrgId), eq(lines.produtoId, input.productId)] as const;
 	const saleWhereConditions = [eq(sales.organizacaoId, userOrgId), eq(sales.statusVenda, "CONFIRMADA"), isNotNull(sales.dataVenda)] as const;
 
 	const saleWhere = and(
@@ -84,23 +80,30 @@ async function getProductStats({ session, input }: GetProductStatsParams) {
 		getSalesIntegrationCondition(input.integrationsIds),
 	);
 
+	// Linhas atribuídas a produto: o produto aparece tanto como item quanto como adicional
+	// vinculado de outro item (lib/products/product-sales-lines.ts). Com período, o recorte das
+	// vendas entra nas linhas (`salesScope`); o total histórico usa as linhas sem recorte.
+	const lines = getProductSalesLines({ organizationId: userOrgId, salesScope: periodAfterDate ? saleWhere : undefined });
+	const allTimeLines = getProductSalesLines({ organizationId: userOrgId });
+	const saleItemWhereConditions = [eq(lines.organizacaoId, userOrgId), eq(lines.produtoId, input.productId)] as const;
+
 	const saleItemWhere = and(...saleItemWhereConditions, inArray(lines.vendaId, db.select({ id: sales.id }).from(sales).where(saleWhere)));
 
 	const allTimeStatsResult = await db
 		.select({
-			quantidadeTotal: sum(lines.quantidade),
-			vendasQtdeTotal: countDistinct(lines.vendaId),
-			faturamentoBrutoTotal: sum(lines.valorVendaTotalBruto),
-			faturamentoLiquidoTotal: sum(lines.valorVendaTotalLiquido),
+			quantidadeTotal: sum(allTimeLines.quantidade),
+			vendasQtdeTotal: countDistinct(allTimeLines.vendaId),
+			faturamentoBrutoTotal: sum(allTimeLines.valorVendaTotalBruto),
+			faturamentoLiquidoTotal: sum(allTimeLines.valorVendaTotalLiquido),
 		})
-		.from(lines)
-		.innerJoin(sales, eq(lines.vendaId, sales.id))
+		.from(allTimeLines)
+		.innerJoin(sales, eq(allTimeLines.vendaId, sales.id))
 		.where(
 			and(
-				eq(lines.organizacaoId, userOrgId),
+				eq(allTimeLines.organizacaoId, userOrgId),
 				eq(sales.organizacaoId, userOrgId),
 				...saleWhereConditions,
-				eq(lines.produtoId, input.productId),
+				eq(allTimeLines.produtoId, input.productId),
 				input.sellerId ? eq(sales.vendedorId, input.sellerId) : undefined,
 				input.partnerId ? eq(sales.parceiroId, input.partnerId) : undefined,
 				getSalesIntegrationCondition(input.integrationsIds),

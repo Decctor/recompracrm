@@ -67,14 +67,14 @@ async function getProductsOverallStats({ input, session }: { input: TGetProducts
 	// 1. Total products count (all products in organization)
 	const totalProductsResult = await db.select({ count: count() }).from(products).where(eq(products.organizacaoId, userOrgId));
 
-	// Linhas atribuídas a produto: adicional vinculado conta para o produto da opção
-	// (lib/products/product-sales-lines.ts).
-	const lines = getProductSalesLines({ organizationId: userOrgId });
-
 	// 2. Active products (products sold in the period)
 	const saleConditions = [eq(sales.organizacaoId, userOrgId), eq(sales.statusVenda, "CONFIRMADA")];
 	if (periodAfter) saleConditions.push(gte(sales.dataVenda, periodAfter));
 	if (periodBefore) saleConditions.push(lte(sales.dataVenda, periodBefore));
+	// Linhas atribuídas a produto: adicional vinculado conta para o produto da opção
+	// (lib/products/product-sales-lines.ts). Com período, o recorte das vendas entra nas linhas
+	// (`salesScope`).
+	const lines = getProductSalesLines({ organizationId: userOrgId, salesScope: periodAfter ? and(...saleConditions) : undefined });
 
 	const activeProductsResult = await db
 		.select({ count: countDistinct(lines.produtoId) })
@@ -220,23 +220,27 @@ async function getProductsOverallStats({ input, session }: { input: TGetProducts
 	const comparisonSaleConditions = [eq(sales.organizacaoId, userOrgId)];
 	if (comparingPeriodAfter) comparisonSaleConditions.push(gte(sales.dataVenda, comparingPeriodAfter));
 	if (comparingPeriodBefore) comparisonSaleConditions.push(lte(sales.dataVenda, comparingPeriodBefore));
+	const comparisonLines = getProductSalesLines({
+		organizationId: userOrgId,
+		salesScope: comparingPeriodAfter ? and(...comparisonSaleConditions) : undefined,
+	});
 
 	const comparisonTotalProductsResult = await db.select({ count: count() }).from(products).where(eq(products.organizacaoId, userOrgId));
 
 	const comparisonActiveProductsResult = await db
-		.select({ count: countDistinct(lines.produtoId) })
-		.from(lines)
-		.innerJoin(sales, eq(lines.vendaId, sales.id))
-		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), ...comparisonSaleConditions));
+		.select({ count: countDistinct(comparisonLines.produtoId) })
+		.from(comparisonLines)
+		.innerJoin(sales, eq(comparisonLines.vendaId, sales.id))
+		.where(and(eq(comparisonLines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), ...comparisonSaleConditions));
 
 	const comparisonRevenueResult = await db
 		.select({
-			totalRevenue: sum(lines.valorVendaTotalLiquido),
-			totalCost: sum(lines.valorCustoTotal),
+			totalRevenue: sum(comparisonLines.valorVendaTotalLiquido),
+			totalCost: sum(comparisonLines.valorCustoTotal),
 		})
-		.from(lines)
-		.innerJoin(sales, eq(lines.vendaId, sales.id))
-		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), ...comparisonSaleConditions));
+		.from(comparisonLines)
+		.innerJoin(sales, eq(comparisonLines.vendaId, sales.id))
+		.where(and(eq(comparisonLines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), ...comparisonSaleConditions));
 
 	const comparisonTotalRevenue = Number(comparisonRevenueResult[0]?.totalRevenue ?? 0);
 	const comparisonTotalCost = Number(comparisonRevenueResult[0]?.totalCost ?? 0);
@@ -251,13 +255,13 @@ async function getProductsOverallStats({ input, session }: { input: TGetProducts
 
 	const comparisonTurnoverData = await db
 		.select({
-			productId: lines.produtoId,
-			totalQtySold: sum(lines.quantidade),
+			productId: comparisonLines.produtoId,
+			totalQtySold: sum(comparisonLines.quantidade),
 		})
-		.from(lines)
-		.innerJoin(sales, eq(lines.vendaId, sales.id))
-		.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), ...comparisonSaleConditions))
-		.groupBy(lines.produtoId);
+		.from(comparisonLines)
+		.innerJoin(sales, eq(comparisonLines.vendaId, sales.id))
+		.where(and(eq(comparisonLines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), ...comparisonSaleConditions))
+		.groupBy(comparisonLines.produtoId);
 
 	const comparisonTurnoverMap = new Map(comparisonTurnoverData.map((d) => [d.productId, Number(d.totalQtySold ?? 0)]));
 

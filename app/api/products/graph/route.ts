@@ -91,16 +91,13 @@ async function fetchProductGraph(input: TGetProductGraphInput, session: TAuthUse
 		before: input.periodBefore ? dayjs(input.periodBefore).tz(OPERATION_TIMEZONE).endOf("day").toDate() : undefined,
 	};
 
-	// Linhas atribuídas a produto: adicional vinculado conta para o produto da opção
-	// (lib/products/product-sales-lines.ts).
-	const lines = getProductSalesLines({ organizationId: userOrgId });
-
 	if (!currentPeriodAdjusted.after) {
+		const allTimeLines = getProductSalesLines({ organizationId: userOrgId });
 		const firstProductSale = await db
 			.select({ data: sales.dataVenda })
-			.from(lines)
-			.innerJoin(sales, eq(lines.vendaId, sales.id))
-			.where(and(eq(lines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), eq(lines.produtoId, input.productId)))
+			.from(allTimeLines)
+			.innerJoin(sales, eq(allTimeLines.vendaId, sales.id))
+			.where(and(eq(allTimeLines.organizacaoId, userOrgId), eq(sales.organizacaoId, userOrgId), eq(allTimeLines.produtoId, input.productId)))
 			.orderBy(asc(sales.dataVenda))
 			.limit(1);
 		currentPeriodAdjusted.after = firstProductSale[0]?.data ?? undefined;
@@ -115,7 +112,6 @@ async function fetchProductGraph(input: TGetProductGraphInput, session: TAuthUse
 	const bucketPosition = chartBucketPositionSql(sales.dataVenda, buckets);
 
 	// Build where conditions
-	const saleItemWhereConditions = [eq(lines.organizacaoId, userOrgId), eq(lines.produtoId, input.productId)];
 	const saleWhereConditions = [eq(sales.organizacaoId, userOrgId), eq(sales.statusVenda, "CONFIRMADA"), isNotNull(sales.dataVenda)];
 
 	const saleWhere = and(
@@ -126,6 +122,12 @@ async function fetchProductGraph(input: TGetProductGraphInput, session: TAuthUse
 		input.partnerId ? eq(sales.parceiroId, input.partnerId) : undefined,
 		getSalesIntegrationCondition(input.integrationsIds),
 	);
+
+	// Linhas atribuídas a produto: adicional vinculado conta para o produto da opção
+	// (lib/products/product-sales-lines.ts). Com período informado, o recorte das vendas entra nas
+	// linhas (`salesScope`).
+	const lines = getProductSalesLines({ organizationId: userOrgId, salesScope: input.periodAfter ? saleWhere : undefined });
+	const saleItemWhereConditions = [eq(lines.organizacaoId, userOrgId), eq(lines.produtoId, input.productId)];
 
 	const saleItemWhere = and(...saleItemWhereConditions, inArray(lines.vendaId, db.select({ id: sales.id }).from(sales).where(saleWhere)));
 
