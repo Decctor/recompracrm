@@ -567,6 +567,12 @@ Body: {
 
 ## Adding New Integrations
 
+> **Integrator has no API and will expose database views instead?** Hand them
+> [`INTEGRATOR-DB-VIEWS.md`](./INTEGRATOR-DB-VIEWS.md) (full spec) or its short version
+> [`INTEGRATOR-DB-VIEWS-COMPACT.md`](./INTEGRATOR-DB-VIEWS-COMPACT.md) — the vendor-agnostic view contract
+> (required views, columns, status/cancellation rules, query patterns, access and homologation
+> checklist). The connector built on top of it follows the same steps below.
+
 ### Step 1: Create Integration Schema
 
 Create a Zod schema for validating the ERP API response:
