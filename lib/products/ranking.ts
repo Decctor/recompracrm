@@ -72,8 +72,9 @@ async function fetchRankingForPeriod({
 	if (periodBefore) saleConditions.push(lte(sales.dataVenda, periodBefore));
 
 	// Get products with sales in the period - group by product ID only
-	// Linhas atribuídas a produto: adicional vinculado conta para o produto da opção.
-	const lines = getProductSalesLines({ organizationId: organizacaoId });
+	// Linhas atribuídas a produto: adicional vinculado conta para o produto da opção. Com período, o
+	// recorte das vendas entra nas linhas (ver `salesScope` em product-sales-lines).
+	const lines = getProductSalesLines({ organizationId: organizacaoId, salesScope: periodAfter ? and(...saleConditions) : undefined });
 	const productsWithSales = await db
 		.select({
 			produtoId: lines.produtoId,

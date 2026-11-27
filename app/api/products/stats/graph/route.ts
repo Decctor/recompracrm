@@ -80,8 +80,19 @@ async function getProductsGraph({ input, sessionUser }: { input: TGetProductsGra
 	const bucketPosition = chartBucketPositionSql(sales.dataVenda, buckets);
 
 	// Linhas atribuídas a produto: adicional vinculado conta para o produto da opção
-	// (lib/products/product-sales-lines.ts).
-	const lines = getProductSalesLines({ organizationId: userOrgId });
+	// (lib/products/product-sales-lines.ts). Com período informado, o recorte das vendas entra nas
+	// linhas (`salesScope`); sem ele o início é a primeira venda e a leitura da org inteira é o plano certo.
+	const lines = getProductSalesLines({
+		organizationId: userOrgId,
+		salesScope: input.periodAfter
+			? and(
+					eq(sales.organizacaoId, userOrgId),
+					gte(sales.dataVenda, period.after),
+					lte(sales.dataVenda, period.before),
+					eq(sales.statusVenda, "CONFIRMADA"),
+				)
+			: undefined,
+	});
 	const periodLinesWhere = and(
 		eq(lines.organizacaoId, userOrgId),
 		eq(sales.organizacaoId, userOrgId),

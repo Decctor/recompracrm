@@ -7,6 +7,7 @@ import { productClientReferences, saleItems, sales } from "@/services/drizzle/sc
 import dayjs from "dayjs";
 import { and, countDistinct, desc, eq, gte, inArray, isNotNull, notInArray, sum } from "drizzle-orm";
 import createHttpError from "http-errors";
+import { unstable_cache } from "next/cache";
 import { type NextRequest, NextResponse } from "next/server";
 import z from "zod";
 
@@ -14,6 +15,29 @@ const SUGGESTIONS_LIMIT = 6;
 const CANDIDATE_POOL = 20;
 const PROFILE_WEIGHT = 0.6;
 const BASKET_WEIGHT = 0.4;
+// Mais vendidos da loja (fallback): a mesma agregação de 12 meses para toda requisição da org
+// (~2,8 s na Congelatte), recalculada a cada cliente escolhido no PDV. Fica em cache por org; a
+// lista guarda folga para tirar os produtos da cesta sem nova consulta.
+const BEST_SELLERS_CACHE_SECONDS = 60 * 60;
+const BEST_SELLERS_CACHED_POOL = 50;
+
+function loadBestSellers(organizacaoId: string) {
+	const twelveMonthsAgo = dayjs().subtract(12, "months").toDate();
+	return db
+		.select({ produtoId: saleItems.produtoId, score: sum(saleItems.quantidade) })
+		.from(saleItems)
+		.innerJoin(sales, eq(saleItems.vendaId, sales.id))
+		.where(and(eq(saleItems.organizacaoId, organizacaoId), isNotNull(sales.dataVenda), gte(sales.dataVenda, twelveMonthsAgo)))
+		.groupBy(saleItems.produtoId)
+		.orderBy(desc(sum(saleItems.quantidade)))
+		.limit(BEST_SELLERS_CACHED_POOL);
+}
+
+function getBestSellersCached(organizacaoId: string) {
+	return unstable_cache(() => loadBestSellers(organizacaoId), ["pos-cross-sell-best-sellers", organizacaoId], {
+		revalidate: BEST_SELLERS_CACHE_SECONDS,
+	})();
+}
 
 const GetCrossSellInputSchema = z.object({
 	clientId: z.string({
@@ -119,21 +143,8 @@ async function getCrossSell({ input, session }: { input: TGetCrossSellInput; ses
 	// Fallback — no personalized signal: best sellers of the store (last 12 months).
 	if (scoreMap.size === 0) {
 		origem = "MAIS_VENDIDOS";
-		const bestSellersRaw = await db
-			.select({ produtoId: saleItems.produtoId, score: sum(saleItems.quantidade) })
-			.from(saleItems)
-			.innerJoin(sales, eq(saleItems.vendaId, sales.id))
-			.where(
-				and(
-					eq(saleItems.organizacaoId, organizacaoId),
-					isNotNull(sales.dataVenda),
-					gte(sales.dataVenda, twelveMonthsAgo),
-					basketIds.length > 0 ? notInArray(saleItems.produtoId, basketIds) : undefined,
-				),
-			)
-			.groupBy(saleItems.produtoId)
-			.orderBy(desc(sum(saleItems.quantidade)))
-			.limit(SUGGESTIONS_LIMIT);
+		const basketIdSet = new Set(basketIds);
+		const bestSellersRaw = (await getBestSellersCached(organizacaoId)).filter((row) => !basketIdSet.has(row.produtoId)).slice(0, SUGGESTIONS_LIMIT);
 		for (const row of bestSellersRaw) addScore(row.produtoId, Number(row.score ?? 0), "perfil");
 		// Reasons for fallback rows should read as store best sellers, not profile.
 		for (const entry of scoreMap.values()) entry.sources = new Set();

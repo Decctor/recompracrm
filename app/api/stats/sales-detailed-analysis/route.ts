@@ -150,7 +150,8 @@ async function getSalesDetailedAnalysis({
 
 	// Ranking de produtos sobre linhas atribuídas a produto: adicional vinculado conta para o
 	// produto da opção (lib/products/product-sales-lines.ts).
-	const lines = getProductSalesLines({ organizationId: organizacaoId });
+	// `salesWhere` só usa colunas de `sales` e sempre tem início de período: vira o `salesScope`.
+	const lines = getProductSalesLines({ organizationId: organizacaoId, salesScope: salesWhere });
 
 	const [kpisResult, topClientsRaw, topProductsRaw] = await Promise.all([
 		db

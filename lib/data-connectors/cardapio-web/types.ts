@@ -361,7 +361,9 @@ const CardapioWebDiscountKindSchema = z.enum(["discount", "free_delivery", "item
 	invalid_type_error: "Tipo inválido para tipo de desconto.",
 });
 
-const CardapioWebDiscountCategorySchema = z.enum(["coupon", "loyalty", "other"], {
+// "cashback" passou a vir do Cardápio Web em 2026-11 (pedidos com resgate de cashback); sem ele o
+// pedido inteiro falhava na validação e não era importado. A categoria não é usada no mapeamento.
+const CardapioWebDiscountCategorySchema = z.enum(["coupon", "loyalty", "cashback", "other"], {
 	required_error: "Categoria do desconto não informada.",
 	invalid_type_error: "Tipo inválido para categoria do desconto.",
 });

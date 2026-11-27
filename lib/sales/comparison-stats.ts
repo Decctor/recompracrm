@@ -205,7 +205,12 @@ async function getProductsGrouped({
 }): Promise<TGroupedRow[]> {
 	// Linhas atribuídas a produto: adicional vinculado conta para o produto da opção
 	// (lib/products/product-sales-lines.ts).
-	const lines = getProductSalesLines({ organizationId: organizacaoId });
+	// A janela entra nas linhas (ver `salesScope` em product-sales-lines.ts). Só colunas de `sales`:
+	// `conditions` pode trazer o EXISTS de RFM em clients, que segue no filtro completo abaixo.
+	const lines = getProductSalesLines({
+		organizationId: organizacaoId,
+		salesScope: and(eq(sales.organizacaoId, organizacaoId), eq(sales.statusVenda, "CONFIRMADA"), ...withinPeriod(period)),
+	});
 	const rows = await db
 		.select({
 			id: products.id,

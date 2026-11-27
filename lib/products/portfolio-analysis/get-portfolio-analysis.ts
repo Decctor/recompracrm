@@ -54,8 +54,9 @@ export async function getPortfolioAnalysis({
 	if (periodAfter) saleConditions.push(gte(sales.dataVenda, periodAfter));
 	if (periodBefore) saleConditions.push(lte(sales.dataVenda, periodBefore));
 
-	// Linhas atribuídas a produto: adicional vinculado conta para o produto da opção.
-	const lines = getProductSalesLines({ organizationId });
+	// Linhas atribuídas a produto: adicional vinculado conta para o produto da opção. Com período, o
+	// recorte das vendas entra nas linhas (ver `salesScope` em product-sales-lines).
+	const lines = getProductSalesLines({ organizationId, salesScope: periodAfter ? and(...saleConditions) : undefined });
 	const [totalProductsResult, salesByProduct] = await Promise.all([
 		db.select({ count: count() }).from(products).where(eq(products.organizacaoId, organizationId)),
 		db
