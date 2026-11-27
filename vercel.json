@@ -173,7 +173,7 @@
 		},
 		{
 			"path": "/api/cron/print-jobs-maintenance",
-			"schedule": "15 6 * * *"
+			"schedule": "15 * * * *"
 		},
 		{
 			"path": "/api/cron/invalidate-chat-windows",

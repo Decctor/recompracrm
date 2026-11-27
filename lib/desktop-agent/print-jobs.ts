@@ -10,6 +10,7 @@ import { CupomVendaDadosSchema, renderCupomVendaHtml } from "./templates/cupom-v
 import { EtiquetaLoteDadosSchema, renderEtiquetaLoteHtml, renderEtiquetaLoteZpl } from "./templates/etiqueta-lote";
 import { TesteImpressaoDadosSchema, renderTesteImpressaoHtml, renderTesteImpressaoZpl } from "./templates/teste-impressao";
 import { TicketPreparoDadosSchema, renderTicketPreparoHtml } from "./templates/ticket-preparo";
+import { omitInlineDataUrls } from "./print-job-retention";
 
 // Fila durável de jobs de impressão do agente desktop (plano: docs/dev-planning/desktop-agent-printing-plan.md).
 // Enqueue renderiza no servidor; claim é atômico com lease; report exige posse da tentativa.
@@ -130,7 +131,9 @@ export async function enqueuePrintJob(params: TEnqueuePrintJobParams) {
 			conteudo: rendered.conteudo,
 			conteudoUrl: rendered.conteudoUrl,
 			copias: params.copias ?? 1,
-			dados: params.dados,
+			// Sem data URLs: a logo embutida (~150 KB) já vai no `conteudo` para o agent, e nada relê
+			// os `dados` gravados (a reimpressão reconstrói da venda). Ver print-job-retention.ts.
+			dados: omitInlineDataUrls(params.dados),
 			origemTipo: params.origemTipo,
 			origemId: params.origemId ?? null,
 			chaveIdempotencia: params.chaveIdempotencia ?? null,
